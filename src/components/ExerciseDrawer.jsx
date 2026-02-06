@@ -13,6 +13,7 @@ export default function ExerciseDrawer({
   onRequestGif,
   onClose,
   onNext,
+  onPrev,
   isPersistent,
   isDesktop,
   lang,
@@ -94,16 +95,19 @@ export default function ExerciseDrawer({
             )}
           </div>
           <div className="drawer-actions">
+            {onPrev && (
+              <button className="tiny" type="button" onClick={onPrev}>
+                Atrás
+              </button>
+            )}
             {onNext && (
               <button className="tiny" type="button" onClick={onNext}>
                 Siguiente
               </button>
             )}
-            {!isPersistent && (
-              <button className="tiny" type="button" onClick={onClose}>
-                Cerrar
-              </button>
-            )}
+            <button className="tiny" type="button" onClick={onClose}>
+              Cerrar
+            </button>
           </div>
         </div>
 

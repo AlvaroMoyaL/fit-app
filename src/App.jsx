@@ -182,6 +182,9 @@ export default function App() {
   const authEnabled = Boolean(supabase);
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
+  const [highContrast, setHighContrast] = useState(() => {
+    return localStorage.getItem("fit_high_contrast") === "1";
+  });
 
   const touchLocalChange = () => {
     localStorage.setItem(LOCAL_SYNC_KEY, new Date().toISOString());
@@ -297,6 +300,11 @@ export default function App() {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("hc", highContrast);
+    localStorage.setItem("fit_high_contrast", highContrast ? "1" : "0");
+  }, [highContrast]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -950,15 +958,64 @@ export default function App() {
   };
 
   const onNextExercise = () => {
-    if (!detailEx?.ex || allExercises.length === 0) return;
+    if (!detailEx?.ex || !plan) return;
+    const day = plan.days.find((d) => d.title === detailEx.dayTitle);
+    if (day) {
+      const idx = day.exercises.findIndex((e) => e.id === detailEx.ex.id);
+      const next = day.exercises[(idx + 1) % day.exercises.length];
+      setDetailEx({ ex: next, dayTitle: detailEx.dayTitle });
+      return;
+    }
+    if (allExercises.length === 0) return;
     const idx = allExercises.findIndex((e) => e.id === detailEx.ex.id);
     const next = allExercises[(idx + 1) % allExercises.length];
     setDetailEx({ ex: next, dayTitle: detailEx.dayTitle });
   };
 
+  const onPrevExercise = () => {
+    if (!detailEx?.ex || !plan) return;
+    const day = plan.days.find((d) => d.title === detailEx.dayTitle);
+    if (day) {
+      const idx = day.exercises.findIndex((e) => e.id === detailEx.ex.id);
+      const prevIndex = (idx - 1 + day.exercises.length) % day.exercises.length;
+      const prev = day.exercises[prevIndex];
+      setDetailEx({ ex: prev, dayTitle: detailEx.dayTitle });
+      return;
+    }
+    if (allExercises.length === 0) return;
+    const idx = allExercises.findIndex((e) => e.id === detailEx.ex.id);
+    const prevIndex = (idx - 1 + allExercises.length) % allExercises.length;
+    const prev = allExercises[prevIndex];
+    setDetailEx({ ex: prev, dayTitle: detailEx.dayTitle });
+  };
+
+  const addMoreExercises = async (dayTitle, count = 2) => {
+    if (!plan) return;
+    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+    const updatedDays = [...plan.days];
+    const dayIndex = updatedDays.findIndex((d) => d.title === dayTitle);
+    if (dayIndex === -1) return;
+    const day = updatedDays[dayIndex];
+    const pool = exercisePool.length ? exercisePool : day.exercises;
+    const extra = await buildExercises(pool, day.mode, day.quiet, count, levelIndex);
+    const nextExercises = [...day.exercises, ...extra];
+    updatedDays[dayIndex] = { ...day, exercises: nextExercises };
+    const updatedPlan = { ...plan, days: updatedDays };
+    setPlan(updatedPlan);
+    if (activeProfileId) {
+      const keys = profileKeys(activeProfileId);
+      localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+    }
+    const firstNew = extra[0];
+    if (firstNew) {
+      setDetailEx({ ex: firstNew, dayTitle });
+    }
+  };
+
   const onToggleComplete = (dayTitle, ex, checked) => {
     const key = getExerciseKey(dayTitle, ex);
-    setCompleted((prev) => ({ ...prev, [key]: checked }));
+    const nextCompleted = { ...completed, [key]: checked };
+    setCompleted(nextCompleted);
 
     const date = todayKey();
     const entryKey = `${date}::${key}`;
@@ -1001,6 +1058,26 @@ export default function App() {
         return next;
       });
     }
+
+    if (checked && plan) {
+      const day = plan.days.find((d) => d.title === dayTitle);
+      if (day) {
+        const allDone = day.exercises.every(
+          (item) => nextCompleted[getExerciseKey(dayTitle, item)]
+        );
+        if (allDone) {
+          const ok = window.confirm(
+            "✅ Terminaste los ejercicios del día. ¿Quieres guardar el entrenamiento?"
+          );
+          if (!ok) {
+            const add = window.confirm(
+              "¿Quieres agregar más ejercicios para este día?"
+            );
+            if (add) addMoreExercises(dayTitle, 2);
+          }
+        }
+      }
+    }
   };
 
   const onUpdateDetail = (dayTitle, ex, patch) => {
@@ -1012,8 +1089,12 @@ export default function App() {
   };
 
   const startSession = (dayIndex) => {
-    setSessionDayIndex(dayIndex);
-    setSessionExIndex(0);
+    if (!plan?.days?.[dayIndex]) return;
+    const day = plan.days[dayIndex];
+    const ex = day.exercises[0];
+    if (ex) {
+      setDetailEx({ ex, dayTitle: day.title });
+    }
   };
 
   const closeSession = () => {
@@ -1283,6 +1364,8 @@ export default function App() {
         onSyncUp={onSyncUp}
         onSyncDown={onSyncDown}
         authEnabled={authEnabled}
+        highContrast={highContrast}
+        onToggleContrast={() => setHighContrast((v) => !v)}
       />
 
       <div className="page">
@@ -1409,6 +1492,9 @@ export default function App() {
                 onStartSession={startSession}
                 metrics={metrics}
                 onInfoMetrics={() => setShowInfo(true)}
+                activeExerciseKey={
+                  detailEx?.ex ? getExerciseKey(detailEx.dayTitle, detailEx.ex) : ""
+                }
               />
             </>
           )}
@@ -1448,6 +1534,7 @@ export default function App() {
         onRequestGif={onRequestGif}
         onClose={() => setDetailEx(null)}
         onNext={onNextExercise}
+        onPrev={onPrevExercise}
         isPersistent={isDesktop}
         isDesktop={isDesktop}
         lang={lang}

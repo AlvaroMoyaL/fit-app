@@ -13,12 +13,14 @@ export default function DayCard({
   getExerciseXp,
   lang,
   onStartSession,
+  activeExerciseKey,
 }) {
   const dayPossible = day.exercises.reduce((sum, ex) => sum + getExerciseXp(ex), 0);
   const dayEarned = day.exercises.reduce((sum, ex) => {
     const key = getExerciseKey(day.title, ex);
     return sum + (completedMap[key] ? getExerciseXp(ex) : 0);
   }, 0);
+  const dayCompleted = day.exercises.every((ex) => completedMap[getExerciseKey(day.title, ex)]);
 
   const getName = (ex) => {
     if (lang === "en") return ex.name_en || ex.name || ex.name_es;
@@ -51,6 +53,11 @@ export default function DayCard({
           {dayEarned} / {dayPossible} XP
         </span>
       </div>
+      {dayCompleted && (
+        <div className="day-complete">
+          ✅ {lang === "en" ? "Day completed" : "Día completado"}
+        </div>
+      )}
 
       <div className="day-controls">
         <label className="field">
@@ -58,6 +65,7 @@ export default function DayCard({
           <select value={day.mode} onChange={(e) => onChangeMode(index, e.target.value)}>
             <option value="week">{EQUIPMENT_MODES.week.label}</option>
             <option value="weekend">{EQUIPMENT_MODES.weekend.label}</option>
+            <option value="gym">{EQUIPMENT_MODES.gym.label}</option>
           </select>
         </label>
         <label className="toggle">
@@ -72,7 +80,12 @@ export default function DayCard({
 
       <ul className="ex-list">
         {day.exercises.map((ex, i) => (
-          <li key={ex.name + i} className="ex-item">
+          <li
+            key={ex.name + i}
+            className={`ex-item ${
+              activeExerciseKey === getExerciseKey(day.title, ex) ? "active" : ""
+            }`}
+          >
             {ex.gifUrl ? (
               <img src={ex.gifUrl} alt={ex.name} />
             ) : (

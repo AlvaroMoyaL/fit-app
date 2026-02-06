@@ -41,6 +41,8 @@ export default function Sidebar({
   onSyncUp,
   onSyncDown,
   authEnabled,
+  highContrast,
+  onToggleContrast,
 }) {
   const progress = totalPossibleXp
     ? Math.min(1, earnedXp / totalPossibleXp)
@@ -130,6 +132,12 @@ export default function Sidebar({
           <option value="es">Español</option>
           <option value="en">English</option>
         </select>
+      </div>
+      <div className="sidebar-section">
+        <h3>Accesibilidad</h3>
+        <button type="button" className="tiny" onClick={onToggleContrast}>
+          Contraste alto: {highContrast ? "On" : "Off"}
+        </button>
       </div>
       <div className="sidebar-section">
         <h3>Perfiles</h3>

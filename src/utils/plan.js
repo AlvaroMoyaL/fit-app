@@ -73,6 +73,25 @@ const EQUIPMENT_MODES = {
     allowed: new Set(["bodyweight", "barbell", "dumbbell", "bench"]),
     noisyBlocked: [],
   },
+  gym: {
+    label: "Gimnasio (máquinas + accesorios)",
+    allowed: new Set([
+      "bodyweight",
+      "barbell",
+      "dumbbell",
+      "bench",
+      "cable",
+      "machine",
+      "leverage",
+      "assisted",
+      "band",
+      "kettlebell",
+      "smith",
+      "ez barbell",
+      "rope",
+    ]),
+    noisyBlocked: [],
+  },
 };
 
 function normalizeEquipment(equipment) {
@@ -82,6 +101,15 @@ function normalizeEquipment(equipment) {
   if (e.includes("dumbbell")) return "dumbbell";
   if (e.includes("bench")) return "bench";
   if (e.includes("body weight")) return "bodyweight";
+  if (e.includes("cable")) return "cable";
+  if (e.includes("machine")) return "machine";
+  if (e.includes("leverage")) return "leverage";
+  if (e.includes("assisted")) return "assisted";
+  if (e.includes("band")) return "band";
+  if (e.includes("kettlebell")) return "kettlebell";
+  if (e.includes("smith")) return "smith";
+  if (e.includes("ez")) return "ez barbell";
+  if (e.includes("rope")) return "rope";
   return e;
 }
 
@@ -504,7 +532,10 @@ async function generatePlan(form, options = {}) {
     0,
     Math.min(niveles.length - 1, baseIndex + (options.adjustLevelDelta || 0))
   );
-  const days = Math.min(6, 3 + Math.floor(levelIndex / 2));
+  const trainDaysCount = Array.isArray(form.trainDays)
+    ? form.trainDays.length
+    : 0;
+  const days = clamp(1, 7, trainDaysCount || 3);
   const mainCount = 4 + Math.floor(levelIndex / 2);
 
   const bodyPartsByGoal = {

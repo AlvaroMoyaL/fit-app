@@ -18,6 +18,7 @@ export default function Plan({
   onStartSession,
   metrics,
   onInfoMetrics,
+  activeExerciseKey,
 }) {
   if (!plan) return null;
 
@@ -125,6 +126,7 @@ export default function Plan({
             getExerciseXp={getExerciseXp}
             lang={lang}
             onStartSession={onStartSession}
+            activeExerciseKey={activeExerciseKey}
           />
         ))}
       </div>

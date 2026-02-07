@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <rect width="180" height="180" rx="30" fill="#0b5f58"/>
+  <rect x="16" y="16" width="148" height="148" rx="26" fill="#f1ede6"/>
+  <text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" font-family="DM Sans, Arial, sans-serif" font-size="48" fill="#0b5f58" font-weight="700">FIT</text>
+</svg>

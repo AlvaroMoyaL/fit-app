@@ -103,6 +103,27 @@ body.hc .help-icon {
   }
 }
 
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 0;
+    gap: 8px;
+  }
+
+  .page {
+    padding: 12px;
+  }
+
+  .sidebar {
+    margin: 8px 12px;
+    border-radius: 16px;
+    padding: 18px 14px;
+  }
+
+  .card {
+    border-radius: 16px;
+  }
+}
+
 .sidebar-section {
   display: grid;
   gap: 10px;
@@ -1487,6 +1508,9 @@ select:focus {
     border-right: none;
     border-bottom: 1px solid #efeae4;
   }
+  .page {
+    padding-right: 0;
+  }
 }
 .ex-actions {
   display: grid;
@@ -1610,5 +1634,37 @@ select:focus {
 @media (max-width: 520px) {
   .series-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .drawer {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 80vh;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
+  }
+
+  .drawer.is-open {
+    transform: translateY(0);
+  }
+
+  .drawer.is-persistent {
+    border-left: 2px solid #d9d1c8;
+  }
+
+  .drawer-actions,
+  .drawer-save-actions,
+  .summary-actions,
+  .session-actions,
+  .export-actions {
+    flex-wrap: wrap;
+  }
+
+  .sidebar-actions {
+    flex-wrap: wrap;
   }
 }

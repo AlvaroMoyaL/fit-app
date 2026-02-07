@@ -23,6 +23,7 @@ export default function Sidebar({
   onContinuePlan,
   onResetPlan,
   dbStatus,
+  onStartDbDownload,
   lang,
   onChangeLang,
   metricsLog,
@@ -50,6 +51,10 @@ export default function Sidebar({
 
   const lastMetric = metricsLog && metricsLog.length > 0 ? metricsLog[metricsLog.length - 1] : null;
   const prevMetric = metricsLog && metricsLog.length > 1 ? metricsLog[metricsLog.length - 2] : null;
+  const canStartDownload =
+    dbStatus && dbStatus.state !== "downloading" && dbStatus.state !== "paused";
+  const downloadLabel =
+    dbStatus?.state === "ready" ? "Re-descargar ejercicios" : "Descargar ejercicios";
 
   const trend = (key) => {
     if (!lastMetric || !prevMetric) return "";
@@ -120,6 +125,16 @@ export default function Sidebar({
       {dbStatus && (
         <div className="sidebar-section">
           <LocalDbStatus status={dbStatus} />
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className="tiny"
+              onClick={onStartDbDownload}
+              disabled={!canStartDownload}
+            >
+              {downloadLabel}
+            </button>
+          </div>
         </div>
       )}
       <div className="sidebar-section">

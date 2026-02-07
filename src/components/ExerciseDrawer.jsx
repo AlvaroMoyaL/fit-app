@@ -8,6 +8,7 @@ export default function ExerciseDrawer({
   completedDetails,
   onUpdateDetail,
   onToggleComplete,
+  onCompleteAndNext,
   getExerciseKey,
   onReplaceExercise,
   onRequestGif,
@@ -231,18 +232,34 @@ export default function ExerciseDrawer({
                 Guardado
               </button>
             ) : (
-              <button
-                type="button"
-                className="tiny primary-btn"
-                onClick={() => {
-                  const ok = window.confirm(
-                    "¿Guardar este ejercicio como completado?"
-                  );
-                  if (ok) onToggleComplete(dayTitle, exercise, true);
-                }}
-              >
-                Guardar
-              </button>
+              <div className="drawer-save-actions">
+                <button
+                  type="button"
+                  className="tiny primary-btn"
+                  onClick={() => {
+                    const ok = window.confirm(
+                      "¿Guardar este ejercicio como completado?"
+                    );
+                    if (ok) onToggleComplete(dayTitle, exercise, true);
+                  }}
+                >
+                  Guardar
+                </button>
+                {onCompleteAndNext && (
+                  <button
+                    type="button"
+                    className="tiny"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        "¿Guardar y pasar al siguiente ejercicio?"
+                      );
+                      if (ok) onCompleteAndNext(dayTitle, exercise);
+                    }}
+                  >
+                    Guardar y siguiente
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

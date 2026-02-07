@@ -1,6 +1,6 @@
 export default function LocalDbStatus({ status }) {
   if (!status) return null;
-  const { state, downloaded, total, error, localCount } = status;
+  const { state, downloaded, total, error, localCount, nextRetryAt } = status;
   if (state === "ready") {
     return (
       <div className="localdb">
@@ -29,6 +29,17 @@ export default function LocalDbStatus({ status }) {
         <div className="xp-bar">
           <div className="xp-bar-fill" style={{ width: `${pct}%` }} />
         </div>
+      </div>
+    );
+  }
+  if (state === "paused") {
+    return (
+      <div className="localdb">
+        <strong>Descarga en pausa</strong>
+        <span>En local: {localCount ?? downloaded}</span>
+        {nextRetryAt && (
+          <span>Reintento: {new Date(nextRetryAt).toLocaleTimeString()}</span>
+        )}
       </div>
     );
   }

@@ -182,6 +182,8 @@ export default function App() {
   const authEnabled = Boolean(supabase);
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
   const [highContrast, setHighContrast] = useState(() => {
     return localStorage.getItem("fit_high_contrast") === "1";
   });
@@ -197,6 +199,7 @@ export default function App() {
     error: "",
     localCount: 0,
   });
+  const dbDownloadRef = useRef({ running: false, resumeTimer: null });
 
   const metrics = useMemo(() => calculateMetrics(form), [form]);
   const allExercises = useMemo(() => {
@@ -382,33 +385,119 @@ export default function App() {
     setRenameProfileName(activeProfile?.name || "");
   }, []);
 
+  const startDbDownload = async () => {
+    const RESUME_DELAY_MS = 30 * 60 * 1000;
+    if (dbDownloadRef.current.running) return;
+    if (dbDownloadRef.current.resumeTimer) {
+      clearTimeout(dbDownloadRef.current.resumeTimer);
+      dbDownloadRef.current.resumeTimer = null;
+    }
+    dbDownloadRef.current.running = true;
+    try {
+      const BATCH_SIZE = 20;
+      const BASE_BACKOFF_MS = 8000;
+      const BATCH_DELAY_MS = 12000;
+
+      const fetchBatch = async (limit, offset) => {
+        let attempt = 0;
+        while (attempt < 5) {
+          const res = await fetch(`/edb/exercises?limit=${limit}&offset=${offset}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) return { items: data, total: 0 };
+            if (Array.isArray(data?.results)) {
+              return { items: data.results, total: data.count || data.total || 0 };
+            }
+            if (Array.isArray(data?.exercises)) {
+              return { items: data.exercises, total: data.total || 0 };
+            }
+            return { items: [], total: 0 };
+          }
+          if (res.status === 429) {
+            await new Promise((r) =>
+              setTimeout(r, BASE_BACKOFF_MS * Math.pow(2, attempt))
+            );
+            attempt += 1;
+            continue;
+          }
+          throw new Error(`API ${res.status}`);
+        }
+        throw new Error("Rate limit");
+      };
+
+      let offset = 0;
+      let total = 0;
+      let downloaded = await countExercises();
+      offset = downloaded;
+      const initialCount = downloaded;
+      setDbStatus({
+        state: "downloading",
+        downloaded,
+        total,
+        error: "",
+        localCount: initialCount,
+      });
+
+      while (true) {
+        const { items, total: apiTotal } = await fetchBatch(BATCH_SIZE, offset);
+        if (!items.length) break;
+        await upsertExercises(items);
+        downloaded += items.length;
+        if (apiTotal) total = apiTotal;
+        const localCount = await countExercises();
+        setDbStatus({
+          state: "downloading",
+          downloaded,
+          total,
+          error: "",
+          localCount,
+        });
+        offset += items.length;
+        if (items.length < BATCH_SIZE) break;
+        await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
+      }
+
+      await setMeta(DB_COMPLETE_KEY, { value: true, total: downloaded });
+      setDbStatus({
+        state: "ready",
+        downloaded,
+        total: total || downloaded,
+        error: "",
+        localCount: total || downloaded,
+      });
+    } catch (err) {
+      const message = err?.message || "";
+      if (message.includes("Rate limit") || message.includes("429")) {
+        const localCount = await countExercises();
+        const nextRetryAt = Date.now() + RESUME_DELAY_MS;
+        setDbStatus({
+          state: "paused",
+          downloaded: localCount,
+          total: 0,
+          error: "",
+          localCount,
+          nextRetryAt,
+        });
+        dbDownloadRef.current.running = false;
+        dbDownloadRef.current.resumeTimer = setTimeout(() => {
+          startDbDownload();
+        }, RESUME_DELAY_MS);
+        return;
+      }
+      setDbStatus({
+        state: "error",
+        downloaded: 0,
+        total: 0,
+        error: err?.message || "Error al descargar",
+        localCount: 0,
+      });
+    } finally {
+      dbDownloadRef.current.running = false;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const fetchBatch = async (limit, offset) => {
-      let attempt = 0;
-      while (attempt < 5) {
-        const res = await fetch(`/edb/exercises?limit=${limit}&offset=${offset}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) return { items: data, total: 0 };
-          if (Array.isArray(data?.results)) {
-            return { items: data.results, total: data.count || data.total || 0 };
-          }
-          if (Array.isArray(data?.exercises)) {
-            return { items: data.exercises, total: data.total || 0 };
-          }
-          return { items: [], total: 0 };
-        }
-        if (res.status === 429) {
-          await new Promise((r) => setTimeout(r, 5000 * Math.pow(2, attempt)));
-          attempt += 1;
-          continue;
-        }
-        throw new Error(`API ${res.status}`);
-      }
-      throw new Error("Rate limit");
-    };
-
     const run = async () => {
       try {
         const meta = await getMeta(DB_COMPLETE_KEY);
@@ -426,49 +515,14 @@ export default function App() {
           return;
         }
 
-        let offset = 0;
-        let total = 0;
-        let downloaded = await countExercises();
-        const initialCount = downloaded;
+        const localCount = await countExercises();
         if (!cancelled) {
           setDbStatus({
-            state: "downloading",
-            downloaded,
-            total,
+            state: "idle",
+            downloaded: localCount,
+            total: 0,
             error: "",
-            localCount: initialCount,
-          });
-        }
-
-        while (true) {
-          const { items, total: apiTotal } = await fetchBatch(20, offset);
-          if (!items.length) break;
-          await upsertExercises(items);
-          downloaded += items.length;
-          if (apiTotal) total = apiTotal;
-          const localCount = await countExercises();
-          if (!cancelled) {
-            setDbStatus({
-              state: "downloading",
-              downloaded,
-              total,
-              error: "",
-              localCount,
-            });
-          }
-          offset += items.length;
-          if (items.length < 20) break;
-          await new Promise((r) => setTimeout(r, 6000));
-        }
-
-        await setMeta(DB_COMPLETE_KEY, { value: true, total: downloaded });
-        if (!cancelled) {
-          setDbStatus({
-            state: "ready",
-            downloaded,
-            total: total || downloaded,
-            error: "",
-            localCount: total || downloaded,
+            localCount,
           });
         }
       } catch (err) {
@@ -989,6 +1043,57 @@ export default function App() {
     setDetailEx({ ex: prev, dayTitle: detailEx.dayTitle });
   };
 
+  const getNextExerciseInDay = (dayTitle, ex) => {
+    if (!plan) return null;
+    const day = plan.days.find((d) => d.title === dayTitle);
+    if (!day) return null;
+    const idx = day.exercises.findIndex((e) => e.id === ex.id);
+    if (idx === -1) return null;
+    if (idx >= day.exercises.length - 1) return null;
+    return day.exercises[idx + 1];
+  };
+
+  const onCompleteAndNext = (dayTitle, ex) => {
+    onToggleComplete(dayTitle, ex, true);
+    const next = getNextExerciseInDay(dayTitle, ex);
+    if (!next) return;
+    setTimeout(() => {
+      setDetailEx({ ex: next, dayTitle });
+    }, 0);
+  };
+
+  const openDaySummary = (dayTitle) => {
+    if (!plan) return;
+    const day = plan.days.find((d) => d.title === dayTitle);
+    if (!day) return;
+    const dayTotal = day.exercises.length;
+    const doneCount = day.exercises.filter((ex) =>
+      completed[getExerciseKey(dayTitle, ex)]
+    ).length;
+    const dayXp = day.exercises.reduce((sum, ex) => {
+      return sum + (completed[getExerciseKey(dayTitle, ex)] ? getExerciseXp(ex) : 0);
+    }, 0);
+    const minutes = day.exercises.reduce((sum, ex) => {
+      const key = getExerciseKey(dayTitle, ex);
+      const detail = completedDetails[key] || {};
+      if (ex.prescription?.type === "time") return sum + (detail.workSec || 0) / 60;
+      if (ex.prescription?.type === "reps") {
+        const reps = (detail.repsBySet || []).reduce((a, b) => a + b, 0);
+        return sum + reps * 3 / 60;
+      }
+      return sum;
+    }, 0);
+
+    setSummaryData({
+      dayTitle,
+      doneCount,
+      dayTotal,
+      dayXp,
+      minutes: Math.round(minutes),
+    });
+    setSummaryOpen(true);
+  };
+
   const addMoreExercises = async (dayTitle, count = 2) => {
     if (!plan) return;
     const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
@@ -1066,15 +1171,7 @@ export default function App() {
           (item) => nextCompleted[getExerciseKey(dayTitle, item)]
         );
         if (allDone) {
-          const ok = window.confirm(
-            "✅ Terminaste los ejercicios del día. ¿Quieres guardar el entrenamiento?"
-          );
-          if (!ok) {
-            const add = window.confirm(
-              "¿Quieres agregar más ejercicios para este día?"
-            );
-            if (add) addMoreExercises(dayTitle, 2);
-          }
+          openDaySummary(dayTitle);
         }
       }
     }
@@ -1346,6 +1443,7 @@ export default function App() {
         onContinuePlan={onContinuePlan}
         onResetPlan={onResetPlan}
         dbStatus={dbStatus}
+        onStartDbDownload={startDbDownload}
         lang={lang}
         onChangeLang={onChangeLang}
         metricsLog={metricsLog}
@@ -1529,6 +1627,7 @@ export default function App() {
         completedDetails={completedDetails}
         onUpdateDetail={onUpdateDetail}
         onToggleComplete={onToggleComplete}
+        onCompleteAndNext={onCompleteAndNext}
         getExerciseKey={getExerciseKey}
         onReplaceExercise={onReplaceExercise}
         onRequestGif={onRequestGif}
@@ -1554,6 +1653,55 @@ export default function App() {
         completedDetails={completedDetails}
         onUpdateDetail={onUpdateDetail}
       />
+
+      {summaryOpen && summaryData && (
+        <div className="overlay" onClick={() => setSummaryOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Resumen del día</h3>
+            <div className="summary-grid">
+              <div>
+                <span>Día</span>
+                <strong>{summaryData.dayTitle}</strong>
+              </div>
+              <div>
+                <span>Completados</span>
+                <strong>
+                  {summaryData.doneCount} / {summaryData.dayTotal}
+                </strong>
+              </div>
+              <div>
+                <span>XP ganado</span>
+                <strong>{summaryData.dayXp}</strong>
+              </div>
+              <div>
+                <span>Minutos estimados</span>
+                <strong>{summaryData.minutes} min</strong>
+              </div>
+            </div>
+            <div className="summary-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  setSummaryOpen(false);
+                }}
+              >
+                Guardar y cerrar
+              </button>
+              <button
+                type="button"
+                className="tiny"
+                onClick={() => {
+                  setSummaryOpen(false);
+                  addMoreExercises(summaryData.dayTitle, 2);
+                }}
+              >
+                Agregar más ejercicios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

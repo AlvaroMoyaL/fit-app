@@ -219,8 +219,7 @@ export default function App() {
   const gifPlanKeyRef = useRef("");
   const gifLocalHydrateRef = useRef("");
   const supabaseGifBase =
-    (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "") ||
-    "";
+    (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "") || "";
   const supabaseGifBucket = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
   const metrics = useMemo(() => calculateMetrics(form), [form]);
@@ -643,7 +642,7 @@ export default function App() {
 
   const startGifDownload = async () => {
     const RESUME_DELAY_MS = 30 * 60 * 1000;
-    const GIF_DELAY_MS = 1200;
+    const GIF_DELAY_MS = 300;
     if (gifDownloadRef.current.running) return;
     if (gifDownloadRef.current.resumeTimer) {
       clearTimeout(gifDownloadRef.current.resumeTimer);
@@ -663,6 +662,17 @@ export default function App() {
         downloaded: 0,
         total: 0,
         error: "Primero descarga la base de ejercicios",
+        localCount: await countGifs(),
+      });
+      return;
+    }
+
+    if (!supabaseGifBase) {
+      setGifStatus({
+        state: "error",
+        downloaded: 0,
+        total: 0,
+        error: "Falta configurar VITE_SUPABASE_URL",
         localCount: await countGifs(),
       });
       return;
@@ -692,9 +702,8 @@ export default function App() {
         while (attempt < 3) {
           let res;
           try {
-            res = await fetch(
-              `/edb/image?exerciseId=${ex.id}&resolution=360`
-            );
+            const url = `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`;
+            res = await fetch(url);
           } catch (err) {
             attempt += 1;
             if (attempt >= 3) break;
@@ -875,6 +884,20 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (gifDownloadRef.current.running) return;
+    if (gifStatus.state === "ready") return;
+    if (dbStatus.state !== "ready") return;
+    const localCount = gifStatus.localCount || 0;
+    if (localCount > 0 && gifStatus.state === "idle") {
+      startGifDownload();
+      return;
+    }
+    if (localCount === 0 && gifStatus.state === "idle") {
+      startGifDownload();
+    }
+  }, [gifStatus.state, gifStatus.localCount, dbStatus.state]);
 
   useEffect(() => {
     if (!activeProfileId) return;

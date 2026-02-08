@@ -1,7 +1,8 @@
 const DB_NAME = "fit-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const EXERCISES_STORE = "exercises";
 const META_STORE = "meta";
+const GIFS_STORE = "gifs";
 
 let dbPromise;
 
@@ -16,6 +17,9 @@ function openDb() {
       }
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(GIFS_STORE)) {
+        db.createObjectStore(GIFS_STORE, { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -85,6 +89,59 @@ export async function countExercises() {
       const store = tx.objectStore(EXERCISES_STORE);
       const req = store.count();
       req.onsuccess = () => resolve(req.result || 0);
+      req.onerror = () => reject(req.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export async function getGif(id) {
+  if (!id) return null;
+  return new Promise(async (resolve, reject) => {
+    try {
+      const db = await openDb();
+      const tx = db.transaction(GIFS_STORE, "readonly");
+      const store = tx.objectStore(GIFS_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export async function upsertGif(id, blob) {
+  if (!id || !blob) return;
+  return withStore(GIFS_STORE, "readwrite", (store) =>
+    store.put({ id, blob, updatedAt: Date.now() })
+  );
+}
+
+export async function countGifs() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const db = await openDb();
+      const tx = db.transaction(GIFS_STORE, "readonly");
+      const store = tx.objectStore(GIFS_STORE);
+      const req = store.count();
+      req.onsuccess = () => resolve(req.result || 0);
+      req.onerror = () => reject(req.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+export async function getAllGifs() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const db = await openDb();
+      const tx = db.transaction(GIFS_STORE, "readonly");
+      const store = tx.objectStore(GIFS_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     } catch (err) {
       reject(err);

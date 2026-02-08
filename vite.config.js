@@ -7,6 +7,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      port: 5175,
+      strictPort: true,
       proxy: {
         "/edb": {
           target: "https://exercisedb.p.rapidapi.com",

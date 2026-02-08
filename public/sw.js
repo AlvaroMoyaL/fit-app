@@ -26,6 +26,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  const url = new URL(request.url);
+  if (url.pathname.startsWith("/edb/")) {
+    return;
+  }
   const isHtml = request.mode === "navigate" || request.headers.get("accept")?.includes("text/html");
 
   if (isHtml) {
@@ -42,6 +46,14 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    (async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      try {
+        return await fetch(request);
+      } catch {
+        return cached;
+      }
+    })()
   );
 });

@@ -1,4 +1,5 @@
 import LocalDbStatus from "./LocalDbStatus";
+import GifDbStatus from "./GifDbStatus";
 
 export default function Sidebar({
   profiles,
@@ -24,6 +25,8 @@ export default function Sidebar({
   onResetPlan,
   dbStatus,
   onStartDbDownload,
+  gifStatus,
+  onStartGifDownload,
   lang,
   onChangeLang,
   metricsLog,
@@ -55,6 +58,10 @@ export default function Sidebar({
     dbStatus && dbStatus.state !== "downloading" && dbStatus.state !== "paused";
   const downloadLabel =
     dbStatus?.state === "ready" ? "Re-descargar ejercicios" : "Descargar ejercicios";
+  const canStartGifDownload =
+    gifStatus && gifStatus.state !== "downloading" && gifStatus.state !== "paused";
+  const gifDownloadLabel =
+    gifStatus?.state === "ready" ? "Re-descargar gifs" : "Descargar gifs";
 
   const trend = (key) => {
     if (!lastMetric || !prevMetric) return "";
@@ -133,6 +140,21 @@ export default function Sidebar({
               disabled={!canStartDownload}
             >
               {downloadLabel}
+            </button>
+          </div>
+        </div>
+      )}
+      {gifStatus && (
+        <div className="sidebar-section">
+          <GifDbStatus status={gifStatus} />
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className="tiny"
+              onClick={onStartGifDownload}
+              disabled={!canStartGifDownload}
+            >
+              {gifDownloadLabel}
             </button>
           </div>
         </div>

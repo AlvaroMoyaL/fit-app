@@ -1,4 +1,4 @@
-import { getAllExercises, getMeta } from "./idb";
+import { getAllExercises, getMeta, getGif, upsertGif } from "./idb";
 import LOCAL_EXERCISES from "../data/exercises.local";
 
 const niveles = [
@@ -66,6 +66,8 @@ const EQUIPMENT_MODES = {
       "jump",
       "skipping",
       "mountain climber",
+      "skater",
+      "hop",
     ],
   },
   weekend: {
@@ -234,6 +236,41 @@ function filterPoolByMode(pool, mode, quiet) {
     return !blocked.some((k) => name.includes(k));
   });
 
+  return filtered.length ? filtered : pool;
+}
+
+function filterPoolByLevel(pool, levelIndex) {
+  if (levelIndex > 1) return pool;
+  const hardKeywords = [
+    "pistol",
+    "handstand",
+    "muscle up",
+    "snatch",
+    "clean",
+    "jerk",
+    "kipping",
+    "olympic",
+    "power clean",
+    "power snatch",
+    "split jerk",
+    "thruster",
+    "box jump",
+    "tuck jump",
+    "plyo",
+    "burpee",
+    "sprint",
+    "depth jump",
+    "jump",
+  ];
+  const filtered = pool.filter((e) => {
+    const diff = (e.difficulty || "").toLowerCase();
+    if (diff.includes("advanced")) return false;
+    if (diff.includes("intermediate")) return false;
+    const name = (e.name || "").toLowerCase();
+    if (name.includes("advanced")) return false;
+    if (hardKeywords.some((k) => name.includes(k))) return false;
+    return true;
+  });
   return filtered.length ? filtered : pool;
 }
 
@@ -412,6 +449,14 @@ const gifPromiseCache = new Map();
 const MAX_GIF_CONCURRENCY = 1;
 let gifActive = 0;
 const gifQueue = [];
+async function getCachedGifUrl(exerciseId) {
+  if (!exerciseId) return "";
+  const cached = await getGif(exerciseId);
+  if (!cached?.blob) return "";
+  const url = URL.createObjectURL(cached.blob);
+  gifCache.set(exerciseId, url);
+  return url;
+}
 
 function runGifQueue() {
   if (gifActive >= MAX_GIF_CONCURRENCY || gifQueue.length === 0) return;
@@ -436,37 +481,11 @@ function enqueueGif(task) {
 async function getGifUrlWithLimit(exerciseId) {
   if (!exerciseId) return "";
   if (gifCache.has(exerciseId)) return gifCache.get(exerciseId);
+  const cachedUrl = await getCachedGifUrl(exerciseId);
+  if (cachedUrl) return cachedUrl;
+  return "";
+
   if (gifPromiseCache.has(exerciseId)) return gifPromiseCache.get(exerciseId);
-
-  const promise = enqueueGif(async () => {
-    let attempt = 0;
-    while (attempt < 3) {
-      const res = await fetch(
-        `/edb/image?exerciseId=${exerciseId}&resolution=360`
-      );
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        gifCache.set(exerciseId, url);
-        return url;
-      }
-      if (res.status === 429) {
-        await sleep(800 * Math.pow(2, attempt));
-        attempt += 1;
-        continue;
-      }
-      throw new Error("No se pudo cargar el gif");
-    }
-    throw new Error("Rate limit gif");
-  });
-
-  gifPromiseCache.set(exerciseId, promise);
-  try {
-    const url = await promise;
-    return url;
-  } finally {
-    gifPromiseCache.delete(exerciseId);
-  }
 }
 
 let localPoolPromise = null;
@@ -486,7 +505,7 @@ async function getLocalPool() {
 }
 
 async function buildExercises(pool, mode, quiet, count, levelIndex) {
-  const filtered = filterPoolByMode(pool, mode, quiet);
+  const filtered = filterPoolByLevel(filterPoolByMode(pool, mode, quiet), levelIndex);
   const picked = pickRandom(filtered, count).map((ex) => ({
     id: ex.id,
     name: ex.name || ex.name_es || ex.name_en,
@@ -508,21 +527,11 @@ async function buildExercises(pool, mode, quiet, count, levelIndex) {
 
   const withPrescription = picked.map((ex) => ({
     ...ex,
+    instanceId: ex.instanceId || `${ex.id || ex.name}-${Math.random().toString(36).slice(2, 8)}`,
     prescription: makePrescription(ex, levelIndex),
   }));
 
-  const withGifs = await Promise.all(
-    withPrescription.map(async (ex) => {
-      try {
-        const gifUrl = await fetchGifUrl(ex.id);
-        return { ...ex, gifUrl };
-      } catch {
-        return ex;
-      }
-    })
-  );
-
-  return withGifs;
+  return withPrescription.map((ex) => ({ ...ex, gifUrl: "" }));
 }
 
 async function generatePlan(form, options = {}) {

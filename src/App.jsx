@@ -22,9 +22,14 @@ import MetricsLogForm from "./components/MetricsLogForm";
 import MetricsCharts from "./components/MetricsCharts";
 import {
   countExercises,
+  countGifs,
+  getAllExercises,
+  getAllGifs,
+  getGif,
   getMeta,
   setMeta,
   upsertExercises,
+  upsertGif,
 } from "./utils/idb";
 import { supabase } from "./utils/supabaseClient";
 import { applyCloudPayload, downloadCloud, uploadCloud } from "./utils/cloudSync";
@@ -32,6 +37,7 @@ import { applyCloudPayload, downloadCloud, uploadCloud } from "./utils/cloudSync
 const PROFILE_LIST_KEY = "fit_profiles";
 const ACTIVE_PROFILE_KEY = "fit_active_profile";
 const DB_COMPLETE_KEY = "exercises_complete";
+const GIFS_COMPLETE_KEY = "gifs_complete";
 const LOCAL_SYNC_KEY = "fit_last_local_change";
 
 function toNum(v) {
@@ -200,6 +206,18 @@ export default function App() {
     localCount: 0,
   });
   const dbDownloadRef = useRef({ running: false, resumeTimer: null });
+  const [gifStatus, setGifStatus] = useState({
+    state: "idle",
+    downloaded: 0,
+    total: 0,
+    error: "",
+    localCount: 0,
+  });
+  const gifDownloadRef = useRef({ running: false, resumeTimer: null });
+  const planRef = useRef(null);
+  const quietUpdateRef = useRef({ timer: null });
+  const gifPlanKeyRef = useRef("");
+  const gifLocalHydrateRef = useRef("");
 
   const metrics = useMemo(() => calculateMetrics(form), [form]);
   const allExercises = useMemo(() => {
@@ -210,7 +228,8 @@ export default function App() {
   const XP_BASE = 10;
   const XP_TIME_BONUS = 5;
 
-  const getExerciseKey = (dayTitle, ex) => `${dayTitle}::${ex.id || ex.name}`;
+  const getExerciseKey = (dayTitle, ex) =>
+    `${dayTitle}::${ex.instanceId || ex.id || ex.name}`;
 
   const getExerciseXp = (ex) =>
     XP_BASE + (ex.prescription?.type === "time" ? XP_TIME_BONUS : 0);
@@ -242,6 +261,23 @@ export default function App() {
       exercises: d.exercises.map((ex) => ({ ...ex, gifUrl: "" })),
     })),
   });
+
+  const ensureInstanceIds = (planToNormalize) => {
+    if (!planToNormalize?.days) return planToNormalize;
+    let changed = false;
+    const days = planToNormalize.days.map((d) => ({
+      ...d,
+      exercises: d.exercises.map((ex) => {
+        if (ex.instanceId) return ex;
+        changed = true;
+        return {
+          ...ex,
+          instanceId: `${ex.id || ex.name}-${Math.random().toString(36).slice(2, 8)}`,
+        };
+      }),
+    }));
+    return changed ? { ...planToNormalize, days } : planToNormalize;
+  };
 
   const totalPossibleXp = useMemo(() => {
     if (!plan) return 0;
@@ -337,6 +373,106 @@ export default function App() {
   }, [plan]);
 
   useEffect(() => {
+    planRef.current = plan;
+  }, [plan]);
+
+  useEffect(() => {
+    if (!plan) return;
+    const key = plan.days
+      .map((d) =>
+        d.exercises.map((e) => e.instanceId || e.id || e.name).join(",")
+      )
+      .join("|");
+    if (key && key === gifPlanKeyRef.current) return;
+    gifPlanKeyRef.current = key;
+
+    let cancelled = false;
+    const preload = async () => {
+      setGifsLoading(true);
+      for (const day of plan.days) {
+        for (const ex of day.exercises) {
+          if (cancelled) break;
+          if (ex.gifUrl) continue;
+          try {
+            const gifUrl = await fetchGifUrl(ex.id);
+            if (!gifUrl || cancelled) continue;
+            setPlan((prev) => {
+              if (!prev) return prev;
+              const days = prev.days.map((d) => ({
+                ...d,
+                exercises: d.exercises.map((item) => {
+                  if (ex.instanceId) {
+                    return item.instanceId === ex.instanceId
+                      ? { ...item, gifUrl }
+                      : item;
+                  }
+                  return item.id === ex.id ? { ...item, gifUrl } : item;
+                }),
+              }));
+              return { ...prev, days };
+            });
+          } catch {
+            // ignore
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+      if (!cancelled) {
+        setGifsLoading(false);
+      }
+    };
+    preload();
+    return () => {
+      cancelled = true;
+    };
+  }, [plan]);
+
+  useEffect(() => {
+    if (!plan) return;
+    const localCount = gifStatus?.localCount || 0;
+    if (localCount === 0) return;
+    const key = [
+      localCount,
+      plan.days
+        .map((d) =>
+          d.exercises.map((e) => e.instanceId || e.id || e.name).join(",")
+        )
+        .join("|"),
+    ].join("|");
+    if (key && key === gifLocalHydrateRef.current) return;
+
+    let cancelled = false;
+    const hydrateLocalGifs = async () => {
+      try {
+        const all = await getAllGifs();
+        if (cancelled) return;
+        if (!all.length) return;
+        const byId = new Map(all.map((g) => [g.id, g.blob]));
+        setPlan((prev) => {
+          if (!prev) return prev;
+          const days = prev.days.map((d) => ({
+            ...d,
+            exercises: d.exercises.map((ex) => {
+              if (ex.gifUrl) return ex;
+              const blob = byId.get(ex.id);
+              if (!blob) return ex;
+              return { ...ex, gifUrl: URL.createObjectURL(blob) };
+            }),
+          }));
+          return { ...prev, days };
+        });
+        gifLocalHydrateRef.current = key;
+      } catch {
+        // ignore
+      }
+    };
+    hydrateLocalGifs();
+    return () => {
+      cancelled = true;
+    };
+  }, [plan, gifStatus?.localCount]);
+
+  useEffect(() => {
     const storedProfiles = localStorage.getItem(PROFILE_LIST_KEY);
     let list = [];
     if (storedProfiles) {
@@ -394,7 +530,7 @@ export default function App() {
     }
     dbDownloadRef.current.running = true;
     try {
-      const BATCH_SIZE = 20;
+      const BATCH_SIZE = 10;
       const BASE_BACKOFF_MS = 8000;
       const BATCH_DELAY_MS = 12000;
 
@@ -496,6 +632,121 @@ export default function App() {
     }
   };
 
+  const startGifDownload = async () => {
+    const RESUME_DELAY_MS = 30 * 60 * 1000;
+    const GIF_DELAY_MS = 1200;
+    if (gifDownloadRef.current.running) return;
+    if (gifDownloadRef.current.resumeTimer) {
+      clearTimeout(gifDownloadRef.current.resumeTimer);
+      gifDownloadRef.current.resumeTimer = null;
+    }
+    let exercisesReady = await getMeta(DB_COMPLETE_KEY);
+    if (!exercisesReady?.value) {
+      const localCount = await countExercises();
+      if (localCount > 0) {
+        await setMeta(DB_COMPLETE_KEY, { value: true, total: localCount });
+        exercisesReady = { value: true, total: localCount };
+      }
+    }
+    if (!exercisesReady?.value) {
+      setGifStatus({
+        state: "error",
+        downloaded: 0,
+        total: 0,
+        error: "Primero descarga la base de ejercicios",
+        localCount: await countGifs(),
+      });
+      return;
+    }
+
+    gifDownloadRef.current.running = true;
+    try {
+      const all = await getAllExercises();
+      const total = all.length;
+      const localCount = await countGifs();
+      let downloaded = localCount;
+      setGifStatus({
+        state: "downloading",
+        downloaded,
+        total,
+        error: "",
+        localCount,
+      });
+
+      for (const ex of all) {
+        if (downloaded >= total) break;
+        const cached = await getGif(ex.id);
+        if (cached?.blob) {
+          continue;
+        }
+        let attempt = 0;
+        while (attempt < 3) {
+          let res;
+          try {
+            res = await fetch(
+              `/edb/image?exerciseId=${ex.id}&resolution=360`
+            );
+          } catch (err) {
+            attempt += 1;
+            if (attempt >= 3) break;
+            await new Promise((r) => setTimeout(r, 1000));
+            continue;
+          }
+          if (res.ok) {
+            const blob = await res.blob();
+            await upsertGif(ex.id, blob);
+            downloaded += 1;
+            setGifStatus({
+              state: "downloading",
+              downloaded,
+              total,
+              error: "",
+              localCount: downloaded,
+            });
+            break;
+          }
+          if (res.status === 429) {
+            const nextRetryAt = Date.now() + RESUME_DELAY_MS;
+            setGifStatus({
+              state: "paused",
+              downloaded,
+              total,
+              error: "",
+              localCount: downloaded,
+              nextRetryAt,
+            });
+            gifDownloadRef.current.running = false;
+            gifDownloadRef.current.resumeTimer = setTimeout(() => {
+              startGifDownload();
+            }, RESUME_DELAY_MS);
+            return;
+          }
+          attempt += 1;
+        }
+        await new Promise((r) => setTimeout(r, GIF_DELAY_MS));
+      }
+
+      await setMeta(GIFS_COMPLETE_KEY, { value: true, total: downloaded });
+      setGifStatus({
+        state: "ready",
+        downloaded,
+        total: total || downloaded,
+        error: "",
+        localCount: downloaded,
+      });
+    } catch (err) {
+      setGifStatus({
+        state: "error",
+        downloaded: 0,
+        total: 0,
+        error: err?.message || "Error al descargar gifs",
+        localCount: 0,
+      });
+    } finally {
+      gifDownloadRef.current.running = false;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -516,6 +767,30 @@ export default function App() {
         }
 
         const localCount = await countExercises();
+        if (localCount === 0) {
+          try {
+            const res = await fetch("/data/exercises.json");
+            if (res.ok) {
+              const bundled = await res.json();
+              if (Array.isArray(bundled) && bundled.length) {
+                await upsertExercises(bundled);
+                await setMeta(DB_COMPLETE_KEY, { value: true, total: bundled.length });
+                if (!cancelled) {
+                  setDbStatus({
+                    state: "ready",
+                    downloaded: bundled.length,
+                    total: bundled.length,
+                    error: "",
+                    localCount: bundled.length,
+                  });
+                }
+                return;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
         if (!cancelled) {
           setDbStatus({
             state: "idle",
@@ -532,6 +807,54 @@ export default function App() {
             downloaded: 0,
             total: 0,
             error: err?.message || "Error al descargar",
+            localCount: 0,
+          });
+        }
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const meta = await getMeta(GIFS_COMPLETE_KEY);
+        if (meta?.value) {
+          const total = meta.total || (await countGifs());
+          if (!cancelled) {
+            setGifStatus({
+              state: "ready",
+              downloaded: total,
+              total,
+              error: "",
+              localCount: total,
+            });
+          }
+          return;
+        }
+
+        const localCount = await countGifs();
+        if (!cancelled) {
+          setGifStatus({
+            state: "idle",
+            downloaded: localCount,
+            total: 0,
+            error: "",
+            localCount,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setGifStatus({
+            state: "error",
+            downloaded: 0,
+            total: 0,
+            error: err?.message || "Error al descargar gifs",
             localCount: 0,
           });
         }
@@ -622,7 +945,13 @@ export default function App() {
     if (savedPlan) {
       try {
         const parsed = JSON.parse(savedPlan);
-        if (parsed?.days) setPlan(parsed);
+        if (parsed?.days) {
+          const normalized = ensureInstanceIds(parsed);
+          setPlan(normalized);
+          if (normalized !== parsed) {
+            localStorage.setItem(keys.plan, JSON.stringify(stripGifs(normalized)));
+          }
+        }
         if (parsed?.pool) setExercisePool(parsed.pool);
       } catch {
         setPlan(null);
@@ -973,32 +1302,46 @@ export default function App() {
   };
 
   const onToggleQuiet = async (dayIndex, quiet) => {
-    if (!plan) return;
-    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
-    const updatedDays = [...plan.days];
+    const currentPlan = planRef.current;
+    if (!currentPlan) return;
+    const updatedDays = [...currentPlan.days];
     const day = updatedDays[dayIndex];
-
-    const exercises = await buildExercises(
-      exercisePool.length ? exercisePool : day.exercises,
-      day.mode,
-      quiet,
-      day.exercises.length || 4,
-      levelIndex
-    );
-
-    updatedDays[dayIndex] = {
-      ...day,
-      quiet,
-      exercises,
-    };
-
-    const updatedPlan = { ...plan, days: updatedDays };
+    updatedDays[dayIndex] = { ...day, quiet };
+    const updatedPlan = { ...currentPlan, days: updatedDays };
     setPlan(updatedPlan);
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
     }
     setDetailEx(null);
+
+    if (quietUpdateRef.current.timer) {
+      clearTimeout(quietUpdateRef.current.timer);
+    }
+
+    quietUpdateRef.current.timer = setTimeout(async () => {
+      const latestPlan = planRef.current;
+      if (!latestPlan) return;
+      const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+      const dayNow = latestPlan.days[dayIndex];
+      if (!dayNow) return;
+      const exercises = await buildExercises(
+        exercisePool.length ? exercisePool : dayNow.exercises,
+        dayNow.mode,
+        quiet,
+        dayNow.exercises.length || 4,
+        levelIndex
+      );
+
+      const nextDays = [...latestPlan.days];
+      nextDays[dayIndex] = { ...dayNow, quiet, exercises };
+      const nextPlan = { ...latestPlan, days: nextDays };
+      setPlan(nextPlan);
+      if (activeProfileId) {
+        const keys = profileKeys(activeProfileId);
+        localStorage.setItem(keys.plan, JSON.stringify(stripGifs(nextPlan)));
+      }
+    }, 400);
   };
 
   const onSelectExercise = (payload) => {
@@ -1444,6 +1787,8 @@ export default function App() {
         onResetPlan={onResetPlan}
         dbStatus={dbStatus}
         onStartDbDownload={startDbDownload}
+        gifStatus={gifStatus}
+        onStartGifDownload={startGifDownload}
         lang={lang}
         onChangeLang={onChangeLang}
         metricsLog={metricsLog}

@@ -450,7 +450,6 @@ export default function App() {
       try {
         const all = await getAllGifs();
         if (cancelled) return;
-        if (!all.length) return;
         const byId = new Map(all.map((g) => [g.id, g.blob]));
         setPlan((prev) => {
           if (!prev) return prev;
@@ -459,9 +458,7 @@ export default function App() {
             exercises: d.exercises.map((ex) => {
               if (ex.gifUrl) return ex;
               const blob = byId.get(ex.id);
-              if (blob) {
-                return { ...ex, gifUrl: URL.createObjectURL(blob) };
-              }
+              if (blob) return { ...ex, gifUrl: URL.createObjectURL(blob) };
               if (supabaseGifBase && ex.id) {
                 return {
                   ...ex,

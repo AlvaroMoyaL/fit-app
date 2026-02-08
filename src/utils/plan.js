@@ -449,6 +449,14 @@ const gifPromiseCache = new Map();
 const MAX_GIF_CONCURRENCY = 1;
 let gifActive = 0;
 const gifQueue = [];
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const SUPABASE_GIF_BUCKET = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
+
+function getSupabaseGifUrl(exerciseId) {
+  if (!SUPABASE_URL || !exerciseId) return "";
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  return `${base}/storage/v1/object/public/${SUPABASE_GIF_BUCKET}/${exerciseId}.gif`;
+}
 async function getCachedGifUrl(exerciseId) {
   if (!exerciseId) return "";
   const cached = await getGif(exerciseId);
@@ -483,6 +491,11 @@ async function getGifUrlWithLimit(exerciseId) {
   if (gifCache.has(exerciseId)) return gifCache.get(exerciseId);
   const cachedUrl = await getCachedGifUrl(exerciseId);
   if (cachedUrl) return cachedUrl;
+  const publicUrl = getSupabaseGifUrl(exerciseId);
+  if (publicUrl) {
+    gifCache.set(exerciseId, publicUrl);
+    return publicUrl;
+  }
   return "";
 
   if (gifPromiseCache.has(exerciseId)) return gifPromiseCache.get(exerciseId);

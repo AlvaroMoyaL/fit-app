@@ -218,6 +218,10 @@ export default function App() {
   const quietUpdateRef = useRef({ timer: null });
   const gifPlanKeyRef = useRef("");
   const gifLocalHydrateRef = useRef("");
+  const supabaseGifBase =
+    (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "") ||
+    "";
+  const supabaseGifBucket = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
   const metrics = useMemo(() => calculateMetrics(form), [form]);
   const allExercises = useMemo(() => {
@@ -455,8 +459,16 @@ export default function App() {
             exercises: d.exercises.map((ex) => {
               if (ex.gifUrl) return ex;
               const blob = byId.get(ex.id);
-              if (!blob) return ex;
-              return { ...ex, gifUrl: URL.createObjectURL(blob) };
+              if (blob) {
+                return { ...ex, gifUrl: URL.createObjectURL(blob) };
+              }
+              if (supabaseGifBase && ex.id) {
+                return {
+                  ...ex,
+                  gifUrl: `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`,
+                };
+              }
+              return ex;
             }),
           }));
           return { ...prev, days };

@@ -1512,6 +1512,81 @@ select:focus {
     padding-right: 0;
   }
 }
+
+.collapsible {
+  border: 2px solid #d9d1c8;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+.collapsible summary {
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible summary::after {
+  content: "▾";
+  font-size: 14px;
+  color: #6a5f55;
+}
+
+.collapsible[open] summary::after {
+  content: "▴";
+}
+
+.collapsible-body {
+  margin-top: 10px;
+}
+
+.mobile-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding-bottom: 84px;
+  }
+
+  .mobile-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px 12px 14px;
+    background: #ffffff;
+    border-top: 2px solid #d9d1c8;
+    z-index: 50;
+  }
+
+  .mobile-nav button {
+    border: 2px solid #d9d1c8;
+    background: #f7f3ee;
+    padding: 10px 8px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #3f352f;
+  }
+
+  .mobile-nav button.active {
+    background: #0b5f58;
+    color: white;
+    border-color: #0b5f58;
+  }
+}
 .ex-actions {
   display: grid;
   gap: 6px;

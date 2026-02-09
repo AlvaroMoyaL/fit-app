@@ -1884,6 +1884,13 @@ export default function App() {
     }
   };
 
+  const renderCollapsible = (title, content, open = false) => (
+    <details className="collapsible" open={open}>
+      <summary>{title}</summary>
+      <div className="collapsible-body">{content}</div>
+    </details>
+  );
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -1993,45 +2000,48 @@ export default function App() {
                 </div>
               )}
 
-              {(showProfileForm || !plan) && (
-                <>
-                  <ProfileForm
-                    form={form}
-                    niveles={niveles}
-                    actividad={actividad}
-                    planTemplates={PLAN_TEMPLATES}
-                    metrics={metrics}
-                    loading={loadingPlan}
-                    error={error}
-                    onChange={onChange}
-                    onToggleTrainDay={onToggleTrainDay}
-                    onChangeReminderEnabled={onChangeReminderEnabled}
-                    onChangeReminderTime={onChangeReminderTime}
-                    onSubmit={(e) => {
-                      onSubmit(e);
-                      setShowProfileForm(false);
-                    }}
-                    onInfo={() => setShowInfo(true)}
-                  />
-                  <div style={{ marginTop: "12px" }}>
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => {
-                        setSidebarTab("history");
-                        setTimeout(() => {
-                          document.getElementById("metrics-log")?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                        }, 0);
+              {(showProfileForm || !plan) &&
+                renderCollapsible(
+                  "Formulario de perfil",
+                  <>
+                    <ProfileForm
+                      form={form}
+                      niveles={niveles}
+                      actividad={actividad}
+                      planTemplates={PLAN_TEMPLATES}
+                      metrics={metrics}
+                      loading={loadingPlan}
+                      error={error}
+                      onChange={onChange}
+                      onToggleTrainDay={onToggleTrainDay}
+                      onChangeReminderEnabled={onChangeReminderEnabled}
+                      onChangeReminderTime={onChangeReminderTime}
+                      onSubmit={(e) => {
+                        onSubmit(e);
+                        setShowProfileForm(false);
                       }}
-                    >
-                      Ir a métricas
-                    </button>
-                  </div>
-                </>
-              )}
+                      onInfo={() => setShowInfo(true)}
+                    />
+                    <div style={{ marginTop: "12px" }}>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => {
+                          setSidebarTab("history");
+                          setTimeout(() => {
+                            document.getElementById("metrics-log")?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start",
+                            });
+                          }, 0);
+                        }}
+                      >
+                        Ir a métricas
+                      </button>
+                    </div>
+                  </>,
+                  isDesktop
+                )}
             </>
           )}
 
@@ -2069,18 +2079,38 @@ export default function App() {
 
           {sidebarTab === "history" && (
             <>
-              <MuscleSummary history={history} lang={lang} />
-              <WeeklyCharts history={history} lang={lang} goals={form} />
-              <MetricsCharts metricsLog={metricsLog} lang={lang} />
-              <div id="metrics-log">
-                <MetricsLogForm
-                  metricsLog={metricsLog}
-                  onAddEntry={onAddMetricsEntry}
-                  onDeleteEntry={onDeleteMetricsEntry}
-                  lang={lang}
-                />
-              </div>
-              <HistoryWeek history={history} lang={lang} />
+              {renderCollapsible(
+                "Resumen muscular",
+                <MuscleSummary history={history} lang={lang} />,
+                isDesktop
+              )}
+              {renderCollapsible(
+                "Resumen semanal",
+                <WeeklyCharts history={history} lang={lang} goals={form} />,
+                isDesktop
+              )}
+              {renderCollapsible(
+                "Tendencia de métricas",
+                <MetricsCharts metricsLog={metricsLog} lang={lang} />,
+                isDesktop
+              )}
+              {renderCollapsible(
+                "Registrar métricas",
+                <div id="metrics-log">
+                  <MetricsLogForm
+                    metricsLog={metricsLog}
+                    onAddEntry={onAddMetricsEntry}
+                    onDeleteEntry={onDeleteMetricsEntry}
+                    lang={lang}
+                  />
+                </div>,
+                true
+              )}
+              {renderCollapsible(
+                "Historial de entrenamientos",
+                <HistoryWeek history={history} lang={lang} />,
+                isDesktop
+              )}
             </>
           )}
         </div>
@@ -2172,6 +2202,38 @@ export default function App() {
           </div>
         </div>
       )}
+      <nav className="mobile-nav">
+        <button
+          type="button"
+          className={sidebarTab === "profile" ? "active" : ""}
+          onClick={() => {
+            setSidebarTab("profile");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          Perfil
+        </button>
+        <button
+          type="button"
+          className={sidebarTab === "plan" ? "active" : ""}
+          onClick={() => {
+            setSidebarTab("plan");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          Plan
+        </button>
+        <button
+          type="button"
+          className={sidebarTab === "history" ? "active" : ""}
+          onClick={() => {
+            setSidebarTab("history");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          Progreso
+        </button>
+      </nav>
       </div>
     </div>
   );

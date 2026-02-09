@@ -192,6 +192,7 @@ export default function App() {
   const authEnabled = Boolean(supabase);
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
+  const initialSyncRef = useRef(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [highContrast, setHighContrast] = useState(() => {
@@ -358,6 +359,28 @@ export default function App() {
     if (!authUser) return;
     autoSync();
   }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    if (!progressReady) return;
+    if (initialSyncRef.current) return;
+    initialSyncRef.current = true;
+    const run = async () => {
+      try {
+        const localUpdated = localStorage.getItem(LOCAL_SYNC_KEY);
+        const cloudPayload = await downloadCloud();
+        if (cloudPayload) {
+          const cloudUpdated = cloudPayload?.meta?.updatedAt || null;
+          if (!localUpdated || (cloudUpdated && cloudUpdated > localUpdated)) {
+            applyCloudPayload(cloudPayload);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    run();
+  }, [authUser, progressReady]);
 
   useEffect(() => {
     if (!authUser) return;

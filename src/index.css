@@ -1242,6 +1242,18 @@ select:focus {
   color: #6a5f55;
 }
 
+.week-date {
+  font-size: 12px;
+  color: #6a5f55;
+  text-transform: capitalize;
+}
+
+.week-day.active {
+  border: 2px solid #0b5f58;
+  background: #f0faf8;
+  box-shadow: 0 0 0 2px rgba(11, 95, 88, 0.12);
+}
+
 .week-day.rest {
   background: #f8f6f1;
   color: #7a6f65;
@@ -1250,6 +1262,29 @@ select:focus {
 .week-day.train {
   background: #eef8f6;
   color: #1f7a58;
+}
+
+.plan-mobile-controls {
+  display: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.plan-day-select {
+  display: grid;
+  gap: 6px;
+}
+
+.plan-day-select label {
+  font-size: 12px;
+  color: #6a5f55;
+}
+
+.plan-day-select select {
+  min-width: 180px;
 }
 
 .xp-summary {
@@ -1287,6 +1322,10 @@ select:focus {
   .plan-grid {
     grid-template-columns: 1fr;
   }
+
+  .plan-mobile-controls {
+    display: flex;
+  }
 }
 
 .toggle {
@@ -1299,6 +1338,54 @@ select:focus {
   border: 1px solid #efeae4;
   border-radius: 12px;
   background: #fff;
+}
+
+.equipment-details {
+  border: 1px solid #efeae4;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+.equipment-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #4f463f;
+}
+
+.equipment-selected {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+}
+
+.equipment-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0 12px;
+}
+
+.equipment-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.equipment-group strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6a5f55;
+}
+
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 10px;
+  margin-top: 8px;
 }
 
 .modal p {

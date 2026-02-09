@@ -1,9 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import DayCard from "./DayCard";
 
 export default function Plan({
   plan,
   onChangeDayMode,
   onToggleQuiet,
+  onChangeDayEquipment,
   onSelectExercise,
   completedMap,
   completedDetails,
@@ -19,10 +21,24 @@ export default function Plan({
   metrics,
   onInfoMetrics,
   activeExerciseKey,
+  equipmentGroups,
 }) {
   if (!plan) return null;
 
+  const [mobileDayIndex, setMobileDayIndex] = useState(0);
+  const [showAllDays, setShowAllDays] = useState(false);
+
+  useEffect(() => {
+    setMobileDayIndex(0);
+    setShowAllDays(false);
+  }, [plan?.days?.length]);
+
   const progress = totalPossibleXp ? Math.min(1, earnedXp / totalPossibleXp) : 0;
+  const today = new Date();
+  const dateFormatter = useMemo(() => {
+    const locale = lang === "es" ? "es-ES" : "en-US";
+    return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" });
+  }, [lang]);
 
   return (
     <div className="plan" id="plan">
@@ -99,36 +115,87 @@ export default function Plan({
       )}
       {plan.weekSchedule && (
         <div className="week-schedule">
-          {plan.weekSchedule.map((d) => (
+          {plan.weekSchedule.map((d, index) => {
+            const date = new Date(today);
+            date.setDate(today.getDate() + index);
+            const dateLabel = dateFormatter.format(date);
+            const isSelected = index === mobileDayIndex;
+            return (
             <div
               key={d.label}
-              className={`week-day ${d.type === "rest" ? "rest" : "train"}`}
+              className={`week-day ${d.type === "rest" ? "rest" : "train"} ${
+                isSelected ? "active" : ""
+              }`}
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                setMobileDayIndex(index);
+                setShowAllDays(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setMobileDayIndex(index);
+                  setShowAllDays(false);
+                }
+              }}
             >
               <span>{d.label}</span>
+              <span className="week-date">{dateLabel}</span>
               <strong>{d.type === "rest" ? "Descanso" : d.title}</strong>
             </div>
-          ))}
+            );
+          })}
+        </div>
+      )}
+      {plan.days?.length > 1 && (
+        <div className="plan-mobile-controls">
+          <div className="plan-day-select">
+            <label>Ver día</label>
+            <select
+              value={mobileDayIndex}
+              onChange={(e) => setMobileDayIndex(Number(e.target.value))}
+            >
+              {plan.days.map((day, index) => (
+                <option key={day.title} value={index}>
+                  {day.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="tiny"
+            onClick={() => setShowAllDays((v) => !v)}
+          >
+            {showAllDays ? "Ver 1 día" : "Ver todos"}
+          </button>
         </div>
       )}
       <div className="plan-grid">
-        {plan.days.map((day, index) => (
-          <DayCard
-            key={day.title}
-            day={day}
-            index={index}
-            onChangeMode={onChangeDayMode}
-            onToggleQuiet={onToggleQuiet}
-            onSelectExercise={onSelectExercise}
-            completedMap={completedMap}
-            completedDetails={completedDetails}
-            onUpdateDetail={onUpdateDetail}
-            getExerciseKey={getExerciseKey}
-            getExerciseXp={getExerciseXp}
-            lang={lang}
-            onStartSession={onStartSession}
-            activeExerciseKey={activeExerciseKey}
-          />
-        ))}
+        {plan.days.map((day, index) => {
+          if (!showAllDays && index !== mobileDayIndex) return null;
+          return (
+            <DayCard
+              key={day.title}
+              day={day}
+              index={index}
+              onChangeMode={onChangeDayMode}
+              onToggleQuiet={onToggleQuiet}
+              onChangeEquipment={onChangeDayEquipment}
+              onSelectExercise={onSelectExercise}
+              completedMap={completedMap}
+              completedDetails={completedDetails}
+              onUpdateDetail={onUpdateDetail}
+              getExerciseKey={getExerciseKey}
+              getExerciseXp={getExerciseXp}
+              lang={lang}
+              onStartSession={onStartSession}
+              activeExerciseKey={activeExerciseKey}
+              equipmentGroups={equipmentGroups}
+            />
+          );
+        })}
       </div>
     </div>
   );

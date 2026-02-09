@@ -5,6 +5,7 @@ export default function DayCard({
   index,
   onChangeMode,
   onToggleQuiet,
+  onChangeEquipment,
   onSelectExercise,
   completedMap,
   completedDetails,
@@ -14,6 +15,7 @@ export default function DayCard({
   lang,
   onStartSession,
   activeExerciseKey,
+  equipmentGroups,
 }) {
   const dayPossible = day.exercises.reduce((sum, ex) => sum + getExerciseXp(ex), 0);
   const dayEarned = day.exercises.reduce((sum, ex) => {
@@ -45,6 +47,32 @@ export default function DayCard({
     return "Fuerza";
   };
 
+  const selectedEquipment = Array.isArray(day.equipmentList) ? day.equipmentList : [];
+  const formatEquipment = (value) => {
+    if (!value) return value;
+    return value
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (m) => m.toUpperCase());
+  };
+  const bodyweightOption =
+    selectedEquipment.find((e) => /body weight|bodyweight/i.test(e)) ||
+    (equipmentGroups || [])
+      .flatMap((g) => g.items)
+      .find((e) => /body weight|bodyweight/i.test(e));
+  const toggleEquipment = (value) => {
+    const next = selectedEquipment.includes(value)
+      ? selectedEquipment.filter((e) => e !== value)
+      : [...selectedEquipment, value];
+    onChangeEquipment(index, next);
+  };
+  const clearEquipment = () => onChangeEquipment(index, []);
+  const setBodyweightOnly = () =>
+    onChangeEquipment(index, bodyweightOption ? [bodyweightOption] : []);
+  const selectedLabel =
+    selectedEquipment.length > 0
+      ? selectedEquipment.map(formatEquipment)
+      : [];
+
   return (
     <div className="day-card">
       <div className="day-head">
@@ -61,7 +89,7 @@ export default function DayCard({
 
       <div className="day-controls">
         <label className="field">
-          Equipo del día
+          {lang === "en" ? "Day equipment" : "Equipo del día"}
           <select value={day.mode} onChange={(e) => onChangeMode(index, e.target.value)}>
             <option value="week">{EQUIPMENT_MODES.week.label}</option>
             <option value="weekend">{EQUIPMENT_MODES.weekend.label}</option>
@@ -74,9 +102,66 @@ export default function DayCard({
             checked={Boolean(day.quiet)}
             onChange={(e) => onToggleQuiet(index, e.target.checked)}
           />
-          Modo silencioso
+          {lang === "en" ? "Quiet mode" : "Modo silencioso"}
         </label>
       </div>
+      {equipmentGroups && equipmentGroups.length > 0 && (
+        <details className="equipment-details">
+          <summary>
+            {lang === "en"
+              ? "Specific equipment (optional)"
+              : "Equipo específico (opcional)"}
+          </summary>
+          {selectedLabel.length > 0 && (
+            <div className="equipment-selected">
+              {selectedLabel.map((item) => (
+                <span key={item} className="pill">
+                  {item}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="equipment-actions">
+            <button type="button" className="tiny" onClick={clearEquipment}>
+              {lang === "en" ? "Clear" : "Limpiar"}
+            </button>
+            <button
+              type="button"
+              className="tiny"
+              onClick={setBodyweightOnly}
+              disabled={!bodyweightOption}
+            >
+              {lang === "en" ? "Bodyweight only" : "Solo sin equipo"}
+            </button>
+            {selectedEquipment.length > 0 && (
+              <span className="note">
+                {lang === "en"
+                  ? `${selectedEquipment.length} selected`
+                  : `${selectedEquipment.length} seleccionados`}
+              </span>
+            )}
+          </div>
+          <div className="equipment-groups">
+            {equipmentGroups.map((group) => (
+              <div key={group.label} className="equipment-group">
+                <strong>{group.label}</strong>
+                <div className="equipment-grid">
+                  {group.items.map((item) => (
+                    <label key={item} className="check">
+                      <input
+                        type="checkbox"
+                        checked={selectedEquipment.includes(item)}
+                        onChange={() => toggleEquipment(item)}
+                      />
+                      {formatEquipment(item)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       <ul className="ex-list">
         {day.exercises.map((ex, i) => (

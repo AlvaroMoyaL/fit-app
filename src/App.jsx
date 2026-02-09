@@ -279,6 +279,7 @@ export default function App() {
     let changed = false;
     const days = planToNormalize.days.map((d) => ({
       ...d,
+      equipmentList: Array.isArray(d.equipmentList) ? d.equipmentList : [],
       exercises: d.exercises.map((ex) => {
         if (ex.instanceId) return ex;
         changed = true;
@@ -288,7 +289,7 @@ export default function App() {
         };
       }),
     }));
-    return changed ? { ...planToNormalize, days } : planToNormalize;
+    return changed ? { ...planToNormalize, days } : { ...planToNormalize, days };
   };
 
   const totalPossibleXp = useMemo(() => {
@@ -323,6 +324,31 @@ export default function App() {
         );
       }, 0)
     : 0;
+
+  const equipmentGroups = useMemo(() => {
+    const pool = exercisePool.length ? exercisePool : plan?.pool || [];
+    const set = new Set();
+    pool.forEach((ex) => {
+      if (ex?.equipment) set.add(ex.equipment);
+    });
+    const list = Array.from(set).sort((a, b) => a.localeCompare(b));
+    const machine = list.filter((e) => /machine|smith|leverage/i.test(e));
+    const other = list.filter((e) => !/machine|smith|leverage/i.test(e));
+    const groups = [];
+    if (other.length) {
+      groups.push({
+        label: lang === "en" ? "Equipment" : "Equipos",
+        items: other,
+      });
+    }
+    if (machine.length) {
+      groups.push({
+        label: lang === "en" ? "Machines" : "Máquinas",
+        items: machine,
+      });
+    }
+    return groups;
+  }, [exercisePool, plan?.pool, lang]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -407,6 +433,10 @@ export default function App() {
       setDetailEx(null);
     }
   }, [plan]);
+
+  useEffect(() => {
+    setGifsLoading(gifStatus.state === "downloading" || gifStatus.state === "paused");
+  }, [gifStatus.state]);
 
   useEffect(() => {
     planRef.current = plan;
@@ -1379,7 +1409,8 @@ export default function App() {
       mode,
       day.quiet,
       day.exercises.length || 4,
-      levelIndex
+      levelIndex,
+      day.equipmentList || []
     );
 
     updatedDays[dayIndex] = {
@@ -1426,7 +1457,8 @@ export default function App() {
         dayNow.mode,
         quiet,
         dayNow.exercises.length || 4,
-        levelIndex
+        levelIndex,
+        dayNow.equipmentList || []
       );
 
       const nextDays = [...latestPlan.days];
@@ -1438,6 +1470,37 @@ export default function App() {
         localStorage.setItem(keys.plan, JSON.stringify(stripGifs(nextPlan)));
       }
     }, 400);
+  };
+
+  const onChangeDayEquipment = async (dayIndex, equipmentList) => {
+    if (!plan) return;
+    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+    const updatedDays = [...plan.days];
+    const day = updatedDays[dayIndex];
+    const nextList = Array.isArray(equipmentList) ? equipmentList : [];
+
+    const exercises = await buildExercises(
+      exercisePool.length ? exercisePool : day.exercises,
+      day.mode,
+      day.quiet,
+      day.exercises.length || 4,
+      levelIndex,
+      nextList
+    );
+
+    updatedDays[dayIndex] = {
+      ...day,
+      equipmentList: nextList,
+      exercises,
+    };
+
+    const updatedPlan = { ...plan, days: updatedDays };
+    setPlan(updatedPlan);
+    if (activeProfileId) {
+      const keys = profileKeys(activeProfileId);
+      localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+    }
+    setDetailEx(null);
   };
 
   const onSelectExercise = (payload) => {
@@ -1541,7 +1604,14 @@ export default function App() {
     if (dayIndex === -1) return;
     const day = updatedDays[dayIndex];
     const pool = exercisePool.length ? exercisePool : day.exercises;
-    const extra = await buildExercises(pool, day.mode, day.quiet, count, levelIndex);
+    const extra = await buildExercises(
+      pool,
+      day.mode,
+      day.quiet,
+      count,
+      levelIndex,
+      day.equipmentList || []
+    );
     const nextExercises = [...day.exercises, ...extra];
     updatedDays[dayIndex] = { ...day, exercises: nextExercises };
     const updatedPlan = { ...plan, days: updatedDays };
@@ -1680,19 +1750,35 @@ export default function App() {
     const pool = exercisePool.length ? exercisePool : day.exercises;
     let mode = day.mode;
     let quiet = day.quiet;
+    let equipmentList = Array.isArray(day.equipmentList) ? day.equipmentList : [];
 
     if (reason === "no-equipment") {
       mode = "week";
+      equipmentList = ["body weight"];
     }
     if (reason === "space") {
       mode = "week";
       quiet = true;
     }
 
-    const replacementList = await buildExercises(pool, mode, quiet, 1, levelIndex);
+    const replacementList = await buildExercises(
+      pool,
+      mode,
+      quiet,
+      1,
+      levelIndex,
+      equipmentList
+    );
     let replacement = replacementList[0];
     if (!replacement || replacement.id === ex.id) {
-      const fallback = await buildExercises(pool, mode, quiet, 2, levelIndex);
+      const fallback = await buildExercises(
+        pool,
+        mode,
+        quiet,
+        2,
+        levelIndex,
+        equipmentList
+      );
       replacement = fallback.find((r) => r.id !== ex.id) || fallback[0];
     }
     if (!replacement) return;
@@ -2057,6 +2143,7 @@ export default function App() {
                 plan={plan}
                 onChangeDayMode={onChangeDayMode}
                 onToggleQuiet={onToggleQuiet}
+                onChangeDayEquipment={onChangeDayEquipment}
                 onSelectExercise={onSelectExercise}
                 completedMap={completed}
                 completedDetails={completedDetails}
@@ -2074,6 +2161,7 @@ export default function App() {
                 activeExerciseKey={
                   detailEx?.ex ? getExerciseKey(detailEx.dayTitle, detailEx.ex) : ""
                 }
+                equipmentGroups={equipmentGroups}
               />
             </>
           )}

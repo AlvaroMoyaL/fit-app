@@ -96,6 +96,8 @@ const EQUIPMENT_MODES = {
   },
 };
 
+const QUIET_BLOCKED = EQUIPMENT_MODES.week.noisyBlocked;
+
 function normalizeEquipment(equipment) {
   if (!equipment) return "";
   const e = equipment.toLowerCase();
@@ -236,6 +238,18 @@ function filterPoolByMode(pool, mode, quiet) {
     return !blocked.some((k) => name.includes(k));
   });
 
+  return filtered.length ? filtered : pool;
+}
+
+function filterPoolByEquipmentList(pool, equipmentList, quiet) {
+  if (!Array.isArray(equipmentList) || equipmentList.length === 0) return pool;
+  const allowed = new Set(equipmentList.map((item) => normalizeEquipment(item)));
+  const blocked = quiet ? QUIET_BLOCKED : [];
+  const filtered = pool.filter((e) => {
+    if (!allowed.has(normalizeEquipment(e.equipment))) return false;
+    const name = (e.name || "").toLowerCase();
+    return !blocked.some((k) => name.includes(k));
+  });
   return filtered.length ? filtered : pool;
 }
 
@@ -538,8 +552,11 @@ async function getLocalPool() {
   return localPoolPromise;
 }
 
-async function buildExercises(pool, mode, quiet, count, levelIndex) {
-  const filtered = filterPoolByLevel(filterPoolByMode(pool, mode, quiet), levelIndex);
+async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentList) {
+  const byMode = filterPoolByMode(pool, mode, quiet);
+  const byEquipment = filterPoolByEquipmentList(pool, equipmentList, quiet);
+  const basePool = equipmentList && equipmentList.length ? byEquipment : byMode;
+  const filtered = filterPoolByLevel(basePool, levelIndex);
   const picked = pickRandom(filtered, count).map((ex) => ({
     id: ex.id,
     name: ex.name || ex.name_es || ex.name_en,
@@ -694,7 +711,8 @@ async function generatePlan(form, options = {}) {
         mode,
         quiet,
         mainCount,
-        levelIndex
+        levelIndex,
+        []
       );
       const xp = 50 + levelIndex * 10 + exercises.length * 5;
       return {
@@ -702,6 +720,7 @@ async function generatePlan(form, options = {}) {
         mode,
         quiet,
         focus,
+        equipmentList: [],
         exercises,
         xp,
       };

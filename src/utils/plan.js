@@ -454,8 +454,10 @@ const SUPABASE_GIF_BUCKET = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
 function getSupabaseGifUrl(exerciseId) {
   if (!SUPABASE_URL || !exerciseId) return "";
+  const idStr = String(exerciseId);
+  if (!/^\d+$/.test(idStr)) return "";
   const base = SUPABASE_URL.replace(/\/$/, "");
-  return `${base}/storage/v1/object/public/${SUPABASE_GIF_BUCKET}/${exerciseId}.gif`;
+  return `${base}/storage/v1/object/public/${SUPABASE_GIF_BUCKET}/${idStr}.gif`;
 }
 async function getCachedGifUrl(exerciseId) {
   if (!exerciseId) return "";

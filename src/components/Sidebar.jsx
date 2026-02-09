@@ -33,6 +33,7 @@ export default function Sidebar({
   onExport,
   onImport,
   authUser,
+  authReady,
   authForm,
   onAuthChange,
   onSignIn,
@@ -82,7 +83,12 @@ export default function Sidebar({
             Configura Supabase en .env para activar login.
           </p>
         )}
-        {authEnabled && !authUser && (
+        {authEnabled && !authReady && (
+          <div className="auth-box">
+            <span className="note">Comprobando sesión…</span>
+          </div>
+        )}
+        {authEnabled && authReady && !authUser && (
           <div className="auth-box">
             <input
               name="email"

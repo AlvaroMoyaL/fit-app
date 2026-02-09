@@ -181,7 +181,11 @@ export default function App() {
   const [reminderPrompt, setReminderPrompt] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(true);
   const [authUser, setAuthUser] = useState(null);
-  const [authForm, setAuthForm] = useState({ email: "", password: "" });
+  const [authReady, setAuthReady] = useState(false);
+  const [authForm, setAuthForm] = useState(() => ({
+    email: localStorage.getItem("fit_auth_email") || "",
+    password: "",
+  }));
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [syncStatus, setSyncStatus] = useState("");
@@ -333,9 +337,11 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => {
       if (ignore) return;
       setAuthUser(data?.session?.user || null);
+      setAuthReady(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user || null);
+      setAuthReady(true);
     });
     return () => {
       ignore = true;
@@ -1143,6 +1149,9 @@ export default function App() {
   const onAuthChange = (e) => {
     const { name, value } = e.target;
     setAuthForm((f) => ({ ...f, [name]: value }));
+    if (name === "email") {
+      localStorage.setItem("fit_auth_email", value);
+    }
   };
 
   const onSignIn = async () => {
@@ -1827,6 +1836,7 @@ export default function App() {
         onExport={onExport}
         onImport={onImport}
         authUser={authUser}
+        authReady={authReady}
         authForm={authForm}
         onAuthChange={onAuthChange}
         onSignIn={onSignIn}

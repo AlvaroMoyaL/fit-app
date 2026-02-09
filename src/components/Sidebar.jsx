@@ -32,6 +32,7 @@ export default function Sidebar({
   metricsLog,
   onExport,
   onImport,
+  onRestoreBackup,
   authUser,
   authReady,
   authForm,
@@ -361,6 +362,9 @@ export default function Sidebar({
         <div className="sidebar-actions">
           <button type="button" className="tiny" onClick={onExport}>
             Exportar
+          </button>
+          <button type="button" className="tiny" onClick={onRestoreBackup}>
+            Restaurar último
           </button>
           <button
             type="button"

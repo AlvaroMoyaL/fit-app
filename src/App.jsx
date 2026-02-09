@@ -1858,6 +1858,32 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const onRestoreBackup = () => {
+    if (!activeProfileId) return;
+    const raw = localStorage.getItem(AUTO_BACKUP_KEY);
+    if (!raw) {
+      alert("No hay backup disponible.");
+      return;
+    }
+    const ok = window.confirm("¿Restaurar el último backup automático?");
+    if (!ok) return;
+    try {
+      const backup = JSON.parse(raw);
+      const data = backup?.data || {};
+      const keys = profileKeys(activeProfileId);
+      if (data.profile) localStorage.setItem(keys.profile, data.profile);
+      if (data.plan) localStorage.setItem(keys.plan, data.plan);
+      if (data.progress) localStorage.setItem(keys.progress, data.progress);
+      if (data.progressDetails) localStorage.setItem(keys.progressDetails, data.progressDetails);
+      if (data.history) localStorage.setItem(keys.history, data.history);
+      if (data.metricsLog) localStorage.setItem(keys.metricsLog, data.metricsLog);
+      if (data.lang) localStorage.setItem(keys.lang, data.lang);
+      window.location.reload();
+    } catch {
+      alert("Backup inválido.");
+    }
+  };
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -1891,6 +1917,7 @@ export default function App() {
         metricsLog={metricsLog}
         onExport={onExport}
         onImport={onImport}
+        onRestoreBackup={onRestoreBackup}
         authUser={authUser}
         authReady={authReady}
         authForm={authForm}

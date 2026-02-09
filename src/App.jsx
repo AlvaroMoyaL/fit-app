@@ -39,6 +39,8 @@ const ACTIVE_PROFILE_KEY = "fit_active_profile";
 const DB_COMPLETE_KEY = "exercises_complete";
 const GIFS_COMPLETE_KEY = "gifs_complete";
 const LOCAL_SYNC_KEY = "fit_last_local_change";
+const AUTO_BACKUP_KEY = "fit_backup_auto";
+const AUTO_BACKUP_PREV_KEY = "fit_backup_auto_prev";
 
 function toNum(v) {
   const n = Number(v);
@@ -223,6 +225,7 @@ export default function App() {
   const quietUpdateRef = useRef({ timer: null });
   const gifPlanKeyRef = useRef("");
   const gifLocalHydrateRef = useRef("");
+  const backupTimerRef = useRef(null);
   const supabaseGifBase =
     (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "") || "";
   const supabaseGifBucket = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
@@ -487,7 +490,7 @@ export default function App() {
               if (ex.gifUrl) return ex;
               const blob = byId.get(ex.id);
               if (blob) return { ...ex, gifUrl: URL.createObjectURL(blob) };
-              if (supabaseGifBase && ex.id) {
+              if (supabaseGifBase && ex.id && /^\d+$/.test(String(ex.id))) {
                 return {
                   ...ex,
                   gifUrl: `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`,
@@ -1066,6 +1069,34 @@ export default function App() {
     localStorage.setItem(keys.metricsLog, JSON.stringify(metricsLog));
     touchLocalChange();
   }, [metricsLog, progressReady, activeProfileId]);
+
+  useEffect(() => {
+    if (!progressReady || !activeProfileId) return;
+    if (backupTimerRef.current) {
+      clearTimeout(backupTimerRef.current);
+    }
+    backupTimerRef.current = setTimeout(() => {
+      try {
+        const keys = profileKeys(activeProfileId);
+        const payload = buildBackupPayload(keys);
+        const backup = {
+          createdAt: new Date().toISOString(),
+          profileId: activeProfileId,
+          data: payload,
+        };
+        const prev = localStorage.getItem(AUTO_BACKUP_KEY);
+        if (prev) localStorage.setItem(AUTO_BACKUP_PREV_KEY, prev);
+        localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(backup));
+      } catch {
+        // ignore
+      }
+    }, 1200);
+    return () => {
+      if (backupTimerRef.current) {
+        clearTimeout(backupTimerRef.current);
+      }
+    };
+  }, [localChangeTick, progressReady, activeProfileId]);
 
   useEffect(() => {
     if (!plan) return;
@@ -1778,18 +1809,20 @@ export default function App() {
     setCompletedDetails({});
   };
 
+  const buildBackupPayload = (keys) => ({
+    profile: localStorage.getItem(keys.profile),
+    plan: localStorage.getItem(keys.plan),
+    progress: localStorage.getItem(keys.progress),
+    progressDetails: localStorage.getItem(keys.progressDetails),
+    history: localStorage.getItem(keys.history),
+    metricsLog: localStorage.getItem(keys.metricsLog),
+    lang: localStorage.getItem(keys.lang),
+  });
+
   const onExport = () => {
     if (!activeProfileId) return;
     const keys = profileKeys(activeProfileId);
-    const data = {
-      profile: localStorage.getItem(keys.profile),
-      plan: localStorage.getItem(keys.plan),
-      progress: localStorage.getItem(keys.progress),
-      progressDetails: localStorage.getItem(keys.progressDetails),
-      history: localStorage.getItem(keys.history),
-      metricsLog: localStorage.getItem(keys.metricsLog),
-      lang: localStorage.getItem(keys.lang),
-    };
+    const data = buildBackupPayload(keys);
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });

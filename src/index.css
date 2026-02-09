@@ -1563,7 +1563,7 @@ select:focus {
     right: 0;
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: auto repeat(3, 1fr);
     gap: 8px;
     padding: 10px 12px 14px;
     background: #ffffff;
@@ -1581,11 +1581,55 @@ select:focus {
     color: #3f352f;
   }
 
+  .mobile-nav .menu-btn {
+    background: #ffffff;
+  }
+
   .mobile-nav button.active {
     background: #0b5f58;
     color: white;
     border-color: #0b5f58;
   }
+
+  .sidebar {
+    display: none;
+  }
+}
+
+.mobile-menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 10, 8, 0.35);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.mobile-menu {
+  width: min(420px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 18px;
+  border: 2px solid #d9d1c8;
+  padding: 16px;
+}
+
+.mobile-menu .sidebar {
+  display: grid;
+  position: static;
+  height: auto;
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.mobile-menu-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 .ex-actions {
   display: grid;

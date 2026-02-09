@@ -200,6 +200,7 @@ export default function App() {
   const [highContrast, setHighContrast] = useState(() => {
     return localStorage.getItem("fit_high_contrast") === "1";
   });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const touchLocalChange = () => {
     localStorage.setItem(LOCAL_SYNC_KEY, new Date().toISOString());
@@ -2040,7 +2041,7 @@ export default function App() {
                       </button>
                     </div>
                   </>,
-                  isDesktop
+                  false
                 )}
             </>
           )}
@@ -2082,17 +2083,17 @@ export default function App() {
               {renderCollapsible(
                 "Resumen muscular",
                 <MuscleSummary history={history} lang={lang} />,
-                isDesktop
+                false
               )}
               {renderCollapsible(
                 "Resumen semanal",
                 <WeeklyCharts history={history} lang={lang} goals={form} />,
-                isDesktop
+                false
               )}
               {renderCollapsible(
                 "Tendencia de métricas",
                 <MetricsCharts metricsLog={metricsLog} lang={lang} />,
-                isDesktop
+                false
               )}
               {renderCollapsible(
                 "Registrar métricas",
@@ -2104,12 +2105,12 @@ export default function App() {
                     lang={lang}
                   />
                 </div>,
-                true
+                false
               )}
               {renderCollapsible(
                 "Historial de entrenamientos",
                 <HistoryWeek history={history} lang={lang} />,
-                isDesktop
+                false
               )}
             </>
           )}
@@ -2205,6 +2206,13 @@ export default function App() {
       <nav className="mobile-nav">
         <button
           type="button"
+          className="menu-btn"
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          Menú
+        </button>
+        <button
+          type="button"
           className={sidebarTab === "profile" ? "active" : ""}
           onClick={() => {
             setSidebarTab("profile");
@@ -2234,6 +2242,68 @@ export default function App() {
           Progreso
         </button>
       </nav>
+
+      {mobileMenuOpen && (
+        <div className="mobile-menu-overlay" onClick={() => setMobileMenuOpen(false)}>
+          <div className="mobile-menu" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-menu-head">
+              <strong>Menú</strong>
+              <button type="button" className="tiny" onClick={() => setMobileMenuOpen(false)}>
+                Cerrar
+              </button>
+            </div>
+            <Sidebar
+              profiles={profiles}
+              activeProfileId={activeProfileId}
+              onSwitchProfile={onSwitchProfile}
+              onAddProfile={onAddProfile}
+              onRenameProfile={onRenameProfile}
+              onDeleteProfile={onDeleteProfile}
+              newProfileName={newProfileName}
+              onChangeNewProfileName={setNewProfileName}
+              renameProfileName={renameProfileName}
+              onChangeRenameProfileName={setRenameProfileName}
+              activeTab={sidebarTab}
+              onChangeTab={setSidebarTab}
+              profile={form}
+              level={level}
+              earnedXp={earnedXp}
+              totalPossibleXp={totalPossibleXp}
+              plan={plan}
+              completedCount={completedCount}
+              totalExercises={totalExercises}
+              onContinuePlan={onContinuePlan}
+              onResetPlan={onResetPlan}
+              dbStatus={dbStatus}
+              onStartDbDownload={startDbDownload}
+              gifStatus={gifStatus}
+              onStartGifDownload={startGifDownload}
+              lang={lang}
+              onChangeLang={onChangeLang}
+              metricsLog={metricsLog}
+              onExport={onExport}
+              onImport={onImport}
+              onRestoreBackup={onRestoreBackup}
+              authUser={authUser}
+              authReady={authReady}
+              authForm={authForm}
+              onAuthChange={onAuthChange}
+              onSignIn={onSignIn}
+              onSignUp={onSignUp}
+              onMagicLink={onMagicLink}
+              onSignOut={onSignOut}
+              authLoading={authLoading}
+              authError={authError}
+              syncStatus={syncStatus}
+              onSyncUp={onSyncUp}
+              onSyncDown={onSyncDown}
+              authEnabled={authEnabled}
+              highContrast={highContrast}
+              onToggleContrast={() => setHighContrast((v) => !v)}
+            />
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

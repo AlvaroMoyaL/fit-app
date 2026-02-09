@@ -261,6 +261,21 @@ function filterPoolByLevel(pool, levelIndex) {
     "sprint",
     "depth jump",
     "jump",
+    "pull-up",
+    "pull up",
+    "chin-up",
+    "chin up",
+    "dip",
+    "pike push",
+    "bear crawl",
+    "handstand push",
+    "muscle-up",
+    "snatch balance",
+    "clean and jerk",
+    "hang clean",
+    "hang snatch",
+    "push press",
+    "overhead squat",
   ];
   const filtered = pool.filter((e) => {
     const diff = (e.difficulty || "").toLowerCase();
@@ -269,6 +284,10 @@ function filterPoolByLevel(pool, levelIndex) {
     const name = (e.name || "").toLowerCase();
     if (name.includes("advanced")) return false;
     if (hardKeywords.some((k) => name.includes(k))) return false;
+    const equipment = normalizeEquipment(e.equipment);
+    if (equipment === "barbell" || equipment === "kettlebell") return false;
+    const category = (e.category || "").toLowerCase();
+    if (category.includes("olympic") || category.includes("power")) return false;
     return true;
   });
   return filtered.length ? filtered : pool;

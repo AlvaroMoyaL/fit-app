@@ -3,6 +3,7 @@ import { EQUIPMENT_MODES } from "../utils/plan";
 export default function DayCard({
   day,
   index,
+  dayLabel,
   onChangeMode,
   onToggleQuiet,
   onChangeEquipment,
@@ -76,7 +77,10 @@ export default function DayCard({
   return (
     <div className="day-card">
       <div className="day-head">
-        <strong>{day.title}</strong>
+        <div className="day-title">
+          <strong>{day.title}</strong>
+          {dayLabel && <span className="day-date">{dayLabel}</span>}
+        </div>
         <span className="day-xp">
           {dayEarned} / {dayPossible} XP
         </span>

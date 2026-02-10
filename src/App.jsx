@@ -246,7 +246,13 @@ export default function App() {
   const getExerciseXp = (ex) =>
     XP_BASE + (ex.prescription?.type === "time" ? XP_TIME_BONUS : 0);
 
-  const todayKey = () => new Date().toISOString().slice(0, 10);
+  const todayKey = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
   const getDetailSnapshot = (dayTitle, ex) => {
     const key = getExerciseKey(dayTitle, ex);
@@ -1564,16 +1570,17 @@ export default function App() {
     }, 0);
   };
 
-  const openDaySummary = (dayTitle) => {
+  const openDaySummary = (dayTitle, completedOverride) => {
     if (!plan) return;
     const day = plan.days.find((d) => d.title === dayTitle);
     if (!day) return;
+    const doneMap = completedOverride || completed;
     const dayTotal = day.exercises.length;
     const doneCount = day.exercises.filter((ex) =>
-      completed[getExerciseKey(dayTitle, ex)]
+      doneMap[getExerciseKey(dayTitle, ex)]
     ).length;
     const dayXp = day.exercises.reduce((sum, ex) => {
-      return sum + (completed[getExerciseKey(dayTitle, ex)] ? getExerciseXp(ex) : 0);
+      return sum + (doneMap[getExerciseKey(dayTitle, ex)] ? getExerciseXp(ex) : 0);
     }, 0);
     const minutes = day.exercises.reduce((sum, ex) => {
       const key = getExerciseKey(dayTitle, ex);
@@ -1680,7 +1687,7 @@ export default function App() {
           (item) => nextCompleted[getExerciseKey(dayTitle, item)]
         );
         if (allDone) {
-          openDaySummary(dayTitle);
+          openDaySummary(dayTitle, nextCompleted);
         }
       }
     }

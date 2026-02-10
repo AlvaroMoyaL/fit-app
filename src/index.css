@@ -1026,6 +1026,17 @@ select:focus {
   flex-wrap: wrap;
 }
 
+.day-title {
+  display: grid;
+  gap: 2px;
+}
+
+.day-date {
+  font-size: 12px;
+  color: #6a5f55;
+  text-transform: capitalize;
+}
+
 .day-xp {
   font-size: 12px;
   color: #0f766e;

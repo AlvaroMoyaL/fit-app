@@ -39,6 +39,11 @@ export default function Plan({
     const locale = lang === "es" ? "es-ES" : "en-US";
     return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" });
   }, [lang]);
+  const getDateLabel = (index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    return dateFormatter.format(date);
+  };
 
   return (
     <div className="plan" id="plan">
@@ -116,9 +121,7 @@ export default function Plan({
       {plan.weekSchedule && (
         <div className="week-schedule">
           {plan.weekSchedule.map((d, index) => {
-            const date = new Date(today);
-            date.setDate(today.getDate() + index);
-            const dateLabel = dateFormatter.format(date);
+            const dateLabel = getDateLabel(index);
             const isSelected = index === mobileDayIndex;
             return (
             <div
@@ -158,7 +161,7 @@ export default function Plan({
             >
               {plan.days.map((day, index) => (
                 <option key={day.title} value={index}>
-                  {day.title}
+                  {`${day.title} · ${getDateLabel(index)}`}
                 </option>
               ))}
             </select>
@@ -180,6 +183,7 @@ export default function Plan({
               key={day.title}
               day={day}
               index={index}
+              dayLabel={getDateLabel(index)}
               onChangeMode={onChangeDayMode}
               onToggleQuiet={onToggleQuiet}
               onChangeEquipment={onChangeDayEquipment}

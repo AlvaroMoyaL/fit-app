@@ -12,12 +12,6 @@ export default function IntervalTimer({ workSec = 30, restSec = 20 }) {
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
-    setPhase("work");
-    setRemaining(workSec);
-    setRunning(false);
-  }, [workSec, restSec]);
-
-  useEffect(() => {
     if (!running) return;
     const id = setInterval(() => {
       setRemaining((r) => {

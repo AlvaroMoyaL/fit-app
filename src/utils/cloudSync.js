@@ -50,7 +50,7 @@ export function buildCloudPayload() {
 
 export function applyCloudPayload(payload) {
   if (!payload) return;
-  const { profiles, activeProfileId, dataByProfile } = payload;
+  const { profiles, activeProfileId, dataByProfile, meta } = payload;
   if (Array.isArray(profiles) && profiles.length) {
     localStorage.setItem(PROFILE_LIST_KEY, JSON.stringify(profiles));
   }
@@ -71,6 +71,9 @@ export function applyCloudPayload(payload) {
         localStorage.setItem(keys.metricsLog, block.metricsLog);
       if (block.lang) localStorage.setItem(keys.lang, block.lang);
     });
+  }
+  if (meta?.updatedAt) {
+    localStorage.setItem(LOCAL_SYNC_KEY, meta.updatedAt);
   }
 }
 

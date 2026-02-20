@@ -16,7 +16,6 @@ export default function ExerciseDrawer({
   onNext,
   onPrev,
   isPersistent,
-  isDesktop,
   lang,
 }) {
   const open = Boolean(exercise);
@@ -286,6 +285,7 @@ export default function ExerciseDrawer({
 
         {exercise?.prescription?.type === "time" && (
           <IntervalTimer
+            key={`${exercise.instanceId || exercise.id || exercise.name}-${exercise.prescription.workSec}-${exercise.prescription.restSec}`}
             workSec={exercise.prescription.workSec}
             restSec={exercise.prescription.restSec}
           />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import DayCard from "./DayCard";
 
 export default function Plan({
@@ -8,8 +8,6 @@ export default function Plan({
   onChangeDayEquipment,
   onSelectExercise,
   completedMap,
-  completedDetails,
-  onUpdateDetail,
   getExerciseKey,
   getExerciseXp,
   earnedXp,
@@ -23,15 +21,8 @@ export default function Plan({
   activeExerciseKey,
   equipmentGroups,
 }) {
-  if (!plan) return null;
-
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [showAllDays, setShowAllDays] = useState(false);
-
-  useEffect(() => {
-    setMobileDayIndex(0);
-    setShowAllDays(false);
-  }, [plan?.days?.length]);
 
   const progress = totalPossibleXp ? Math.min(1, earnedXp / totalPossibleXp) : 0;
   const today = new Date();
@@ -44,6 +35,8 @@ export default function Plan({
     date.setDate(today.getDate() + index);
     return dateFormatter.format(date);
   };
+
+  if (!plan) return null;
 
   return (
     <div className="plan" id="plan">
@@ -189,8 +182,6 @@ export default function Plan({
               onChangeEquipment={onChangeDayEquipment}
               onSelectExercise={onSelectExercise}
               completedMap={completedMap}
-              completedDetails={completedDetails}
-              onUpdateDetail={onUpdateDetail}
               getExerciseKey={getExerciseKey}
               getExerciseXp={getExerciseXp}
               lang={lang}

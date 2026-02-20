@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -29,7 +29,6 @@ function formatDayLabel(date) {
 
 export default function HistoryWeek({ history, lang }) {
   const [offset, setOffset] = useState(0);
-  const [weekInput, setWeekInput] = useState("");
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() + offset * 7);
   const weekStart = startOfWeek(baseDate);
@@ -64,13 +63,7 @@ export default function HistoryWeek({ history, lang }) {
     return `${year}-W${padded}`;
   };
 
-  useEffect(() => {
-    setWeekInput(toWeekInput(new Date()));
-  }, []);
-
-  useEffect(() => {
-    setWeekInput(toWeekInput(baseDate));
-  }, [offset]);
+  const weekInput = toWeekInput(baseDate);
 
   return (
     <div className="history">
@@ -106,7 +99,6 @@ export default function HistoryWeek({ history, lang }) {
                 value={weekInput}
                 onChange={(e) => {
                   const value = e.target.value;
-                  setWeekInput(value);
                   if (!value) return;
                   const [yearStr, weekStr] = value.split("-W");
                   const year = Number(yearStr);

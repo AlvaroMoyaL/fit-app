@@ -90,6 +90,7 @@ export default function SessionRunner({
                 />
               </label>
               <IntervalTimer
+                key={`${key}-${ex.prescription.workSec}-${ex.prescription.restSec}`}
                 workSec={ex.prescription.workSec}
                 restSec={ex.prescription.restSec}
               />

@@ -409,6 +409,7 @@ export default function App() {
           const cloudUpdated = cloudPayload?.meta?.updatedAt || null;
           if (!localUpdated || (cloudUpdated && cloudUpdated > localUpdated)) {
             applyCloudPayload(cloudPayload);
+            window.location.reload();
           }
         }
       } catch {
@@ -773,7 +774,7 @@ export default function App() {
           try {
             const url = `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`;
             res = await fetch(url);
-          } catch (err) {
+          } catch {
             attempt += 1;
             if (attempt >= 3) break;
             await new Promise((r) => setTimeout(r, 1000));
@@ -1380,7 +1381,7 @@ export default function App() {
       touchLocalChange();
       setPlan(finalPlan);
       setSidebarTab("plan");
-    } catch (err) {
+    } catch {
       setError("No se pudo generar el plan. Revisa tu API key.");
     } finally {
       setLoadingPlan(false);
@@ -1430,6 +1431,7 @@ export default function App() {
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+      touchLocalChange();
     }
     setDetailEx(null);
   };
@@ -1445,6 +1447,7 @@ export default function App() {
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+      touchLocalChange();
     }
     setDetailEx(null);
 
@@ -1474,6 +1477,7 @@ export default function App() {
       if (activeProfileId) {
         const keys = profileKeys(activeProfileId);
         localStorage.setItem(keys.plan, JSON.stringify(stripGifs(nextPlan)));
+        touchLocalChange();
       }
     }, 400);
   };
@@ -1505,6 +1509,7 @@ export default function App() {
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+      touchLocalChange();
     }
     setDetailEx(null);
   };
@@ -1521,31 +1526,45 @@ export default function App() {
 
   const onNextExercise = () => {
     if (!detailEx?.ex || !plan) return;
+    const currentId = detailEx.ex.instanceId || detailEx.ex.id;
     const day = plan.days.find((d) => d.title === detailEx.dayTitle);
     if (day) {
-      const idx = day.exercises.findIndex((e) => e.id === detailEx.ex.id);
+      const idx = day.exercises.findIndex(
+        (e) => (e.instanceId || e.id) === currentId
+      );
+      if (idx === -1) return;
       const next = day.exercises[(idx + 1) % day.exercises.length];
       setDetailEx({ ex: next, dayTitle: detailEx.dayTitle });
       return;
     }
     if (allExercises.length === 0) return;
-    const idx = allExercises.findIndex((e) => e.id === detailEx.ex.id);
+    const idx = allExercises.findIndex(
+      (e) => (e.instanceId || e.id) === currentId
+    );
+    if (idx === -1) return;
     const next = allExercises[(idx + 1) % allExercises.length];
     setDetailEx({ ex: next, dayTitle: detailEx.dayTitle });
   };
 
   const onPrevExercise = () => {
     if (!detailEx?.ex || !plan) return;
+    const currentId = detailEx.ex.instanceId || detailEx.ex.id;
     const day = plan.days.find((d) => d.title === detailEx.dayTitle);
     if (day) {
-      const idx = day.exercises.findIndex((e) => e.id === detailEx.ex.id);
+      const idx = day.exercises.findIndex(
+        (e) => (e.instanceId || e.id) === currentId
+      );
+      if (idx === -1) return;
       const prevIndex = (idx - 1 + day.exercises.length) % day.exercises.length;
       const prev = day.exercises[prevIndex];
       setDetailEx({ ex: prev, dayTitle: detailEx.dayTitle });
       return;
     }
     if (allExercises.length === 0) return;
-    const idx = allExercises.findIndex((e) => e.id === detailEx.ex.id);
+    const idx = allExercises.findIndex(
+      (e) => (e.instanceId || e.id) === currentId
+    );
+    if (idx === -1) return;
     const prevIndex = (idx - 1 + allExercises.length) % allExercises.length;
     const prev = allExercises[prevIndex];
     setDetailEx({ ex: prev, dayTitle: detailEx.dayTitle });
@@ -1555,7 +1574,8 @@ export default function App() {
     if (!plan) return null;
     const day = plan.days.find((d) => d.title === dayTitle);
     if (!day) return null;
-    const idx = day.exercises.findIndex((e) => e.id === ex.id);
+    const exId = ex.instanceId || ex.id;
+    const idx = day.exercises.findIndex((e) => (e.instanceId || e.id) === exId);
     if (idx === -1) return null;
     if (idx >= day.exercises.length - 1) return null;
     return day.exercises[idx + 1];
@@ -1626,6 +1646,7 @@ export default function App() {
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+      touchLocalChange();
     }
     const firstNew = extra[0];
     if (firstNew) {
@@ -1703,11 +1724,9 @@ export default function App() {
 
   const startSession = (dayIndex) => {
     if (!plan?.days?.[dayIndex]) return;
-    const day = plan.days[dayIndex];
-    const ex = day.exercises[0];
-    if (ex) {
-      setDetailEx({ ex, dayTitle: day.title });
-    }
+    setSessionDayIndex(dayIndex);
+    setSessionExIndex(0);
+    setDetailEx(null);
   };
 
   const closeSession = () => {
@@ -1790,8 +1809,9 @@ export default function App() {
     }
     if (!replacement) return;
 
+    const targetId = ex.instanceId || ex.id;
     const nextExercises = day.exercises.map((item) =>
-      item.id === ex.id ? replacement : item
+      (item.instanceId || item.id) === targetId ? replacement : item
     );
     updatedDays[dayIndex] = { ...day, exercises: nextExercises };
 
@@ -1800,6 +1820,7 @@ export default function App() {
     if (activeProfileId) {
       const keys = profileKeys(activeProfileId);
       localStorage.setItem(keys.plan, JSON.stringify(stripGifs(updatedPlan)));
+      touchLocalChange();
     }
     const date = todayKey();
     const entryKey = `${date}::replace::${dayTitle}::${ex.id}`;
@@ -2150,13 +2171,11 @@ export default function App() {
                 plan={plan}
                 onChangeDayMode={onChangeDayMode}
                 onToggleQuiet={onToggleQuiet}
-                onChangeDayEquipment={onChangeDayEquipment}
-                onSelectExercise={onSelectExercise}
-                completedMap={completed}
-                completedDetails={completedDetails}
-                onUpdateDetail={onUpdateDetail}
-                getExerciseKey={getExerciseKey}
-                getExerciseXp={getExerciseXp}
+              onChangeDayEquipment={onChangeDayEquipment}
+              onSelectExercise={onSelectExercise}
+              completedMap={completed}
+              getExerciseKey={getExerciseKey}
+              getExerciseXp={getExerciseXp}
                 earnedXp={earnedXp}
                 totalPossibleXp={totalPossibleXp}
                 level={level}
@@ -2212,7 +2231,7 @@ export default function App() {
         </div>
 
         <MetricsInfoModal
-          open={showInfo && sidebarTab === "profile"}
+          open={showInfo}
           onClose={() => setShowInfo(false)}
         />
 
@@ -2231,7 +2250,6 @@ export default function App() {
         onNext={onNextExercise}
         onPrev={onPrevExercise}
         isPersistent={isDesktop}
-        isDesktop={isDesktop}
         lang={lang}
       />
 

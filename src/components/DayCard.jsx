@@ -9,8 +9,6 @@ export default function DayCard({
   onChangeEquipment,
   onSelectExercise,
   completedMap,
-  completedDetails,
-  onUpdateDetail,
   getExerciseKey,
   getExerciseXp,
   lang,

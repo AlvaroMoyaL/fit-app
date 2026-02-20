@@ -1,4 +1,4 @@
-import { getAllExercises, getMeta, getGif, upsertGif } from "./idb";
+import { getAllExercises, getMeta, getGif } from "./idb";
 import LOCAL_EXERCISES from "../data/exercises.local";
 
 const niveles = [
@@ -478,10 +478,6 @@ async function fetchGifUrl(exerciseId) {
 }
 
 const gifCache = new Map();
-const gifPromiseCache = new Map();
-const MAX_GIF_CONCURRENCY = 1;
-let gifActive = 0;
-const gifQueue = [];
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_GIF_BUCKET = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
@@ -501,26 +497,6 @@ async function getCachedGifUrl(exerciseId) {
   return url;
 }
 
-function runGifQueue() {
-  if (gifActive >= MAX_GIF_CONCURRENCY || gifQueue.length === 0) return;
-  const { task, resolve, reject } = gifQueue.shift();
-  gifActive += 1;
-  task()
-    .then(resolve)
-    .catch(reject)
-    .finally(() => {
-      gifActive -= 1;
-      setTimeout(runGifQueue, 500);
-    });
-}
-
-function enqueueGif(task) {
-  return new Promise((resolve, reject) => {
-    gifQueue.push({ task, resolve, reject });
-    runGifQueue();
-  });
-}
-
 async function getGifUrlWithLimit(exerciseId) {
   if (!exerciseId) return "";
   if (gifCache.has(exerciseId)) return gifCache.get(exerciseId);
@@ -532,8 +508,6 @@ async function getGifUrlWithLimit(exerciseId) {
     return publicUrl;
   }
   return "";
-
-  if (gifPromiseCache.has(exerciseId)) return gifPromiseCache.get(exerciseId);
 }
 
 let localPoolPromise = null;

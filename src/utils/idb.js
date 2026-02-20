@@ -46,17 +46,16 @@ export async function setMeta(key, value) {
 }
 
 export async function getMeta(key) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(META_STORE, "readonly");
       const store = tx.objectStore(META_STORE);
       const req = store.get(key);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }
 
@@ -67,48 +66,45 @@ export async function upsertExercises(list) {
 }
 
 export async function getAllExercises() {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(EXERCISES_STORE, "readonly");
       const store = tx.objectStore(EXERCISES_STORE);
       const req = store.getAll();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }
 
 export async function countExercises() {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(EXERCISES_STORE, "readonly");
       const store = tx.objectStore(EXERCISES_STORE);
       const req = store.count();
       req.onsuccess = () => resolve(req.result || 0);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }
 
 export async function getGif(id) {
   if (!id) return null;
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(GIFS_STORE, "readonly");
       const store = tx.objectStore(GIFS_STORE);
       const req = store.get(id);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }
 
@@ -120,31 +116,29 @@ export async function upsertGif(id, blob) {
 }
 
 export async function countGifs() {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(GIFS_STORE, "readonly");
       const store = tx.objectStore(GIFS_STORE);
       const req = store.count();
       req.onsuccess = () => resolve(req.result || 0);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }
 
 export async function getAllGifs() {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const db = await openDb();
+  return new Promise((resolve, reject) => {
+    openDb()
+      .then((db) => {
       const tx = db.transaction(GIFS_STORE, "readonly");
       const store = tx.objectStore(GIFS_STORE);
       const req = store.getAll();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
-    } catch (err) {
-      reject(err);
-    }
+      })
+      .catch(reject);
   });
 }

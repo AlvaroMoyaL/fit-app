@@ -88,6 +88,14 @@ export async function uploadCloud() {
     .upsert({ user_id: userId, payload }, { onConflict: "user_id" })
     .select();
   if (error) throw error;
+
+  // Best effort versioning: if fit_cloud_versions exists, keep history snapshots.
+  try {
+    await supabase.from("fit_cloud_versions").insert({ user_id: userId, payload });
+  } catch {
+    // ignore (table may not exist yet)
+  }
+
   return data;
 }
 

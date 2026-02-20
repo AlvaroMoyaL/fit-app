@@ -3,7 +3,6 @@ import { EQUIPMENT_MODES } from "../utils/plan";
 export default function DayCard({
   day,
   index,
-  dayLabel,
   onChangeMode,
   onToggleQuiet,
   onChangeEquipment,

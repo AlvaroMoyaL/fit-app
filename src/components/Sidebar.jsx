@@ -49,6 +49,7 @@ export default function Sidebar({
   syncStatus,
   onSyncUp,
   onSyncDown,
+  canSyncUp,
   authEnabled,
   highContrast,
   onToggleContrast,
@@ -125,7 +126,7 @@ export default function Sidebar({
           <div className="auth-box">
             <span className="note">Conectado: {authUser.email}</span>
             <div className="sidebar-actions">
-              <button type="button" className="tiny" onClick={onSyncUp}>
+              <button type="button" className="tiny" onClick={onSyncUp} disabled={!canSyncUp}>
                 Subir
               </button>
               <button type="button" className="tiny" onClick={onSyncDown}>

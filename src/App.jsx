@@ -195,6 +195,20 @@ function getCloudProfileSyncScore(payload, profileId) {
   return computeProgressScore({ progress, history, metricsLog });
 }
 
+function getLocalAppSyncScore() {
+  const profiles = safeParseJson(localStorage.getItem(PROFILE_LIST_KEY), []);
+  if (!Array.isArray(profiles) || profiles.length === 0) return 0;
+  return profiles.reduce((sum, p) => sum + getLocalProfileSyncScore(p.id), 0);
+}
+
+function getCloudAppSyncScore(payload) {
+  if (!payload) return 0;
+  const ids = Array.isArray(payload.profiles)
+    ? payload.profiles.map((p) => p.id).filter(Boolean)
+    : Object.keys(payload.dataByProfile || {});
+  return ids.reduce((sum, id) => sum + getCloudProfileSyncScore(payload, id), 0);
+}
+
 export default function App() {
   const [profiles, setProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState("");
@@ -238,6 +252,7 @@ export default function App() {
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
   const initialSyncRef = useRef(false);
+  const [canUploadSync, setCanUploadSync] = useState(false);
   const hydratingProfileRef = useRef(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -436,36 +451,22 @@ export default function App() {
   }, [highContrast]);
 
   useEffect(() => {
-    if (!authUser) return;
-    autoSync();
-  }, [authUser]);
-
-  useEffect(() => {
-    if (!authUser) return;
-    if (!progressReady) return;
+    if (!authUser) {
+      initialSyncRef.current = false;
+      setCanUploadSync(false);
+      return;
+    }
+    if (!progressReady || !activeProfileId) return;
     if (initialSyncRef.current) return;
     initialSyncRef.current = true;
-    const run = async () => {
-      try {
-        const localUpdated = localStorage.getItem(LOCAL_SYNC_KEY);
-        const cloudPayload = await downloadCloud();
-        if (cloudPayload) {
-          const cloudUpdated = cloudPayload?.meta?.updatedAt || null;
-          if (!localUpdated || (cloudUpdated && cloudUpdated > localUpdated)) {
-            applyCloudPayload(cloudPayload);
-            window.location.reload();
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    run();
-  }, [authUser, progressReady]);
+    autoSync();
+  }, [authUser, progressReady, activeProfileId]);
 
   useEffect(() => {
     if (!authUser) return;
     if (!progressReady) return;
+    if (!canUploadSync) return;
+    if (localChangeTick === 0) return;
     const now = Date.now();
     if (now - lastAutoSyncRef.current < 8000) return;
     const id = setTimeout(async () => {
@@ -477,7 +478,7 @@ export default function App() {
       }
     }, 2500);
     return () => clearTimeout(id);
-  }, [authUser, localChangeTick, progressReady]);
+  }, [authUser, localChangeTick, progressReady, canUploadSync]);
 
   useEffect(() => {
     if (!plan) {
@@ -1349,21 +1350,29 @@ export default function App() {
   };
 
   const autoSync = async () => {
-    if (!authUser) return;
+    if (!authUser || !progressReady) return;
     try {
       const localUpdated = localStorage.getItem(LOCAL_SYNC_KEY);
       const cloudPayload = await downloadCloud();
+      const localScore = getLocalAppSyncScore();
 
       if (!cloudPayload) {
-        await uploadCloud();
-        setSyncStatus("Sincronizado ✓");
+        if (localScore > 0) {
+          await uploadCloud();
+          setSyncStatus("Sincronizado ✓");
+        } else {
+          setSyncStatus("Sin datos en la nube");
+        }
+        setCanUploadSync(true);
         setTimeout(() => setSyncStatus(""), 1500);
         return;
       }
 
       const cloudUpdated = cloudPayload?.meta?.updatedAt || null;
-      if (!localUpdated) {
+      const cloudScore = getCloudAppSyncScore(cloudPayload);
+      if (!localUpdated || localScore === 0) {
         applyCloudPayload(cloudPayload);
+        setCanUploadSync(true);
         setSyncStatus("Datos restaurados ✓");
         setTimeout(() => window.location.reload(), 300);
         return;
@@ -1375,29 +1384,28 @@ export default function App() {
         );
         if (ok) {
           applyCloudPayload(cloudPayload);
+          setCanUploadSync(true);
           setSyncStatus("Datos restaurados ✓");
           setTimeout(() => window.location.reload(), 300);
           return;
         }
       }
 
-      const localScore = getLocalProfileSyncScore(activeProfileId);
-      const cloudScore = getCloudProfileSyncScore(cloudPayload, activeProfileId);
       if (cloudScore > localScore) {
         const keepCloud = window.confirm(
           "La nube parece tener más progreso que este dispositivo. ¿Quieres usar los datos de la nube para evitar sobrescribirlos?"
         );
         if (keepCloud) {
           applyCloudPayload(cloudPayload);
+          setCanUploadSync(true);
           setSyncStatus("Datos restaurados ✓");
           setTimeout(() => window.location.reload(), 300);
           return;
         }
       }
-
-      await uploadCloud();
-      setSyncStatus("Sincronizado ✓");
-      setTimeout(() => setSyncStatus(""), 1500);
+      setCanUploadSync(true);
+      setSyncStatus("Sincronización lista");
+      setTimeout(() => setSyncStatus(""), 1200);
     } catch (e) {
       setSyncStatus(e?.message || "Error al sincronizar");
       setTimeout(() => setSyncStatus(""), 2000);
@@ -1405,6 +1413,11 @@ export default function App() {
   };
 
   const onSyncUp = async () => {
+    if (!canUploadSync) {
+      setSyncStatus("Primero descarga y revisa datos");
+      setTimeout(() => setSyncStatus(""), 2200);
+      return;
+    }
     try {
       setSyncStatus("Subiendo...");
       await uploadCloud();
@@ -1425,6 +1438,7 @@ export default function App() {
         return;
       }
       applyCloudPayload(payload);
+      setCanUploadSync(true);
       setSyncStatus("Datos restaurados ✓");
       setTimeout(() => window.location.reload(), 400);
     } catch (e) {
@@ -2200,6 +2214,7 @@ export default function App() {
         syncStatus={syncStatus}
         onSyncUp={onSyncUp}
         onSyncDown={onSyncDown}
+        canSyncUp={canUploadSync}
         authEnabled={authEnabled}
         highContrast={highContrast}
         onToggleContrast={() => setHighContrast((v) => !v)}
@@ -2561,6 +2576,7 @@ export default function App() {
               syncStatus={syncStatus}
               onSyncUp={onSyncUp}
               onSyncDown={onSyncDown}
+              canSyncUp={canUploadSync}
               authEnabled={authEnabled}
               highContrast={highContrast}
               onToggleContrast={() => setHighContrast((v) => !v)}

@@ -202,7 +202,6 @@ export default function Plan({
               key={day.title}
               day={day}
               index={index}
-              dayLabel={getDateLabel(index)}
               onChangeMode={onChangeDayMode}
               onToggleQuiet={onToggleQuiet}
               onChangeEquipment={onChangeDayEquipment}

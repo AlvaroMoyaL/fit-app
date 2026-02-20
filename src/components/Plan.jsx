@@ -151,7 +151,6 @@ export default function Plan({
                 }
               }}
             >
-              <span>{d.label}</span>
               <span className="week-date">{dateLabel}</span>
               <strong>{d.type === "rest" ? "Descanso" : d.title}</strong>
             </div>

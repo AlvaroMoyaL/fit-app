@@ -77,7 +77,6 @@ export default function DayCard({
       <div className="day-head">
         <div className="day-title">
           <strong>{day.title}</strong>
-          {dayLabel && <span className="day-date">{dayLabel}</span>}
         </div>
         <span className="day-xp">
           {dayEarned} / {dayPossible} XP

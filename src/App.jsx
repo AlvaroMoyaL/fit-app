@@ -41,6 +41,7 @@ const GIFS_COMPLETE_KEY = "gifs_complete";
 const LOCAL_SYNC_KEY = "fit_last_local_change";
 const AUTO_BACKUP_KEY = "fit_backup_auto";
 const AUTO_BACKUP_PREV_KEY = "fit_backup_auto_prev";
+const SYNC_RELOAD_GUARD_KEY = "fit_sync_reload_guard";
 
 function toNum(v) {
   const n = Number(v);
@@ -207,6 +208,17 @@ function getCloudAppSyncScore(payload) {
     ? payload.profiles.map((p) => p.id).filter(Boolean)
     : Object.keys(payload.dataByProfile || {});
   return ids.reduce((sum, id) => sum + getCloudProfileSyncScore(payload, id), 0);
+}
+
+function reloadAfterSyncOnce() {
+  try {
+    if (sessionStorage.getItem(SYNC_RELOAD_GUARD_KEY) === "1") return false;
+    sessionStorage.setItem(SYNC_RELOAD_GUARD_KEY, "1");
+  } catch {
+    // ignore
+  }
+  window.location.reload();
+  return true;
 }
 
 export default function App() {
@@ -1374,7 +1386,10 @@ export default function App() {
         applyCloudPayload(cloudPayload);
         setCanUploadSync(true);
         setSyncStatus("Datos restaurados ✓");
-        setTimeout(() => window.location.reload(), 300);
+        setTimeout(() => {
+          const didReload = reloadAfterSyncOnce();
+          if (!didReload) setSyncStatus("Datos restaurados ✓");
+        }, 300);
         return;
       }
 
@@ -1386,7 +1401,10 @@ export default function App() {
           applyCloudPayload(cloudPayload);
           setCanUploadSync(true);
           setSyncStatus("Datos restaurados ✓");
-          setTimeout(() => window.location.reload(), 300);
+          setTimeout(() => {
+            const didReload = reloadAfterSyncOnce();
+            if (!didReload) setSyncStatus("Datos restaurados ✓");
+          }, 300);
           return;
         }
       }
@@ -1399,7 +1417,10 @@ export default function App() {
           applyCloudPayload(cloudPayload);
           setCanUploadSync(true);
           setSyncStatus("Datos restaurados ✓");
-          setTimeout(() => window.location.reload(), 300);
+          setTimeout(() => {
+            const didReload = reloadAfterSyncOnce();
+            if (!didReload) setSyncStatus("Datos restaurados ✓");
+          }, 300);
           return;
         }
       }

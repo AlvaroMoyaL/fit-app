@@ -47,6 +47,9 @@
 - `VITE_SUPABASE_ANON_KEY`
 - Optional server-side script vars (`scripts/upload_gifs.js`):
   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `GIF_DIR`, `SUPABASE_GIF_BUCKET`
+- Secret management policy:
+  - `.env` is local-only and is **not tracked** in git.
+  - `.env.example` is the committed template for required variables.
 
 ## Offline / PWA
 - Service worker: `public/sw.js`.
@@ -65,7 +68,10 @@
 ## Current Technical Notes
 - Build passes (`npm run build`).
 - Lint has no errors; 4 hook dependency warnings in `src/App.jsx`.
-- `.env` is user-managed and should not be committed with secrets.
+- `.env` is intentionally untracked; configure real secrets locally and/or in hosting environment variables.
+- Sync now includes a basic conflict guard to avoid overwriting cloud data with lower local progress.
+- Backup UI supports restoring both latest and previous automatic backup.
+- Date grouping in history/weekly charts uses local date keys (not UTC ISO slicing).
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.
@@ -82,6 +88,11 @@
 - Se corrigió la apertura de sesión para usar `SessionRunner` (en vez de abrir el drawer).
 - Se habilitó el modal de métricas desde cualquier pestaña donde se dispare `showInfo`.
 - Se ajustó la trazabilidad de cambios locales para mejorar autosync/backup.
+- Se añadió protección de sincronización: antes de subir, compara progreso local vs nube y pide confirmación si la nube parece tener más avance.
+- Se evitó marcar cambios locales falsos durante hidratación de perfil para no alterar prioridad de sync.
+- Se añadió recuperación directa desde UI con dos opciones: `Restaurar último` y `Restaurar anterior`.
+- Se añadió acción `Entreno libre hoy` cuando el día actual está marcado como descanso (sesión temporal sin modificar el plan base).
+- Se corrigió el desfase de día por zona horaria en vistas de historial y resumen semanal.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

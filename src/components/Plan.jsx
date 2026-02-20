@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import DayCard from "./DayCard";
 
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export default function Plan({
   plan,
   onChangeDayMode,
@@ -16,6 +25,7 @@ export default function Plan({
   gifsLoading,
   lang,
   onStartSession,
+  onStartFreeSession,
   metrics,
   onInfoMetrics,
   activeExerciseKey,
@@ -25,16 +35,21 @@ export default function Plan({
   const [showAllDays, setShowAllDays] = useState(false);
 
   const progress = totalPossibleXp ? Math.min(1, earnedXp / totalPossibleXp) : 0;
-  const today = new Date();
+  const weekStart = startOfWeek(new Date());
   const dateFormatter = useMemo(() => {
     const locale = lang === "es" ? "es-ES" : "en-US";
     return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" });
   }, [lang]);
   const getDateLabel = (index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() + index);
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
     return dateFormatter.format(date);
   };
+  const todayWeekIndex = (new Date().getDay() + 6) % 7;
+  const todaySchedule = Array.isArray(plan?.weekSchedule)
+    ? plan.weekSchedule[todayWeekIndex]
+    : null;
+  const todayIsRest = todaySchedule?.type === "rest";
 
   if (!plan) return null;
 
@@ -144,6 +159,18 @@ export default function Plan({
           })}
         </div>
       )}
+      {todayIsRest && (
+        <div className="rest-panel">
+          <p className="note">
+            {lang === "en"
+              ? "Today is a rest day in your plan."
+              : "Hoy es día de descanso en tu plan."}
+          </p>
+          <button type="button" className="tiny primary-btn" onClick={onStartFreeSession}>
+            {lang === "en" ? "Free workout today" : "Entreno libre hoy"}
+          </button>
+        </div>
+      )}
       {plan.days?.length > 1 && (
         <div className="plan-mobile-controls">
           <div className="plan-day-select">
@@ -154,7 +181,7 @@ export default function Plan({
             >
               {plan.days.map((day, index) => (
                 <option key={day.title} value={index}>
-                  {`${day.title} · ${getDateLabel(index)}`}
+                  {day.title}
                 </option>
               ))}
             </select>

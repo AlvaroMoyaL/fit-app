@@ -153,6 +153,48 @@ function computeAdjustDelta(history, form) {
   return 0;
 }
 
+function safeParseJson(raw, fallback) {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function countHistoryItems(history) {
+  return Object.values(history || {}).reduce((sum, day) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    return sum + items.filter((it) => it?.type !== "replace").length;
+  }, 0);
+}
+
+function computeProgressScore({ progress, history, metricsLog }) {
+  const completedCount = Object.values(progress || {}).filter(Boolean).length;
+  const historyCount = countHistoryItems(history);
+  const metricsCount = Array.isArray(metricsLog) ? metricsLog.length : 0;
+  return completedCount + historyCount * 10 + metricsCount * 3;
+}
+
+function getLocalProfileSyncScore(profileId) {
+  if (!profileId) return 0;
+  const keys = profileKeys(profileId);
+  const progress = safeParseJson(localStorage.getItem(keys.progress), {});
+  const history = safeParseJson(localStorage.getItem(keys.history), {});
+  const metricsLog = safeParseJson(localStorage.getItem(keys.metricsLog), []);
+  return computeProgressScore({ progress, history, metricsLog });
+}
+
+function getCloudProfileSyncScore(payload, profileId) {
+  if (!payload || !profileId) return 0;
+  const block = payload?.dataByProfile?.[profileId];
+  if (!block) return 0;
+  const progress = safeParseJson(block.progress, {});
+  const history = safeParseJson(block.history, {});
+  const metricsLog = safeParseJson(block.metricsLog, []);
+  return computeProgressScore({ progress, history, metricsLog });
+}
+
 export default function App() {
   const [profiles, setProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState("");
@@ -162,6 +204,7 @@ export default function App() {
   const [lang, setLang] = useState("es");
   const [sessionDayIndex, setSessionDayIndex] = useState(null);
   const [sessionExIndex, setSessionExIndex] = useState(0);
+  const [sessionCustomDay, setSessionCustomDay] = useState(null);
 
   const [form, setForm] = useState(initialForm);
   const [showInfo, setShowInfo] = useState(false);
@@ -195,6 +238,7 @@ export default function App() {
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
   const initialSyncRef = useRef(false);
+  const hydratingProfileRef = useRef(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [highContrast, setHighContrast] = useState(() => {
@@ -971,6 +1015,7 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProfileId) return;
+    hydratingProfileRef.current = true;
     setProgressReady(false);
     const keys = profileKeys(activeProfileId);
 
@@ -1078,34 +1123,50 @@ export default function App() {
     } else {
       setLang("es");
     }
+
+    const unlockId = setTimeout(() => {
+      hydratingProfileRef.current = false;
+    }, 0);
+    return () => {
+      clearTimeout(unlockId);
+      hydratingProfileRef.current = false;
+    };
   }, [activeProfileId]);
 
   useEffect(() => {
     if (!progressReady || !activeProfileId) return;
     const keys = profileKeys(activeProfileId);
-    localStorage.setItem(keys.progress, JSON.stringify(completed));
-    touchLocalChange();
+    const serialized = JSON.stringify(completed);
+    if (localStorage.getItem(keys.progress) === serialized) return;
+    localStorage.setItem(keys.progress, serialized);
+    if (!hydratingProfileRef.current) touchLocalChange();
   }, [completed, progressReady, activeProfileId]);
 
   useEffect(() => {
     if (!progressReady || !activeProfileId) return;
     const keys = profileKeys(activeProfileId);
-    localStorage.setItem(keys.progressDetails, JSON.stringify(completedDetails));
-    touchLocalChange();
+    const serialized = JSON.stringify(completedDetails);
+    if (localStorage.getItem(keys.progressDetails) === serialized) return;
+    localStorage.setItem(keys.progressDetails, serialized);
+    if (!hydratingProfileRef.current) touchLocalChange();
   }, [completedDetails, progressReady, activeProfileId]);
 
   useEffect(() => {
     if (!progressReady || !activeProfileId) return;
     const keys = profileKeys(activeProfileId);
-    localStorage.setItem(keys.history, JSON.stringify(history));
-    touchLocalChange();
+    const serialized = JSON.stringify(history);
+    if (localStorage.getItem(keys.history) === serialized) return;
+    localStorage.setItem(keys.history, serialized);
+    if (!hydratingProfileRef.current) touchLocalChange();
   }, [history, progressReady, activeProfileId]);
 
   useEffect(() => {
     if (!progressReady || !activeProfileId) return;
     const keys = profileKeys(activeProfileId);
-    localStorage.setItem(keys.metricsLog, JSON.stringify(metricsLog));
-    touchLocalChange();
+    const serialized = JSON.stringify(metricsLog);
+    if (localStorage.getItem(keys.metricsLog) === serialized) return;
+    localStorage.setItem(keys.metricsLog, serialized);
+    if (!hydratingProfileRef.current) touchLocalChange();
   }, [metricsLog, progressReady, activeProfileId]);
 
   useEffect(() => {
@@ -1313,6 +1374,20 @@ export default function App() {
           "Se encontraron datos más recientes en la nube. ¿Quieres usarlos? (Cancelar mantiene tus datos locales)"
         );
         if (ok) {
+          applyCloudPayload(cloudPayload);
+          setSyncStatus("Datos restaurados ✓");
+          setTimeout(() => window.location.reload(), 300);
+          return;
+        }
+      }
+
+      const localScore = getLocalProfileSyncScore(activeProfileId);
+      const cloudScore = getCloudProfileSyncScore(cloudPayload, activeProfileId);
+      if (cloudScore > localScore) {
+        const keepCloud = window.confirm(
+          "La nube parece tener más progreso que este dispositivo. ¿Quieres usar los datos de la nube para evitar sobrescribirlos?"
+        );
+        if (keepCloud) {
           applyCloudPayload(cloudPayload);
           setSyncStatus("Datos restaurados ✓");
           setTimeout(() => window.location.reload(), 300);
@@ -1725,16 +1800,45 @@ export default function App() {
   const startSession = (dayIndex) => {
     if (!plan?.days?.[dayIndex]) return;
     setSessionDayIndex(dayIndex);
+    setSessionCustomDay(null);
+    setSessionExIndex(0);
+    setDetailEx(null);
+  };
+
+  const startFreeSessionToday = async () => {
+    if (!plan) return;
+    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+    const sourcePool = exercisePool.length
+      ? exercisePool
+      : plan.pool?.length
+      ? plan.pool
+      : allExercises;
+    const exercises = await buildExercises(
+      sourcePool,
+      "week",
+      true,
+      3,
+      levelIndex,
+      []
+    );
+    if (!exercises.length) return;
+    const day = {
+      title: `Libre ${todayKey()}`,
+      exercises,
+    };
+    setSessionCustomDay(day);
+    setSessionDayIndex(null);
     setSessionExIndex(0);
     setDetailEx(null);
   };
 
   const closeSession = () => {
     setSessionDayIndex(null);
+    setSessionCustomDay(null);
     setSessionExIndex(0);
   };
 
-  const sessionDay = plan?.days?.[sessionDayIndex] || null;
+  const sessionDay = sessionCustomDay || plan?.days?.[sessionDayIndex] || null;
 
   const nextSession = () => {
     if (!sessionDay) return;
@@ -1999,12 +2103,52 @@ export default function App() {
     }
   };
 
+  const onRestorePrevBackup = () => {
+    if (!activeProfileId) return;
+    const raw = localStorage.getItem(AUTO_BACKUP_PREV_KEY);
+    if (!raw) {
+      alert("No hay backup anterior disponible.");
+      return;
+    }
+    const ok = window.confirm("¿Restaurar el backup automático anterior?");
+    if (!ok) return;
+    try {
+      const backup = JSON.parse(raw);
+      const data = backup?.data || {};
+      const keys = profileKeys(activeProfileId);
+      if (data.profile) localStorage.setItem(keys.profile, data.profile);
+      if (data.plan) localStorage.setItem(keys.plan, data.plan);
+      if (data.progress) localStorage.setItem(keys.progress, data.progress);
+      if (data.progressDetails) localStorage.setItem(keys.progressDetails, data.progressDetails);
+      if (data.history) localStorage.setItem(keys.history, data.history);
+      if (data.metricsLog) localStorage.setItem(keys.metricsLog, data.metricsLog);
+      if (data.lang) localStorage.setItem(keys.lang, data.lang);
+      window.location.reload();
+    } catch {
+      alert("Backup anterior inválido.");
+    }
+  };
+
   const renderCollapsible = (title, content, open = false) => (
     <details className="collapsible" open={open}>
       <summary>{title}</summary>
       <div className="collapsible-body">{content}</div>
     </details>
   );
+
+  const formatBackupDate = (raw) => {
+    if (!raw) return "";
+    try {
+      const parsed = JSON.parse(raw);
+      const date = parsed?.createdAt ? new Date(parsed.createdAt) : null;
+      if (!date || Number.isNaN(date.getTime())) return "";
+      return date.toLocaleString();
+    } catch {
+      return "";
+    }
+  };
+  const backupLastLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_KEY));
+  const backupPrevLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_PREV_KEY));
 
   return (
     <div className="app-shell">
@@ -2040,6 +2184,9 @@ export default function App() {
         onExport={onExport}
         onImport={onImport}
         onRestoreBackup={onRestoreBackup}
+        onRestorePrevBackup={onRestorePrevBackup}
+        backupLastLabel={backupLastLabel}
+        backupPrevLabel={backupPrevLabel}
         authUser={authUser}
         authReady={authReady}
         authForm={authForm}
@@ -2171,17 +2318,18 @@ export default function App() {
                 plan={plan}
                 onChangeDayMode={onChangeDayMode}
                 onToggleQuiet={onToggleQuiet}
-              onChangeDayEquipment={onChangeDayEquipment}
-              onSelectExercise={onSelectExercise}
-              completedMap={completed}
-              getExerciseKey={getExerciseKey}
-              getExerciseXp={getExerciseXp}
+                onChangeDayEquipment={onChangeDayEquipment}
+                onSelectExercise={onSelectExercise}
+                completedMap={completed}
+                getExerciseKey={getExerciseKey}
+                getExerciseXp={getExerciseXp}
                 earnedXp={earnedXp}
                 totalPossibleXp={totalPossibleXp}
                 level={level}
                 gifsLoading={gifsLoading}
                 lang={lang}
                 onStartSession={startSession}
+                onStartFreeSession={startFreeSessionToday}
                 metrics={metrics}
                 onInfoMetrics={() => setShowInfo(true)}
                 activeExerciseKey={
@@ -2254,7 +2402,7 @@ export default function App() {
       />
 
       <SessionRunner
-        open={sessionDayIndex !== null}
+        open={sessionDayIndex !== null || Boolean(sessionCustomDay)}
         day={sessionDay}
         exerciseIndex={sessionExIndex}
         lang={lang}
@@ -2397,6 +2545,9 @@ export default function App() {
               onExport={onExport}
               onImport={onImport}
               onRestoreBackup={onRestoreBackup}
+              onRestorePrevBackup={onRestorePrevBackup}
+              backupLastLabel={backupLastLabel}
+              backupPrevLabel={backupPrevLabel}
               authUser={authUser}
               authReady={authReady}
               authForm={authForm}

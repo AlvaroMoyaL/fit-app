@@ -33,6 +33,9 @@ export default function Sidebar({
   onExport,
   onImport,
   onRestoreBackup,
+  onRestorePrevBackup,
+  backupLastLabel,
+  backupPrevLabel,
   authUser,
   authReady,
   authForm,
@@ -366,6 +369,9 @@ export default function Sidebar({
           <button type="button" className="tiny" onClick={onRestoreBackup}>
             Restaurar último
           </button>
+          <button type="button" className="tiny" onClick={onRestorePrevBackup}>
+            Restaurar anterior
+          </button>
           <button
             type="button"
             className="tiny"
@@ -380,6 +386,16 @@ export default function Sidebar({
             onChange={onImport}
             style={{ display: "none" }}
           />
+        </div>
+        <div className="sidebar-kv">
+          <div>
+            <span>Último</span>
+            <strong>{backupLastLabel || "—"}</strong>
+          </div>
+          <div>
+            <span>Anterior</span>
+            <strong>{backupPrevLabel || "—"}</strong>
+          </div>
         </div>
       </div>
     </aside>

@@ -30,6 +30,7 @@
   - `npm run build` OK.
   - `npm run lint` sin errores.
   - Flujos críticos funcionando en QA manual.
+  - Gestión de secretos aplicada: `.env` no versionado y `.env.example` disponible.
 
 ## Sprint 2 (Refactor App.jsx Fase 1)
 - Duración: 1 semana

@@ -4,7 +4,7 @@ import {
   actividad,
   buildExercises,
   calculateMetrics,
-  fetchGifUrl,
+  fetchGifMeta,
   generatePlan,
   niveles,
   PLAN_TEMPLATES,
@@ -311,6 +311,17 @@ export default function App() {
   const XP_BASE = 10;
   const XP_TIME_BONUS = 5;
 
+  const getGifIdCandidates = (id) => {
+    if (!id) return [];
+    const original = String(id);
+    const out = [original];
+    if (/^\d+$/.test(original)) {
+      const normalized = String(Number(original));
+      if (normalized && normalized !== original) out.push(normalized);
+    }
+    return out;
+  };
+
   const getExerciseKey = (dayTitle, ex) =>
     `${dayTitle}::${ex.instanceId || ex.id || ex.name}`;
 
@@ -427,6 +438,13 @@ export default function App() {
     return groups;
   }, [exercisePool, plan?.pool, lang]);
 
+  const planExerciseKey = useMemo(() => {
+    if (!plan) return "";
+    return plan.days
+      .map((d) => d.exercises.map((e) => e.instanceId || e.id || e.name).join(","))
+      .join("|");
+  }, [plan]);
+
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const update = () => setIsDesktop(mq.matches);
@@ -507,24 +525,20 @@ export default function App() {
   }, [plan]);
 
   useEffect(() => {
-    if (!plan) return;
-    const key = plan.days
-      .map((d) =>
-        d.exercises.map((e) => e.instanceId || e.id || e.name).join(",")
-      )
-      .join("|");
-    if (key && key === gifPlanKeyRef.current) return;
-    gifPlanKeyRef.current = key;
+    if (!plan || !planExerciseKey) return;
+    if (planExerciseKey === gifPlanKeyRef.current) return;
+    gifPlanKeyRef.current = planExerciseKey;
 
     let cancelled = false;
     const preload = async () => {
       setGifsLoading(true);
-      for (const day of plan.days) {
+      const currentPlan = planRef.current || plan;
+      for (const day of currentPlan.days) {
         for (const ex of day.exercises) {
           if (cancelled) break;
           if (ex.gifUrl) continue;
           try {
-            const gifUrl = await fetchGifUrl(ex.id);
+            const { url: gifUrl, resolvedId, source } = await fetchGifMeta(ex);
             if (!gifUrl || cancelled) continue;
             setPlan((prev) => {
               if (!prev) return prev;
@@ -533,10 +547,22 @@ export default function App() {
                 exercises: d.exercises.map((item) => {
                   if (ex.instanceId) {
                     return item.instanceId === ex.instanceId
-                      ? { ...item, gifUrl }
+                      ? {
+                          ...item,
+                          gifUrl,
+                          gifResolvedId: resolvedId || item.gifResolvedId || "",
+                          gifSource: source || item.gifSource || "",
+                        }
                       : item;
                   }
-                  return item.id === ex.id ? { ...item, gifUrl } : item;
+                  return item.id === ex.id
+                    ? {
+                        ...item,
+                        gifUrl,
+                        gifResolvedId: resolvedId || item.gifResolvedId || "",
+                        gifSource: source || item.gifSource || "",
+                      }
+                    : item;
                 }),
               }));
               return { ...prev, days };
@@ -555,7 +581,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [plan]);
+  }, [planExerciseKey]);
 
   useEffect(() => {
     if (!plan) return;
@@ -574,21 +600,41 @@ export default function App() {
     let cancelled = false;
     const hydrateLocalGifs = async () => {
       try {
-        const all = await getAllGifs();
+        const [all, allExercises] = await Promise.all([getAllGifs(), getAllExercises()]);
         if (cancelled) return;
         const byId = new Map(all.map((g) => [g.id, g.blob]));
+        const normalizeName = (value) =>
+          (value || "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+        const idByName = new Map();
+        allExercises.forEach((e) => {
+          const names = [e?.name, e?.name_es, e?.name_en]
+            .map(normalizeName)
+            .filter(Boolean);
+          names.forEach((n) => {
+            if (!idByName.has(n)) idByName.set(n, e.id);
+          });
+        });
         setPlan((prev) => {
           if (!prev) return prev;
           const days = prev.days.map((d) => ({
             ...d,
             exercises: d.exercises.map((ex) => {
-              if (ex.gifUrl) return ex;
-              const blob = byId.get(ex.id);
-              if (blob) return { ...ex, gifUrl: URL.createObjectURL(blob) };
-              if (supabaseGifBase && ex.id && /^\d+$/.test(String(ex.id))) {
+              let blob = byId.get(ex.id);
+              if (!blob) {
+                const nameKey = normalizeName(ex.name || ex.name_es || ex.name_en);
+                const mappedId = idByName.get(nameKey);
+                if (mappedId) blob = byId.get(mappedId);
+              }
+              if (blob) {
                 return {
                   ...ex,
-                  gifUrl: `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`,
+                  gifUrl: URL.createObjectURL(blob),
+                  gifResolvedId: String(ex.id || ""),
+                  gifSource: "exact-local",
                 };
               }
               return ex;
@@ -829,8 +875,40 @@ export default function App() {
         while (attempt < 3) {
           let res;
           try {
-            const url = `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${ex.id}.gif`;
-            res = await fetch(url);
+            const candidates = getGifIdCandidates(ex.id);
+            for (const candidateId of candidates) {
+              const url = `${supabaseGifBase}/storage/v1/object/public/${supabaseGifBucket}/${candidateId}.gif`;
+              // Try both zero-padded and normalized ids (e.g. 0001 vs 1).
+              const candidateRes = await fetch(url);
+              if (candidateRes.ok || candidateRes.status === 429) {
+                res = candidateRes;
+                break;
+              }
+            }
+            if (!res && supabase) {
+              for (const candidateId of candidates) {
+                const { data, error } = await supabase.storage
+                  .from(supabaseGifBucket)
+                  .download(`${candidateId}.gif`);
+                if (error || !data) continue;
+                await upsertGif(ex.id, data);
+                downloaded += 1;
+                setGifStatus({
+                  state: "downloading",
+                  downloaded,
+                  total,
+                  error: "",
+                  localCount: downloaded,
+                });
+                res = { ok: true, status: 200, _skipBlob: true };
+                break;
+              }
+              if (res?.ok) break;
+            }
+            if (!res) {
+              attempt += 1;
+              continue;
+            }
           } catch {
             attempt += 1;
             if (attempt >= 3) break;
@@ -838,16 +916,18 @@ export default function App() {
             continue;
           }
           if (res.ok) {
-            const blob = await res.blob();
-            await upsertGif(ex.id, blob);
-            downloaded += 1;
-            setGifStatus({
-              state: "downloading",
-              downloaded,
-              total,
-              error: "",
-              localCount: downloaded,
-            });
+            if (!res._skipBlob) {
+              const blob = await res.blob();
+              await upsertGif(ex.id, blob);
+              downloaded += 1;
+              setGifStatus({
+                state: "downloading",
+                downloaded,
+                total,
+                error: "",
+                localCount: downloaded,
+              });
+            }
             break;
           }
           if (res.status === 429) {
@@ -1891,11 +1971,18 @@ export default function App() {
   const onRequestGif = async (exercise) => {
     if (!exercise?.id || !plan) return;
     try {
-      const gifUrl = await fetchGifUrl(exercise.id);
+      const { url: gifUrl, resolvedId, source } = await fetchGifMeta(exercise);
       const updatedDays = plan.days.map((d) => ({
         ...d,
         exercises: d.exercises.map((ex) =>
-          ex.id === exercise.id ? { ...ex, gifUrl } : ex
+          ex.id === exercise.id
+            ? {
+                ...ex,
+                gifUrl,
+                gifResolvedId: resolvedId || ex.gifResolvedId || "",
+                gifSource: source || ex.gifSource || "",
+              }
+            : ex
         ),
       }));
       setPlan({ ...plan, days: updatedDays });

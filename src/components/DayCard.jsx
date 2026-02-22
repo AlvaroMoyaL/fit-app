@@ -187,6 +187,10 @@ export default function DayCard({
                 {ex.prescription?.type === "time" &&
                   `${ex.prescription.workSec}s trabajo • ${ex.prescription.restSec}s descanso`}
               </span>
+              <span className="ex-meta">
+                ID ex: {ex.id || "—"} • ID gif: {ex.gifResolvedId || "—"} • fuente:{" "}
+                {ex.gifSource || "—"}
+              </span>
               <span className={`type-pill ${typeLabel(ex).toLowerCase()}`}>
                 {typeLabel(ex)}
               </span>

@@ -1,4 +1,5 @@
-import { getAllExercises, getMeta, getGif } from "./idb";
+import { getAllExercises, getMeta, getGif, upsertGif } from "./idb";
+import { supabase } from "./supabaseClient";
 import LOCAL_EXERCISES from "../data/exercises.local";
 
 const niveles = [
@@ -473,20 +474,52 @@ async function fetchByBodyPart(bodyPart) {
   }
 }
 
-async function fetchGifUrl(exerciseId) {
-  return getGifUrlWithLimit(exerciseId);
-}
-
 const gifCache = new Map();
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_GIF_BUCKET = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
+const LOCAL_GIF_ID_MAP = {
+  l001: "3533", // Squat
+  l002: "1460", // Lunge
+  l003: "3013", // Glute bridge
+  l004: "1373", // Standing calf raise
+  l005: "0662", // Push-up
+  l006: "0464", // Plank variant
+  l007: "0276", // Dead bug (closest core pattern)
+  l008: "0274", // Crunch
+  l009: "0293", // Dumbbell bent over row
+  l010: "0025", // Barbell bench press
+  l011: "0405", // Dumbbell seated shoulder press
+  l012: "0294", // Dumbbell biceps curl
+  l013: "0129", // Bench dip
+  l014: "0085", // Romanian deadlift
+  l015: "0027", // Barbell bent over row
+  l016: "0289", // Dumbbell bench press (closest floor press intent)
+  l017: "3221", // March-like cardio
+  l018: "3220", // Side-step-like cardio
+  l019: "1419", // Hip stretch (bodyweight mobility)
+  l020: "0690", // Seated lower back stretch
+};
 
-function getSupabaseGifUrl(exerciseId) {
-  if (!SUPABASE_URL || !exerciseId) return "";
-  const idStr = String(exerciseId);
-  if (!/^\d+$/.test(idStr)) return "";
+function getGifIdCandidates(exerciseId) {
+  if (!exerciseId) return [];
+  const original = String(exerciseId);
+  const out = [];
+  if (/^\d+$/.test(original)) {
+    const normalized = String(Number(original));
+    if (normalized) out.push(normalized);
+  }
+  if (!out.includes(original)) out.push(original);
+  return out;
+}
+
+function getSupabaseGifUrls(exerciseId) {
+  if (!SUPABASE_URL || !exerciseId) return [];
+  const ids = getGifIdCandidates(exerciseId);
+  if (ids.length === 0) return [];
   const base = SUPABASE_URL.replace(/\/$/, "");
-  return `${base}/storage/v1/object/public/${SUPABASE_GIF_BUCKET}/${idStr}.gif`;
+  return ids.map(
+    (idStr) => `${base}/storage/v1/object/public/${SUPABASE_GIF_BUCKET}/${idStr}.gif`
+  );
 }
 async function getCachedGifUrl(exerciseId) {
   if (!exerciseId) return "";
@@ -502,10 +535,36 @@ async function getGifUrlWithLimit(exerciseId) {
   if (gifCache.has(exerciseId)) return gifCache.get(exerciseId);
   const cachedUrl = await getCachedGifUrl(exerciseId);
   if (cachedUrl) return cachedUrl;
-  const publicUrl = getSupabaseGifUrl(exerciseId);
-  if (publicUrl) {
-    gifCache.set(exerciseId, publicUrl);
-    return publicUrl;
+  if (supabase) {
+    const ids = getGifIdCandidates(exerciseId);
+    for (const candidateId of ids) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(SUPABASE_GIF_BUCKET)
+          .download(`${candidateId}.gif`);
+        if (error || !data) continue;
+        await upsertGif(exerciseId, data);
+        const url = URL.createObjectURL(data);
+        gifCache.set(exerciseId, url);
+        return url;
+      } catch {
+        // try next candidate
+      }
+    }
+  }
+  const publicUrls = getSupabaseGifUrls(exerciseId);
+  for (const url of publicUrls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      await upsertGif(exerciseId, blob);
+      const localUrl = URL.createObjectURL(blob);
+      gifCache.set(exerciseId, localUrl);
+      return localUrl;
+    } catch {
+      // ignore and try next candidate
+    }
   }
   return "";
 }
@@ -524,6 +583,134 @@ async function getLocalPool() {
     }
   })();
   return localPoolPromise;
+}
+
+const exerciseLookupPromise = { current: null };
+
+function normalizeName(value) {
+  return (value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+async function getExerciseLookups() {
+  if (exerciseLookupPromise.current) return exerciseLookupPromise.current;
+  exerciseLookupPromise.current = (async () => {
+    const all = await getAllExercises();
+    const byName = new Map();
+    const byBodyTarget = new Map();
+    const byBodyPart = new Map();
+    all.forEach((e) => {
+      if (!e?.id) return;
+      const keys = [e.name, e.name_es, e.name_en].map(normalizeName).filter(Boolean);
+      keys.forEach((k) => {
+        if (!byName.has(k)) byName.set(k, e.id);
+      });
+      const bp = normalizeName(e.bodyPart);
+      const target = normalizeName(e.target);
+      if (bp && target) {
+        const btKey = `${bp}|${target}`;
+        const list = byBodyTarget.get(btKey) || [];
+        list.push(e.id);
+        byBodyTarget.set(btKey, list);
+      }
+      if (bp) {
+        const list = byBodyPart.get(bp) || [];
+        list.push(e.id);
+        byBodyPart.set(bp, list);
+      }
+    });
+    return { byName, byBodyTarget, byBodyPart };
+  })();
+  return exerciseLookupPromise.current;
+}
+
+function pickDeterministicId(list, seed) {
+  if (!Array.isArray(list) || list.length === 0) return "";
+  const s = String(seed || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  const idx = h % list.length;
+  return String(list[idx]);
+}
+
+function parseGifRequest(input) {
+  if (!input) return { id: "", names: [] };
+  if (typeof input === "object") {
+    return {
+      id: input.id || "",
+      names: [input.name, input.name_es, input.name_en].filter(Boolean),
+      bodyPart: input.bodyPart || "",
+      target: input.target || "",
+    };
+  }
+  return { id: input, names: [], bodyPart: "", target: "" };
+}
+
+async function resolveGifId(input) {
+  const { id, names, bodyPart, target } = parseGifRequest(input);
+  const idStr = String(id || "");
+  if (/^\d+$/.test(idStr)) return idStr;
+  if (LOCAL_GIF_ID_MAP[idStr]) return LOCAL_GIF_ID_MAP[idStr];
+  const lookups = await getExerciseLookups();
+  const seed = `${id}|${names.join("|")}|${bodyPart}|${target}`;
+  for (const raw of names) {
+    const key = normalizeName(raw);
+    if (!key) continue;
+    const match = lookups.byName.get(key);
+    if (match) return String(match);
+  }
+  const bp = normalizeName(bodyPart);
+  const tg = normalizeName(target);
+  if (bp && tg) {
+    const byBoth = lookups.byBodyTarget.get(`${bp}|${tg}`);
+    const picked = pickDeterministicId(byBoth, seed);
+    if (picked) return picked;
+  }
+  if (bp) {
+    const byPart = lookups.byBodyPart.get(bp);
+    const picked = pickDeterministicId(byPart, seed);
+    if (picked) return picked;
+  }
+  return idStr;
+}
+
+async function fetchGifUrl(input) {
+  const { id: originalId } = parseGifRequest(input);
+  const resolvedId = await resolveGifId(input);
+  const url = await getGifUrlWithLimit(resolvedId);
+  if (!url) return "";
+  if (originalId && String(originalId) !== String(resolvedId)) {
+    gifCache.set(originalId, url);
+  }
+  return url;
+}
+
+async function fetchGifMeta(input) {
+  const { id: originalId } = parseGifRequest(input);
+  const exactId = String(originalId || "");
+
+  if (/^\d+$/.test(exactId)) {
+    const exactUrl = await getGifUrlWithLimit(exactId);
+    if (exactUrl) {
+      return { url: exactUrl, resolvedId: exactId, source: "exact" };
+    }
+  }
+
+  const resolvedId = await resolveGifId(input);
+  const url = resolvedId ? await getGifUrlWithLimit(resolvedId) : "";
+  if (url && originalId && String(originalId) !== String(resolvedId)) {
+    gifCache.set(originalId, url);
+  }
+  return {
+    url,
+    resolvedId: resolvedId || "",
+    source: resolvedId && String(resolvedId) !== exactId ? "fallback" : "exact",
+  };
 }
 
 async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentList) {
@@ -733,5 +920,6 @@ export {
   calculateMetrics,
   generatePlan,
   buildExercises,
+  fetchGifMeta,
   fetchGifUrl,
 };

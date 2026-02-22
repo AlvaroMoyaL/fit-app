@@ -72,6 +72,9 @@
 - Sync now includes a basic conflict guard to avoid overwriting cloud data with lower local progress.
 - Backup UI supports restoring both latest and previous automatic backup.
 - Date grouping in history/weekly charts uses local date keys (not UTC ISO slicing).
+- Se agregó trazabilidad visual en miniaturas para depuración: `ID ex`, `ID gif` y `fuente` (`exact`, `exact-local`, `fallback`).
+- Carga de GIF prioriza coincidencia exacta por ID de ejercicio; solo usa fallback si no existe el GIF exacto.
+- Ajuste de mapeo local: `l019` (Hip Stretch) ahora apunta a `1419` (bodyweight mobility) en lugar de `2202` (roller).
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.
@@ -93,6 +96,9 @@
 - Se añadió recuperación directa desde UI con dos opciones: `Restaurar último` y `Restaurar anterior`.
 - Se añadió acción `Entreno libre hoy` cuando el día actual está marcado como descanso (sesión temporal sin modificar el plan base).
 - Se corrigió el desfase de día por zona horaria en vistas de historial y resumen semanal.
+- Se añadió diagnóstico visible en miniaturas para validar mapeo ejercicio↔gif durante pruebas.
+- Se reforzó la resolución de gifs para preferir `exact` antes de `fallback`.
+- Se corrigió el caso reportado de `l019` para mejorar coherencia del gif en local fallback.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

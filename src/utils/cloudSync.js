@@ -51,22 +51,50 @@ export function buildCloudPayload() {
 export function applyCloudPayload(payload) {
   if (!payload) return;
   const { profiles, activeProfileId, dataByProfile, meta } = payload;
-  if (Array.isArray(profiles) && profiles.length) {
-    localStorage.setItem(PROFILE_LIST_KEY, JSON.stringify(profiles));
+  let resolvedProfiles = Array.isArray(profiles) ? profiles.filter((p) => p?.id) : [];
+  if (!resolvedProfiles.length && dataByProfile && typeof dataByProfile === "object") {
+    resolvedProfiles = Object.keys(dataByProfile).map((id, index) => {
+      const block = dataByProfile[id] || {};
+      let name = `Perfil ${index + 1}`;
+      try {
+        const parsed = block.profile ? JSON.parse(block.profile) : null;
+        name = parsed?.profile?.nombre || parsed?.nombre || name;
+      } catch {
+        // keep fallback name
+      }
+      return { id, name };
+    });
   }
-  if (activeProfileId) {
+
+  if (resolvedProfiles.length) {
+    localStorage.setItem(PROFILE_LIST_KEY, JSON.stringify(resolvedProfiles));
+  }
+
+  const hasActiveInProfiles = resolvedProfiles.some((p) => p.id === activeProfileId);
+  if (activeProfileId && hasActiveInProfiles) {
     localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfileId);
+  } else if (resolvedProfiles.length) {
+    localStorage.setItem(ACTIVE_PROFILE_KEY, resolvedProfiles[0].id);
   }
+
   if (dataByProfile && typeof dataByProfile === "object") {
     Object.keys(dataByProfile).forEach((id) => {
       const keys = profileKeys(id);
       const block = dataByProfile[id] || {};
-      if (block.profile) localStorage.setItem(keys.profile, block.profile);
-      if (block.plan) localStorage.setItem(keys.plan, block.plan);
-      if (block.progress) localStorage.setItem(keys.progress, block.progress);
+      if (block.profile !== undefined && block.profile !== null) {
+        localStorage.setItem(keys.profile, block.profile);
+      }
+      if (block.plan !== undefined && block.plan !== null) {
+        localStorage.setItem(keys.plan, block.plan);
+      }
+      if (block.progress !== undefined && block.progress !== null) {
+        localStorage.setItem(keys.progress, block.progress);
+      }
       if (block.progressDetails)
         localStorage.setItem(keys.progressDetails, block.progressDetails);
-      if (block.history) localStorage.setItem(keys.history, block.history);
+      if (block.history !== undefined && block.history !== null) {
+        localStorage.setItem(keys.history, block.history);
+      }
       if (block.metricsLog)
         localStorage.setItem(keys.metricsLog, block.metricsLog);
       if (block.lang) localStorage.setItem(keys.lang, block.lang);

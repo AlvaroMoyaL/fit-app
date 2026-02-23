@@ -102,6 +102,10 @@
   - se reemplazó umbral fijo de `300 XP` por curva progresiva centralizada en `src/utils/levelProgress.js`,
   - tramos actuales: 800, 1000, 1200, 1500, y luego +300 por nivel,
   - `App`, `Sidebar` y `Plan` usan la misma utilidad para nivel, XP en nivel y porcentaje de barra.
+- Fix de sincronización cloud/local en `applyCloudPayload` (`src/utils/cloudSync.js`):
+  - si el payload no trae `profiles`, ahora reconstruye la lista desde `dataByProfile`,
+  - asegura `activeProfileId` válido tras restaurar,
+  - evita el caso de "Datos restaurados ✓" sin perfiles visibles en el listado.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

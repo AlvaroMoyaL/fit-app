@@ -16,12 +16,55 @@ function profileKeys(id) {
   };
 }
 
+function safeParse(raw) {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function inferProfileNameFromBlock(block, fallbackName) {
+  const parsed = safeParse(block?.profile);
+  return parsed?.profile?.nombre || parsed?.nombre || fallbackName;
+}
+
+function deriveProfileIdsFromStorage(activeProfileId) {
+  const ids = new Set();
+  if (activeProfileId) ids.add(activeProfileId);
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const k = localStorage.key(i) || "";
+    const m = k.match(
+      /^fit_(?:profile|plan|progress|progress_details|history|metrics_log|lang):(.+)$/
+    );
+    if (m?.[1]) ids.add(m[1]);
+  }
+  return Array.from(ids);
+}
+
 export function buildCloudPayload() {
   const profilesRaw = localStorage.getItem(PROFILE_LIST_KEY);
-  const profiles = profilesRaw ? JSON.parse(profilesRaw) : [];
+  const parsedProfiles = profilesRaw ? safeParse(profilesRaw) : [];
   const activeProfileId = localStorage.getItem(ACTIVE_PROFILE_KEY) || "";
   const updatedAt =
     localStorage.getItem(LOCAL_SYNC_KEY) || new Date().toISOString();
+
+  let profiles = Array.isArray(parsedProfiles)
+    ? parsedProfiles.filter((p) => p?.id)
+    : [];
+  if (!profiles.length) {
+    const inferredIds = deriveProfileIdsFromStorage(activeProfileId);
+    profiles = inferredIds.map((id, index) => {
+      const keys = profileKeys(id);
+      const block = {
+        profile: localStorage.getItem(keys.profile),
+      };
+      return {
+        id,
+        name: inferProfileNameFromBlock(block, `Perfil ${index + 1}`),
+      };
+    });
+  }
 
   const dataByProfile = {};
   profiles.forEach((p) => {
@@ -36,6 +79,45 @@ export function buildCloudPayload() {
       lang: localStorage.getItem(keys.lang),
     };
   });
+
+  // Legacy fallback (single-profile keys without suffix)
+  if (!profiles.length) {
+    const legacyProfile = localStorage.getItem("fit_profile");
+    const legacyPlan = localStorage.getItem("fit_plan");
+    const legacyProgress = localStorage.getItem("fit_progress");
+    const legacyProgressDetails = localStorage.getItem("fit_progress_details");
+    const legacyHistory = localStorage.getItem("fit_history");
+    const legacyMetricsLog = localStorage.getItem("fit_metrics_log");
+    const legacyLang = localStorage.getItem("fit_lang");
+    const hasLegacyData = Boolean(
+      legacyProfile ||
+        legacyPlan ||
+        legacyProgress ||
+        legacyProgressDetails ||
+        legacyHistory ||
+        legacyMetricsLog ||
+        legacyLang
+    );
+    if (hasLegacyData) {
+      const legacyId = activeProfileId || "legacy-default";
+      const fallbackBlock = { profile: legacyProfile };
+      profiles = [
+        {
+          id: legacyId,
+          name: inferProfileNameFromBlock(fallbackBlock, "Perfil legado"),
+        },
+      ];
+      dataByProfile[legacyId] = {
+        profile: legacyProfile,
+        plan: legacyPlan,
+        progress: legacyProgress,
+        progressDetails: legacyProgressDetails,
+        history: legacyHistory,
+        metricsLog: legacyMetricsLog,
+        lang: legacyLang,
+      };
+    }
+  }
 
   return {
     meta: {

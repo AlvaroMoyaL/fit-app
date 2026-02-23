@@ -21,6 +21,8 @@ export default function Plan({
   activeProfileName,
   activeExerciseKey,
   equipmentGroups,
+  exerciseCatalog,
+  onAddCoreAlternative,
   selectedDayIndex,
   onSelectDayIndex,
 }) {
@@ -159,6 +161,8 @@ export default function Plan({
               onStartSession={onStartSession}
               activeExerciseKey={activeExerciseKey}
               equipmentGroups={equipmentGroups}
+              exerciseCatalog={exerciseCatalog}
+              onAddCoreAlternative={onAddCoreAlternative}
             />
           );
         })}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   actividad,
   buildExercises,
+  buildDayBlueprint,
   calculateMetrics,
   fetchGifMeta,
   generatePlan,
@@ -552,6 +553,16 @@ export default function App() {
     };
   };
 
+  const getDayTargetExerciseCount = (day) =>
+    Math.max(1, day?.targetExerciseCount || day?.exercises?.length || 6);
+
+  const getRebuildPool = (fallback = []) => {
+    if (exercisePool.length) return exercisePool;
+    if (plan?.pool?.length) return plan.pool;
+    if (allExercises.length) return allExercises;
+    return fallback;
+  };
+
   const stripGifs = (planToStore) => ({
     ...planToStore,
     // Keep pool only in-memory (exercisePool state). Persisting full pool can exceed localStorage quota.
@@ -568,6 +579,11 @@ export default function App() {
     const days = planToNormalize.days.map((d) => ({
       ...d,
       equipmentList: Array.isArray(d.equipmentList) ? d.equipmentList : [],
+      targetExerciseCount: getDayTargetExerciseCount(d),
+      equipmentShortage:
+        Array.isArray(d.equipmentList) &&
+        d.equipmentList.length > 0 &&
+        (d.exercises?.length || 0) < getDayTargetExerciseCount(d),
       exercises: d.exercises.map((ex) => {
         if (ex.instanceId) return ex;
         changed = true;
@@ -624,7 +640,14 @@ export default function App() {
     : 0;
 
   const equipmentGroups = useMemo(() => {
-    const pool = exercisePool.length ? exercisePool : plan?.pool || [];
+    const poolFromPlanDays = Array.isArray(plan?.days)
+      ? plan.days.flatMap((d) => d.exercises || [])
+      : [];
+    const pool = exercisePool.length
+      ? exercisePool
+      : plan?.pool?.length
+      ? plan.pool
+      : poolFromPlanDays;
     const set = new Set();
     pool.forEach((ex) => {
       if (ex?.equipment) set.add(ex.equipment);
@@ -1868,19 +1891,35 @@ export default function App() {
 
     const updatedDays = [...plan.days];
     const day = updatedDays[dayIndex];
+    const blueprint = buildDayBlueprint(
+      form.planTemplate || "goal",
+      dayIndex,
+      form.objetivo
+    );
+    const splitTarget = (blueprint?.split?.strength || 0) + (blueprint?.split?.core || 0);
+    const targetCount = Math.max(
+      getDayTargetExerciseCount(day),
+      blueprint?.dailyCount || 0,
+      splitTarget
+    );
+    const currentEquipment = day.equipmentList || [];
 
     const exercises = await buildExercises(
-      exercisePool.length ? exercisePool : day.exercises,
+      getRebuildPool(day.exercises),
       mode,
       day.quiet,
-      day.exercises.length || 4,
+      targetCount,
       levelIndex,
-      day.equipmentList || []
+      currentEquipment,
+      { blueprint }
     );
 
     updatedDays[dayIndex] = {
       ...day,
       mode,
+      targetExerciseCount: targetCount,
+      equipmentShortage:
+        currentEquipment.length > 0 && exercises.length < targetCount,
       exercises,
     };
 
@@ -1919,17 +1958,37 @@ export default function App() {
       const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
       const dayNow = latestPlan.days[dayIndex];
       if (!dayNow) return;
+      const blueprint = buildDayBlueprint(
+        form.planTemplate || "goal",
+        dayIndex,
+        form.objetivo
+      );
+      const splitTarget = (blueprint?.split?.strength || 0) + (blueprint?.split?.core || 0);
+      const targetCount = Math.max(
+        getDayTargetExerciseCount(dayNow),
+        blueprint?.dailyCount || 0,
+        splitTarget
+      );
+      const currentEquipment = dayNow.equipmentList || [];
       const exercises = await buildExercises(
-        exercisePool.length ? exercisePool : dayNow.exercises,
+        getRebuildPool(dayNow.exercises),
         dayNow.mode,
         quiet,
-        dayNow.exercises.length || 4,
+        targetCount,
         levelIndex,
-        dayNow.equipmentList || []
+        currentEquipment,
+        { blueprint }
       );
 
       const nextDays = [...latestPlan.days];
-      nextDays[dayIndex] = { ...dayNow, quiet, exercises };
+      nextDays[dayIndex] = {
+        ...dayNow,
+        quiet,
+        targetExerciseCount: targetCount,
+        equipmentShortage:
+          currentEquipment.length > 0 && exercises.length < targetCount,
+        exercises,
+      };
       const nextPlan = { ...latestPlan, days: nextDays };
       setPlan(nextPlan);
       if (activeProfileId) {
@@ -1946,19 +2005,33 @@ export default function App() {
     const updatedDays = [...plan.days];
     const day = updatedDays[dayIndex];
     const nextList = Array.isArray(equipmentList) ? equipmentList : [];
+    const blueprint = buildDayBlueprint(
+      form.planTemplate || "goal",
+      dayIndex,
+      form.objetivo
+    );
+    const splitTarget = (blueprint?.split?.strength || 0) + (blueprint?.split?.core || 0);
+    const targetCount = Math.max(
+      getDayTargetExerciseCount(day),
+      blueprint?.dailyCount || 0,
+      splitTarget
+    );
 
     const exercises = await buildExercises(
-      exercisePool.length ? exercisePool : day.exercises,
+      getRebuildPool(day.exercises),
       day.mode,
       day.quiet,
-      day.exercises.length || 4,
+      targetCount,
       levelIndex,
-      nextList
+      nextList,
+      { blueprint }
     );
 
     updatedDays[dayIndex] = {
       ...day,
       equipmentList: nextList,
+      targetExerciseCount: targetCount,
+      equipmentShortage: nextList.length > 0 && exercises.length < targetCount,
       exercises,
     };
 
@@ -1972,14 +2045,34 @@ export default function App() {
     setDetailEx(null);
   };
 
-  const onSelectExercise = (payload) => {
+  const onSelectExercise = async (payload) => {
     const ex = payload?.ex || payload;
+    if (!ex) return;
+    let nextPayload = payload;
+    if (!ex.gifUrl) {
+      try {
+        const { url: gifUrl, resolvedId, source } = await fetchGifMeta(ex);
+        if (gifUrl) {
+          nextPayload = {
+            ...payload,
+            ex: {
+              ...ex,
+              gifUrl,
+              gifResolvedId: resolvedId || ex.gifResolvedId || "",
+              gifSource: source || ex.gifSource || "",
+            },
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
     if (detailEx && detailEx?.ex?.id !== ex.id) {
       setDetailEx(null);
-      setTimeout(() => setDetailEx(payload), 0);
+      setTimeout(() => setDetailEx(nextPayload), 0);
       return;
     }
-    setDetailEx(payload);
+    setDetailEx(nextPayload);
   };
 
   const onNextExercise = () => {
@@ -2172,6 +2265,61 @@ export default function App() {
     }
   };
 
+  const onAddCoreAlternative = async (dayIndex, exerciseId) => {
+    if (!plan) return;
+    const updatedDays = [...plan.days];
+    const day = updatedDays[dayIndex];
+    if (!day || !exerciseId) return;
+
+    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+    const sourcePool = getRebuildPool(day.exercises);
+    const selectedPool = sourcePool.filter(
+      (item) => String(item?.id || "") === String(exerciseId)
+    );
+    if (!selectedPool.length) return;
+
+    const blueprint = buildDayBlueprint(
+      form.planTemplate || "goal",
+      dayIndex,
+      form.objetivo
+    );
+    const picked = await buildExercises(
+      selectedPool,
+      day.mode,
+      day.quiet,
+      1,
+      levelIndex,
+      day.equipmentList || [],
+      { blueprint }
+    );
+    const candidate = picked[0];
+    if (!candidate) return;
+
+    const exists = day.exercises.some(
+      (ex) => String(ex?.id || "") === String(candidate?.id || "")
+    );
+    if (exists) return;
+
+    const nextExercises = [...day.exercises, candidate];
+    const targetCount = getDayTargetExerciseCount(day);
+    updatedDays[dayIndex] = {
+      ...day,
+      exercises: nextExercises,
+      equipmentShortage:
+        Array.isArray(day.equipmentList) &&
+        day.equipmentList.length > 0 &&
+        nextExercises.length < targetCount,
+    };
+
+    const nextPlan = { ...plan, days: updatedDays };
+    setPlan(nextPlan);
+    if (activeProfileId) {
+      const keys = profileKeys(activeProfileId);
+      localStorage.setItem(keys.plan, JSON.stringify(stripGifs(nextPlan)));
+      touchLocalChange();
+    }
+  };
+
   const onRegisterPastExercise = (payload) => {
     const date = String(payload?.date || "").trim();
     const dayTitle = payload?.dayTitle || "";
@@ -2290,37 +2438,73 @@ export default function App() {
   };
 
   const onRequestGif = async (exercise) => {
-    if (!exercise?.id || !plan) return;
+    if (!exercise?.id) return;
     try {
       const { url: gifUrl, resolvedId, source } = await fetchGifMeta(exercise);
-      const updatedDays = plan.days.map((d) => ({
-        ...d,
-        exercises: d.exercises.map((ex) =>
-          ex.id === exercise.id
-            ? {
+      if (!gifUrl) return;
+      setDetailEx((prev) => {
+        if (!prev?.ex) return prev;
+        const prevId = String(prev.ex.instanceId || prev.ex.id || "");
+        const targetId = String(exercise.instanceId || exercise.id || "");
+        if (prevId !== targetId) return prev;
+        return {
+          ...prev,
+          ex: {
+            ...prev.ex,
+            gifUrl,
+            gifResolvedId: resolvedId || prev.ex.gifResolvedId || "",
+            gifSource: source || prev.ex.gifSource || "",
+          },
+        };
+      });
+      if (planRef.current?.days?.length) {
+        setPlan((prev) => {
+          if (!prev?.days) return prev;
+          const targetId = String(exercise.instanceId || exercise.id || "");
+          const days = prev.days.map((d) => ({
+            ...d,
+            exercises: d.exercises.map((ex) => {
+              const exId = String(ex.instanceId || ex.id || "");
+              if (exId !== targetId && String(ex.id || "") !== String(exercise.id || "")) {
+                return ex;
+              }
+              return {
                 ...ex,
                 gifUrl,
                 gifResolvedId: resolvedId || ex.gifResolvedId || "",
                 gifSource: source || ex.gifSource || "",
-              }
-            : ex
-        ),
-      }));
-      setPlan({ ...plan, days: updatedDays });
+              };
+            }),
+          }));
+          return { ...prev, days };
+        });
+      }
     } catch {
       // ignore
     }
   };
 
-  const onReplaceExercise = async (dayTitle, ex, reason) => {
+  const onReplaceExercise = async (dayTitle, ex, replaceInput) => {
     if (!plan) return;
     const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
     const updatedDays = [...plan.days];
     const dayIndex = updatedDays.findIndex((d) => d.title === dayTitle);
     if (dayIndex === -1) return;
 
+    const replaceOpts =
+      replaceInput && typeof replaceInput === "object"
+        ? replaceInput
+        : { mode: "random", reason: replaceInput };
+    const replaceMode = replaceOpts.mode === "manual" ? "manual" : "random";
+    const reason = replaceOpts.reason || "discomfort";
+
     const day = updatedDays[dayIndex];
-    const pool = exercisePool.length ? exercisePool : day.exercises;
+    const dayPool = exercisePool.length ? exercisePool : day.exercises;
+    const globalPool = exercisePool.length
+      ? exercisePool
+      : plan.pool?.length
+      ? plan.pool
+      : allExercises;
     let mode = day.mode;
     let quiet = day.quiet;
     let equipmentList = Array.isArray(day.equipmentList) ? day.equipmentList : [];
@@ -2334,25 +2518,46 @@ export default function App() {
       quiet = true;
     }
 
-    const replacementList = await buildExercises(
-      pool,
-      mode,
-      quiet,
-      1,
-      levelIndex,
-      equipmentList
-    );
-    let replacement = replacementList[0];
+    let replacement = null;
+    if (replaceMode === "manual" && replaceOpts.exerciseId) {
+      const selectedPool = globalPool.filter(
+        (item) => String(item?.id || "") === String(replaceOpts.exerciseId)
+      );
+      if (selectedPool.length) {
+        const picked = await buildExercises(
+          selectedPool,
+          mode,
+          quiet,
+          1,
+          levelIndex,
+          equipmentList
+        );
+        replacement = picked[0] || null;
+      }
+    }
+
+    if (!replacement) {
+      const replacementList = await buildExercises(
+        dayPool,
+        mode,
+        quiet,
+        1,
+        levelIndex,
+        equipmentList
+      );
+      replacement = replacementList[0] || null;
+    }
+
     if (!replacement || replacement.id === ex.id) {
       const fallback = await buildExercises(
-        pool,
+        dayPool,
         mode,
         quiet,
         2,
         levelIndex,
         equipmentList
       );
-      replacement = fallback.find((r) => r.id !== ex.id) || fallback[0];
+      replacement = fallback.find((r) => r.id !== ex.id) || fallback[0] || null;
     }
     if (!replacement) return;
 
@@ -2498,6 +2703,8 @@ export default function App() {
       quiet,
       focus: "Extra",
       equipmentList,
+      targetExerciseCount: count,
+      equipmentShortage: equipmentList.length > 0 && exercises.length < count,
       exercises,
       xp: 50 + levelIndex * 10 + exercises.length * 5,
     };
@@ -2539,17 +2746,28 @@ export default function App() {
     setLoadingPlan(true);
     try {
       const adjustDelta = computeAdjustDelta(history, form);
+      const dayOverrides = Array.isArray(plan?.days)
+        ? plan.days.map((d) => ({
+            mode: d?.mode || "week",
+            quiet: typeof d?.quiet === "boolean" ? d.quiet : true,
+            equipmentList: Array.isArray(d?.equipmentList)
+              ? d.equipmentList
+              : [],
+          }))
+        : [];
       let newPlan;
       try {
         newPlan = await generatePlan(form, {
           forceLocal: dbStatus.state !== "ready",
           adjustLevelDelta: adjustDelta,
+          dayOverrides,
         });
       } catch (firstErr) {
         // Fallback: force local dataset if remote/local DB path fails.
         newPlan = await generatePlan(form, {
           forceLocal: true,
           adjustLevelDelta: adjustDelta,
+          dayOverrides,
         });
         console.warn("Regenerate fallback to local pool", firstErr);
       }
@@ -2897,6 +3115,10 @@ export default function App() {
                   detailEx?.ex ? getExerciseKey(detailEx.dayTitle, detailEx.ex) : ""
                 }
                 equipmentGroups={equipmentGroups}
+                exerciseCatalog={
+                  exercisePool.length ? exercisePool : plan?.pool?.length ? plan.pool : allExercises
+                }
+                onAddCoreAlternative={onAddCoreAlternative}
                 selectedDayIndex={selectedPlanDayIndex}
                 onSelectDayIndex={setSelectedPlanDayIndex}
               />
@@ -3164,6 +3386,9 @@ export default function App() {
         onCompleteAndNext={onCompleteAndNext}
         getExerciseKey={getExerciseKey}
         onReplaceExercise={onReplaceExercise}
+        replacementPool={
+          exercisePool.length ? exercisePool : plan?.pool?.length ? plan.pool : allExercises
+        }
         onRequestGif={onRequestGif}
         onClose={() => setDetailEx(null)}
         onNext={onNextExercise}

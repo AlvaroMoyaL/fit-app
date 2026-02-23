@@ -115,6 +115,7 @@ function normalizeEquipment(equipment) {
   if (e.includes("smith")) return "smith";
   if (e.includes("ez")) return "ez barbell";
   if (e.includes("rope")) return "rope";
+  if (e.includes("medicine")) return "medicine ball";
   return e;
 }
 
@@ -333,14 +334,19 @@ function filterPoolByMode(pool, mode, quiet) {
 
 function filterPoolByEquipmentList(pool, equipmentList, quiet) {
   if (!Array.isArray(equipmentList) || equipmentList.length === 0) return pool;
-  const allowed = new Set(equipmentList.map((item) => normalizeEquipment(item)));
+  const allowed = new Set(
+    equipmentList
+      .map((item) => normalizeEquipment(item))
+      .filter(Boolean)
+  );
+  if (!allowed.size) return [];
   const blocked = quiet ? QUIET_BLOCKED : [];
   const filtered = pool.filter((e) => {
     if (!allowed.has(normalizeEquipment(e.equipment))) return false;
     const name = (e.name || "").toLowerCase();
     return !blocked.some((k) => name.includes(k));
   });
-  return filtered.length ? filtered : pool;
+  return filtered;
 }
 
 function filterPoolByLevel(pool, levelIndex) {
@@ -1005,6 +1011,20 @@ async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentLis
   const byEquipment = filterPoolByEquipmentList(pool, equipmentList, quiet);
   const basePool = equipmentList && equipmentList.length ? byEquipment : byMode;
   const filtered = filterPoolByLevel(basePool, levelIndex);
+  const modeFiltered = filterPoolByLevel(byMode, levelIndex);
+  const selectedEquipmentSet = new Set(
+    (Array.isArray(equipmentList) ? equipmentList : [])
+      .map((item) => normalizeEquipment(item))
+      .filter(Boolean)
+  );
+  const hasSelectedEquipment = selectedEquipmentSet.size > 0;
+  const preferSelectedEquipment = (list) => {
+    if (!hasSelectedEquipment) return list;
+    const preferred = list.filter((item) =>
+      selectedEquipmentSet.has(normalizeEquipment(item?.equipment))
+    );
+    return preferred.length ? preferred : list;
+  };
   const blueprint = options.blueprint || null;
   const excludedIds = new Set((options.excludedIds || []).map((x) => String(x)));
   const uniqueFiltered = uniqueById(filtered);
@@ -1014,13 +1034,14 @@ async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentLis
     const primaryPool = filterByBlueprint(uniqueFiltered, blueprint);
     const split = blueprint.split || null;
     if (split) {
-      const uniqueBase = uniqueById(basePool);
+      const uniqueModeFiltered = uniqueById(modeFiltered);
       const strengthTarget = Math.min(count, Math.max(0, split.strength || 0));
       const coreTarget = Math.min(
         Math.max(0, count - strengthTarget),
         Math.max(0, split.core || 0)
       );
       let strengthPool = primaryPool.filter(isStrengthExercise);
+      strengthPool = preferSelectedEquipment(strengthPool);
       if (Array.isArray(blueprint.strengthBodyParts) && blueprint.strengthBodyParts.length) {
         const focused = filterPoolByBodyParts(
           strengthPool,
@@ -1036,11 +1057,14 @@ async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentLis
         strengthPool = focused.length ? focused : strengthPool;
       }
       if (!strengthPool.length) {
-        strengthPool = uniqueFiltered.filter(isStrengthExercise);
+        strengthPool = preferSelectedEquipment(uniqueFiltered.filter(isStrengthExercise));
       }
-      let corePool = primaryPool.filter(isCoreExercise);
-      if (!corePool.length) corePool = uniqueFiltered.filter(isCoreExercise);
-      if (!corePool.length) corePool = uniqueBase.filter(isCoreExercise);
+      // Core stays independent from selected equipment.
+      let corePool = filterByBlueprint(uniqueModeFiltered, blueprint).filter(isCoreExercise);
+      if (!corePool.length) corePool = uniqueModeFiltered.filter(isCoreExercise);
+      const bodyweightCorePool = corePool.filter(
+        (ex) => normalizeEquipment(ex.equipment) === "bodyweight"
+      );
 
       let pickedStrength = pickWithExclusions(strengthPool, strengthTarget, excludedIds);
       if (pickedStrength.length < strengthTarget) {
@@ -1056,10 +1080,22 @@ async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentLis
       }
       pickedStrength.forEach((ex) => excludedIds.add(String(ex.id || "")));
 
-      let pickedCore = pickWithExclusions(corePool, coreTarget, excludedIds);
+      // Prefer 100% bodyweight for the core block.
+      let pickedCore = pickWithExclusions(bodyweightCorePool, coreTarget, excludedIds);
+      if (pickedCore.length < coreTarget) {
+        const fillCore = pickWithExclusions(
+          corePool,
+          coreTarget - pickedCore.length,
+          new Set([
+            ...excludedIds,
+            ...pickedCore.map((ex) => String(ex.id || "")),
+          ])
+        );
+        pickedCore = [...pickedCore, ...fillCore];
+      }
       if (pickedCore.length < coreTarget) {
         const fallbackCore = pickWithExclusions(
-          uniqueFiltered.filter(isCoreExercise),
+          uniqueModeFiltered.filter(isCoreExercise),
           coreTarget - pickedCore.length,
           new Set([
             ...excludedIds,
@@ -1163,6 +1199,9 @@ async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentLis
 
 async function generatePlan(form, options = {}) {
   const forceLocal = Boolean(options.forceLocal);
+  const dayOverrides = Array.isArray(options.dayOverrides)
+    ? options.dayOverrides
+    : [];
   const baseIndex = Math.max(0, niveles.indexOf(form.nivel));
   const levelIndex = Math.max(
     0,
@@ -1313,8 +1352,13 @@ async function generatePlan(form, options = {}) {
 
   const planDays = await Promise.all(
     Array.from({ length: days }).map(async (_, idx) => {
-      const mode = "week";
-      const quiet = true;
+      const override = dayOverrides[idx] || {};
+      const mode = override.mode || "week";
+      const quiet =
+        typeof override.quiet === "boolean" ? override.quiet : true;
+      const equipmentList = Array.isArray(override.equipmentList)
+        ? override.equipmentList
+        : [];
       const { pool: templatePool } = filterPoolByTemplate(
         pool,
         template,
@@ -1328,16 +1372,20 @@ async function generatePlan(form, options = {}) {
         quiet,
         dayCount,
         levelIndex,
-        [],
+        equipmentList,
         { blueprint }
       );
       const xp = 50 + levelIndex * 10 + exercises.length * 5;
+      const equipmentShortage =
+        equipmentList.length > 0 && exercises.length < dayCount;
       return {
         title: `Día ${idx + 1}`,
         mode,
         quiet,
         focus: blueprint.focus || "Objetivo",
-        equipmentList: [],
+        equipmentList,
+        targetExerciseCount: dayCount,
+        equipmentShortage,
         exercises,
         xp,
       };
@@ -1373,6 +1421,7 @@ export {
   actividad,
   EQUIPMENT_MODES,
   PLAN_TEMPLATES,
+  buildDayBlueprint,
   calculateMetrics,
   generatePlan,
   buildExercises,

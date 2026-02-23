@@ -1,4 +1,3 @@
-import { EQUIPMENT_MODES } from "../utils/plan";
 import { buildDayFocusLabel } from "../utils/dayFocus";
 
 export default function DayCard({
@@ -15,6 +14,8 @@ export default function DayCard({
   onStartSession,
   activeExerciseKey,
   equipmentGroups,
+  exerciseCatalog,
+  onAddCoreAlternative,
 }) {
   const dayPossible = day.exercises.reduce((sum, ex) => sum + getExerciseXp(ex), 0);
   const dayEarned = day.exercises.reduce((sum, ex) => {
@@ -113,30 +114,145 @@ export default function DayCard({
   );
 
   const selectedEquipment = Array.isArray(day.equipmentList) ? day.equipmentList : [];
+  const hasEquipment =
+    selectedEquipment.length > 0 || (day.mode && day.mode !== "week");
+  const normalizeEquipment = (equipment) => {
+    const e = String(equipment || "").toLowerCase();
+    if (!e) return "";
+    if (e.includes("barbell")) return "barbell";
+    if (e.includes("dumbbell")) return "dumbbell";
+    if (e.includes("bench")) return "bench";
+    if (e.includes("body weight")) return "bodyweight";
+    if (e.includes("cable")) return "cable";
+    if (e.includes("machine")) return "machine";
+    if (e.includes("leverage")) return "leverage";
+    if (e.includes("assisted")) return "assisted";
+    if (e.includes("band")) return "band";
+    if (e.includes("kettlebell")) return "kettlebell";
+    if (e.includes("smith")) return "smith";
+    if (e.includes("ez")) return "ez barbell";
+    if (e.includes("rope")) return "rope";
+    if (e.includes("plate") || e.includes("disc")) return "plate";
+    if (e.includes("medicine")) return "medicine ball";
+    return e;
+  };
   const formatEquipment = (value) => {
     if (!value) return value;
     return value
       .replace(/_/g, " ")
       .replace(/\b\w/g, (m) => m.toUpperCase());
   };
-  const bodyweightOption =
-    selectedEquipment.find((e) => /body weight|bodyweight/i.test(e)) ||
-    (equipmentGroups || [])
-      .flatMap((g) => g.items)
-      .find((e) => /body weight|bodyweight/i.test(e));
-  const toggleEquipment = (value) => {
-    const next = selectedEquipment.includes(value)
-      ? selectedEquipment.filter((e) => e !== value)
-      : [...selectedEquipment, value];
-    onChangeEquipment(index, next);
+  const translateEquipment = (value) => {
+    const raw = normalizeEquipment(value);
+    const labelsEs = [
+      { re: /dumbbell/, label: "Mancuerna" },
+      { re: /barbell|ez barbell|smith/, label: "Barra" },
+      { re: /bench/, label: "Banca" },
+      { re: /plate|disc/, label: "Discos / Pesos" },
+      { re: /body weight|bodyweight/, label: "Sin equipo" },
+      { re: /medicine ball/, label: "Bola medicinal" },
+      { re: /kettlebell/, label: "Kettlebell" },
+      { re: /machine|leverage|assisted/, label: "Máquina" },
+      { re: /cable/, label: "Cable" },
+      { re: /band/, label: "Banda" },
+      { re: /rope/, label: "Cuerda" },
+    ];
+    const labelsEn = [
+      { re: /dumbbell/, label: "Dumbbell" },
+      { re: /barbell|ez barbell|smith/, label: "Barbell" },
+      { re: /bench/, label: "Bench" },
+      { re: /plate|disc/, label: "Plates / Weights" },
+      { re: /body weight|bodyweight/, label: "Bodyweight" },
+      { re: /medicine ball/, label: "Medicine Ball" },
+      { re: /kettlebell/, label: "Kettlebell" },
+      { re: /machine|leverage|assisted/, label: "Machine" },
+      { re: /cable/, label: "Cable" },
+      { re: /band/, label: "Band" },
+      { re: /rope/, label: "Rope" },
+    ];
+    const found = (lang === "en" ? labelsEn : labelsEs).find((it) =>
+      it.re.test(raw)
+    );
+    return found ? found.label : formatEquipment(value);
   };
-  const clearEquipment = () => onChangeEquipment(index, []);
-  const setBodyweightOnly = () =>
-    onChangeEquipment(index, bodyweightOption ? [bodyweightOption] : []);
-  const selectedLabel =
-    selectedEquipment.length > 0
-      ? selectedEquipment.map(formatEquipment)
+  const equipmentOptions = Array.from(
+    new Set(
+      (equipmentGroups || [])
+        .flatMap((g) => g.items)
+        .map((item) => normalizeEquipment(item))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => translateEquipment(a).localeCompare(translateEquipment(b)));
+  const fallbackEquipmentOptions = [
+    "bodyweight",
+    "dumbbell",
+    "barbell",
+    "bench",
+    "plate",
+    "medicine ball",
+    "kettlebell",
+    "cable",
+    "band",
+    "machine",
+    "leverage",
+    "assisted",
+    "rope",
+    "smith",
+    "ez barbell",
+  ];
+  const checklistOptions = Array.from(
+    new Set([...fallbackEquipmentOptions, ...equipmentOptions])
+  ).sort((a, b) => translateEquipment(a).localeCompare(translateEquipment(b)));
+  const inferModeFromEquipment = (list) => {
+    if (!Array.isArray(list) || list.length === 0) return "week";
+    const gymHints = /(machine|leverage|assisted|cable|smith|ez barbell|rope)/i;
+    return list.some((item) => gymHints.test(String(item || ""))) ? "gym" : "weekend";
+  };
+  const applyEquipmentSelection = (nextList) => {
+    const list = Array.isArray(nextList)
+      ? Array.from(
+          new Set(nextList.map((item) => normalizeEquipment(item)).filter(Boolean))
+        )
       : [];
+    onChangeEquipment(index, list);
+    const nextMode = inferModeFromEquipment(list);
+    if (day.mode !== nextMode) onChangeMode(index, nextMode);
+  };
+  const hasSelectedEquipmentValue = (value) => {
+    const needle = normalizeEquipment(value);
+    return selectedEquipment.some((item) => normalizeEquipment(item) === needle);
+  };
+  const addEquipment = (value) => {
+    const normalized = normalizeEquipment(value);
+    if (!normalized) return;
+    if (hasSelectedEquipmentValue(normalized)) return;
+    applyEquipmentSelection([...selectedEquipment, normalized]);
+  };
+  const removeEquipment = (value) => {
+    const normalized = normalizeEquipment(value);
+    applyEquipmentSelection(
+      selectedEquipment.filter((item) => normalizeEquipment(item) !== normalized)
+    );
+  };
+  const toggleEquipment = (value) => {
+    if (!value) return;
+    if (selectedEquipment.includes(value)) {
+      removeEquipment(value);
+      return;
+    }
+    addEquipment(value);
+  };
+  const selectedEquipmentSet = new Set(
+    selectedEquipment.map((item) => normalizeEquipment(item)).filter(Boolean)
+  );
+  const currentCoreIds = new Set(
+    coreExercises.map((item) => String(item?.id || item?.instanceId || ""))
+  );
+  const coreEquipmentAlternatives = (Array.isArray(exerciseCatalog) ? exerciseCatalog : [])
+    .filter((ex) => isCoreExercise(ex))
+    .filter((ex) => selectedEquipmentSet.has(normalizeEquipment(ex.equipment)))
+    .filter((ex) => !currentCoreIds.has(String(ex?.id || ex?.instanceId || "")))
+    .slice(0, 6);
 
   return (
     <div className="day-card">
@@ -145,9 +261,19 @@ export default function DayCard({
           <strong>{day.title}</strong>
           {resolvedFocus && <span className="day-focus">{resolvedFocus}</span>}
         </div>
-        <span className="day-xp">
-          {dayEarned} / {dayPossible} XP
-        </span>
+        <div className="day-head-side">
+          <span className="day-xp">
+            {dayEarned} / {dayPossible} XP
+          </span>
+          <label className="toggle quiet-inline">
+            <input
+              type="checkbox"
+              checked={Boolean(day.quiet)}
+              onChange={(e) => onToggleQuiet(index, e.target.checked)}
+            />
+            {lang === "en" ? "Quiet mode" : "Modo silencioso"}
+          </label>
+        </div>
       </div>
       {dayCompleted && (
         <div className="day-complete">
@@ -155,80 +281,66 @@ export default function DayCard({
         </div>
       )}
 
-      <div className="day-controls">
+      <div className="equipment-inline">
         <label className="field">
-          {lang === "en" ? "Day equipment" : "Equipo del día"}
-          <select value={day.mode} onChange={(e) => onChangeMode(index, e.target.value)}>
-            <option value="week">{EQUIPMENT_MODES.week.label}</option>
-            <option value="weekend">{EQUIPMENT_MODES.weekend.label}</option>
-            <option value="gym">{EQUIPMENT_MODES.gym.label}</option>
+          {lang === "en" ? "Do you have equipment?" : "¿Tienes equipo?"}
+          <select
+            value={hasEquipment ? "yes" : "no"}
+            onChange={(e) => {
+              const enabled = e.target.value === "yes";
+              if (!enabled) {
+                applyEquipmentSelection([]);
+                return;
+              }
+              if (day.mode === "week") onChangeMode(index, "weekend");
+            }}
+          >
+            <option value="no">{lang === "en" ? "No" : "No"}</option>
+            <option value="yes">{lang === "en" ? "Yes" : "Sí"}</option>
           </select>
         </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={Boolean(day.quiet)}
-            onChange={(e) => onToggleQuiet(index, e.target.checked)}
-          />
-          {lang === "en" ? "Quiet mode" : "Modo silencioso"}
-        </label>
-      </div>
-      {equipmentGroups && equipmentGroups.length > 0 && (
-        <details className="equipment-details">
-          <summary>
-            {lang === "en"
-              ? "Specific equipment (optional)"
-              : "Equipo específico (opcional)"}
-          </summary>
-          {selectedLabel.length > 0 && (
-            <div className="equipment-selected">
-              {selectedLabel.map((item) => (
-                <span key={item} className="pill">
-                  {item}
-                </span>
+        {hasEquipment && (
+          <div className="field equipment-checklist">
+            <span>{lang === "en" ? "What equipment do you have?" : "¿Qué equipo tienes?"}</span>
+            <div className="equipment-grid">
+              {checklistOptions.map((item) => (
+                <label key={item} className="check">
+                  <input
+                    type="checkbox"
+                    checked={hasSelectedEquipmentValue(item)}
+                    onChange={() => toggleEquipment(item)}
+                  />
+                  {translateEquipment(item)}
+                </label>
               ))}
             </div>
-          )}
-          <div className="equipment-actions">
-            <button type="button" className="tiny" onClick={clearEquipment}>
-              {lang === "en" ? "Clear" : "Limpiar"}
-            </button>
+          </div>
+        )}
+      </div>
+
+      {hasEquipment && selectedEquipment.length > 0 && (
+        <div className="equipment-selected">
+          {Array.from(
+            new Set(selectedEquipment.map((item) => normalizeEquipment(item)).filter(Boolean))
+          ).map((item) => (
             <button
+              key={item}
               type="button"
-              className="tiny"
-              onClick={setBodyweightOnly}
-              disabled={!bodyweightOption}
+              className="pill"
+              onClick={() => removeEquipment(item)}
+              title={lang === "en" ? "Remove" : "Quitar"}
             >
-              {lang === "en" ? "Bodyweight only" : "Solo sin equipo"}
+              {translateEquipment(item)} ×
             </button>
-            {selectedEquipment.length > 0 && (
-              <span className="note">
-                {lang === "en"
-                  ? `${selectedEquipment.length} selected`
-                  : `${selectedEquipment.length} seleccionados`}
-              </span>
-            )}
-          </div>
-          <div className="equipment-groups">
-            {equipmentGroups.map((group) => (
-              <div key={group.label} className="equipment-group">
-                <strong>{group.label}</strong>
-                <div className="equipment-grid">
-                  {group.items.map((item) => (
-                    <label key={item} className="check">
-                      <input
-                        type="checkbox"
-                        checked={selectedEquipment.includes(item)}
-                        onChange={() => toggleEquipment(item)}
-                      />
-                      {formatEquipment(item)}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </details>
+          ))}
+        </div>
+      )}
+      {day.equipmentShortage && (
+        <div className="equipment-warning">
+          {lang === "en"
+            ? "Not enough exercises for selected equipment. Add more equipment or change selection."
+            : "No hay suficientes ejercicios para el equipo seleccionado. Agrega más equipo o cambia la selección."}
+        </div>
       )}
 
       <div className="ex-section">
@@ -246,6 +358,41 @@ export default function DayCard({
           <strong>Core</strong>
           <span>{coreExercises.length}/3</span>
         </div>
+        {selectedEquipment.length > 0 && coreEquipmentAlternatives.length > 0 && (
+          <div className="core-alt-box">
+            <span className="core-alt-title">
+              {lang === "en"
+                ? "Core alternatives with equipment (optional)"
+                : "Alternativas de core con equipo (opcional)"}
+            </span>
+            <div className="core-alt-list">
+              {coreEquipmentAlternatives.map((ex) => (
+                <div
+                  key={`${ex.id || ex.instanceId || ex.name}-${ex.equipment || ""}`}
+                  className="pill core-alt-item"
+                >
+                  <span>{getName(ex)} · {translateEquipment(ex.equipment)}</span>
+                  <div className="core-alt-actions">
+                    <button
+                      type="button"
+                      className="tiny"
+                      onClick={() => onSelectExercise?.({ ex, dayTitle: day.title })}
+                    >
+                      {lang === "en" ? "View" : "Ver"}
+                    </button>
+                    <button
+                      type="button"
+                      className="tiny primary-btn"
+                      onClick={() => onAddCoreAlternative?.(index, ex.id)}
+                    >
+                      {lang === "en" ? "Add" : "Agregar"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <ul className="ex-list">
           {coreExercises.map((ex, i) => renderExercise(ex, i, "core"))}
         </ul>

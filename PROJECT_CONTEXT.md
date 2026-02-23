@@ -134,6 +134,24 @@
   - bajo `Tu plan inicial` se muestra `Version X.Y.Z`,
   - versión inyectada desde `package.json` vía `vite.config.js` (`import.meta.env.VITE_APP_VERSION`).
 - Versión actual de app definida en `package.json`: `0.9.0`.
+- Consistencia de versión local/prod:
+  - `vite.config.js` ahora resuelve `VITE_APP_VERSION` con fallback a `package.json` (evita mostrar `0.0.0` en local cuando no viene `npm_package_version`).
+- Selector de equipo del día refinado:
+  - se removió el selector manual de “equipo del día” y se consolidó en `¿Tienes equipo?` + checklist.
+  - `Modo silencioso` se movió al encabezado del día para mejorar jerarquía visual.
+- Lógica de equipo/core actualizada:
+  - fuerza prioriza equipo seleccionado;
+  - core mantiene bloque base en `bodyweight` (3/3 cuando hay pool), usando otras opciones solo como fallback.
+  - regeneración al cambiar equipo/modo/quiet usa pool global + blueprint del día para mantener split (`3 fuerza + 3 core`) y evitar sesgos por usar solo ejercicios del día.
+- Alternativas de core con equipo:
+  - en `DayCard` se muestra bloque “Alternativas de core con equipo (opcional)” con acciones `Ver` y `Agregar`.
+  - `Ver` abre drawer; `Agregar` inserta el ejercicio al día si no existe.
+  - se corrigió carga de gif para vista previa de alternativas (incluye casos fuera del plan actual).
+- Filtros de equipo normalizados (sin duplicados visuales):
+  - deduplicación por clave canónica (`barbell`, `dumbbell`, etc.) para evitar repeticiones tipo `barra`/`banda`.
+  - recuperación de opción `Bola medicinal` en checklist y normalización de `medicine ball` en motor.
+- Dev server:
+  - se mantiene decisión previa de integración: `port 5175` y `strictPort: true` en `vite.config.js`.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

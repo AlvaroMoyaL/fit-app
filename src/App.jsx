@@ -148,9 +148,9 @@ function computeAdjustDelta(history, form) {
   const minGoal = Number(form.weeklyMinutesGoal || 0);
   const xpRatio = xpGoal ? xp / xpGoal : 0;
   const minRatio = minGoal ? minutes / minGoal : 0;
-  const avg = (xpRatio + minRatio) / 2;
-  if (avg >= 1.1) return 1;
-  if (avg <= 0.4) return -1;
+  const avg = xpRatio * 0.55 + minRatio * 0.45;
+  if (avg >= 1.25) return 1;
+  if (avg <= 0.55) return -1;
   return 0;
 }
 
@@ -163,10 +163,82 @@ function safeParseJson(raw, fallback) {
   }
 }
 
+function isValidDateKey(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  return (
+    date.getFullYear() === y &&
+    date.getMonth() + 1 === m &&
+    date.getDate() === d
+  );
+}
+
 function countHistoryItems(history) {
   return Object.values(history || {}).reduce((sum, day) => {
     const items = Array.isArray(day?.items) ? day.items : [];
     return sum + items.filter((it) => it?.type !== "replace").length;
+  }, 0);
+}
+
+function countTrainedDays(history) {
+  return Object.values(history || {}).reduce((sum, day) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    const trained = items.some((it) => it?.type !== "replace");
+    return sum + (trained ? 1 : 0);
+  }, 0);
+}
+
+function computeTrainingStreak(history) {
+  const trainedDates = new Set(
+    Object.entries(history || {})
+      .filter(([, day]) =>
+        Array.isArray(day?.items) ? day.items.some((it) => it?.type !== "replace") : false
+      )
+      .map(([date]) => date)
+  );
+  if (trainedDates.size === 0) return 0;
+
+  const cursor = new Date();
+  let streak = 0;
+  for (;;) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(cursor.getDate()).padStart(2, "0")}`;
+    if (trainedDates.has(key)) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+      continue;
+    }
+    if (streak === 0) {
+      cursor.setDate(cursor.getDate() - 1);
+      const prevKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (trainedDates.has(prevKey)) {
+        streak = 1;
+        cursor.setDate(cursor.getDate() - 1);
+        continue;
+      }
+    }
+    break;
+  }
+  return streak;
+}
+
+function countTrainedDaysThisMonth(history) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return Object.entries(history || {}).reduce((sum, [date, day]) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    if (!items.some((it) => it?.type !== "replace")) return sum;
+    const [y, m] = String(date).split("-").map(Number);
+    if (y === year && m === month) return sum + 1;
+    return sum;
   }, 0);
 }
 
@@ -268,6 +340,7 @@ export default function App() {
   const hydratingProfileRef = useRef(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
+  const [selectedPlanDayIndex, setSelectedPlanDayIndex] = useState(0);
   const [highContrast, setHighContrast] = useState(() => {
     return localStorage.getItem("fit_high_contrast") === "1";
   });
@@ -310,6 +383,12 @@ export default function App() {
 
   const XP_BASE = 10;
   const XP_TIME_BONUS = 5;
+  const trainedDaysTotal = useMemo(() => countTrainedDays(history), [history]);
+  const trainingStreak = useMemo(() => computeTrainingStreak(history), [history]);
+  const trainedDaysThisMonth = useMemo(
+    () => countTrainedDaysThisMonth(history),
+    [history]
+  );
 
   const getGifIdCandidates = (id) => {
     if (!id) return [];
@@ -1904,6 +1983,59 @@ export default function App() {
     }
   };
 
+  const onRegisterPastExercise = (payload) => {
+    const date = String(payload?.date || "").trim();
+    const dayTitle = payload?.dayTitle || "";
+    const ex = payload?.exercise;
+    const detail = payload?.detail || {};
+    if (!date || !isValidDateKey(date)) {
+      alert("Fecha inválida. Usa formato YYYY-MM-DD.");
+      return false;
+    }
+    if (!dayTitle || !ex) {
+      alert("Faltan datos para registrar el ejercicio.");
+      return false;
+    }
+    const itemType = detail.type === "time" ? "time" : "reps";
+    const repsBySet =
+      itemType === "reps"
+        ? (Array.isArray(detail.repsBySet) && detail.repsBySet.length
+            ? detail.repsBySet
+            : Array.from({ length: ex.prescription?.sets || 3 }).map(
+                () => ex.prescription?.reps || 10
+              ))
+        : undefined;
+    const workSec =
+      itemType === "time"
+        ? Number(detail.workSec || ex.prescription?.workSec || 30)
+        : undefined;
+
+    const entryKey = `${date}::manual::${dayTitle}::${ex.id || ex.name}::${Date.now()}`;
+    setHistory((prev) => {
+      const day = prev[date] || { items: [] };
+      const item = {
+        key: entryKey,
+        date,
+        dayTitle,
+        name: ex.name,
+        name_es: ex.name_es,
+        name_en: ex.name_en,
+        target: ex.target,
+        secondaryMuscles: ex.secondaryMuscles,
+        type: itemType,
+        repsBySet,
+        workSec,
+        xp: getExerciseXp(ex),
+      };
+      return {
+        ...prev,
+        [date]: { ...day, items: [...day.items, item] },
+      };
+    });
+    touchLocalChange();
+    return true;
+  };
+
   const onUpdateDetail = (dayTitle, ex, patch) => {
     const key = getExerciseKey(dayTitle, ex);
     setCompletedDetails((prev) => ({
@@ -2135,6 +2267,66 @@ export default function App() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const onGoToPlanDay = (dayIndex) => {
+    setSidebarTab("plan");
+    setSelectedPlanDayIndex(dayIndex);
+    setTimeout(() => {
+      const el = document.getElementById("plan");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const onAddExtraDay = async () => {
+    if (!plan) return;
+    const levelIndex = Math.max(0, niveles.indexOf(form.nivel));
+    const sourcePool = exercisePool.length
+      ? exercisePool
+      : plan.pool?.length
+      ? plan.pool
+      : allExercises;
+    const baseDay = plan.days?.[0];
+    const count = Math.max(1, baseDay?.exercises?.length || 6);
+    const mode = baseDay?.mode || "week";
+    const quiet = typeof baseDay?.quiet === "boolean" ? baseDay.quiet : true;
+    const equipmentList = Array.isArray(baseDay?.equipmentList) ? baseDay.equipmentList : [];
+
+    const exercises = await buildExercises(
+      sourcePool,
+      mode,
+      quiet,
+      count,
+      levelIndex,
+      equipmentList
+    );
+    if (!exercises.length) return;
+
+    const extraCount =
+      (plan.days || []).filter((d) => String(d?.title || "").toLowerCase().startsWith("día extra"))
+        .length + 1;
+    const newDay = {
+      title: `Día extra ${extraCount}`,
+      mode,
+      quiet,
+      focus: "Extra",
+      equipmentList,
+      exercises,
+      xp: 50 + levelIndex * 10 + exercises.length * 5,
+    };
+
+    const nextDays = [...(plan.days || []), newDay];
+    const totalXp = nextDays.reduce((sum, d) => sum + (d.xp || 0), 0);
+    const nextPlan = { ...plan, days: nextDays, totalXp };
+    setPlan(nextPlan);
+
+    if (activeProfileId) {
+      const keys = profileKeys(activeProfileId);
+      localStorage.setItem(keys.plan, JSON.stringify(stripGifs(nextPlan)));
+      touchLocalChange();
+    }
+
+    onGoToPlanDay(nextDays.length - 1);
+  };
+
   const onResetPlan = () => {
     if (!activeProfileId) return;
     const ok = window.confirm("¿Reiniciar plan y progreso de este perfil?");
@@ -2294,8 +2486,13 @@ export default function App() {
         plan={plan}
         completedCount={completedCount}
         totalExercises={totalExercises}
-        onContinuePlan={onContinuePlan}
+        trainedDaysTotal={trainedDaysTotal}
+        trainedDaysThisMonth={trainedDaysThisMonth}
+        trainingStreak={trainingStreak}
+        selectedPlanDayIndex={selectedPlanDayIndex}
         onResetPlan={onResetPlan}
+        onGoToPlanDay={onGoToPlanDay}
+        onAddExtraDay={onAddExtraDay}
         dbStatus={dbStatus}
         onStartDbDownload={startDbDownload}
         gifStatus={gifStatus}
@@ -2459,6 +2656,8 @@ export default function App() {
                   detailEx?.ex ? getExerciseKey(detailEx.dayTitle, detailEx.ex) : ""
                 }
                 equipmentGroups={equipmentGroups}
+                selectedDayIndex={selectedPlanDayIndex}
+                onSelectDayIndex={setSelectedPlanDayIndex}
               />
             </>
           )}
@@ -2494,7 +2693,13 @@ export default function App() {
               )}
               {renderCollapsible(
                 "Historial de entrenamientos",
-                <HistoryWeek history={history} lang={lang} />,
+                <HistoryWeek
+                  history={history}
+                  lang={lang}
+                  plan={plan}
+                  onRegisterPastExercise={onRegisterPastExercise}
+                  onPreviewExercise={onSelectExercise}
+                />,
                 false
               )}
             </>
@@ -2656,8 +2861,19 @@ export default function App() {
               plan={plan}
               completedCount={completedCount}
               totalExercises={totalExercises}
-              onContinuePlan={onContinuePlan}
+              trainedDaysTotal={trainedDaysTotal}
+              trainedDaysThisMonth={trainedDaysThisMonth}
+              trainingStreak={trainingStreak}
+              selectedPlanDayIndex={selectedPlanDayIndex}
               onResetPlan={onResetPlan}
+              onGoToPlanDay={(idx) => {
+                onGoToPlanDay(idx);
+                setMobileMenuOpen(false);
+              }}
+              onAddExtraDay={async () => {
+                await onAddExtraDay();
+                setMobileMenuOpen(false);
+              }}
               dbStatus={dbStatus}
               onStartDbDownload={startDbDownload}
               gifStatus={gifStatus}

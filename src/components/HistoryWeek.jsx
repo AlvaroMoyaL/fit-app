@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -30,8 +30,60 @@ function formatDayLabel(date) {
   });
 }
 
-export default function HistoryWeek({ history, lang }) {
+function exerciseFormKey(ex, idx) {
+  return `${ex.instanceId || ex.id || ex.name || "ex"}::${idx}`;
+}
+
+function makeDefaultEntry(ex) {
+  if (ex?.prescription?.type === "time") {
+    return { type: "time", workSec: ex.prescription?.workSec || 30 };
+  }
+  return {
+    type: "reps",
+    repsBySet: Array.from({ length: ex?.prescription?.sets || 3 }).map(
+      () => ex?.prescription?.reps || 10
+    ),
+  };
+}
+
+function buildEntries(day) {
+  const out = {};
+  const list = Array.isArray(day?.exercises) ? day.exercises : [];
+  list.forEach((ex, idx) => {
+    out[exerciseFormKey(ex, idx)] = makeDefaultEntry(ex);
+  });
+  return out;
+}
+
+function buildSelected(day) {
+  const out = {};
+  const list = Array.isArray(day?.exercises) ? day.exercises : [];
+  list.forEach((ex, idx) => {
+    out[exerciseFormKey(ex, idx)] = true;
+  });
+  return out;
+}
+
+export default function HistoryWeek({
+  history,
+  lang,
+  plan,
+  onRegisterPastExercise,
+  onPreviewExercise,
+}) {
   const [offset, setOffset] = useState(0);
+  const [showRegister, setShowRegister] = useState(false);
+  const [registerDate, setRegisterDate] = useState(() => {
+    const now = new Date();
+    now.setDate(now.getDate() - 1);
+    return toKey(now);
+  });
+  const [registerDayTitle, setRegisterDayTitle] = useState("");
+  const [registerEntries, setRegisterEntries] = useState({});
+  const [registerSelected, setRegisterSelected] = useState({});
+  const [registerSaved, setRegisterSaved] = useState({});
+  const [registerMsg, setRegisterMsg] = useState("");
+
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() + offset * 7);
   const weekStart = startOfWeek(baseDate);
@@ -67,11 +119,123 @@ export default function HistoryWeek({ history, lang }) {
   };
 
   const weekInput = toWeekInput(baseDate);
+  const registerDays = Array.isArray(plan?.days) ? plan.days : [];
+  const selectedDay = useMemo(() => {
+    if (!registerDays.length) return null;
+    const first = registerDays[0] || null;
+    if (!registerDayTitle) return first;
+    return registerDays.find((d) => d.title === registerDayTitle) || first;
+  }, [registerDays, registerDayTitle]);
+
+  const openRegister = () => {
+    if (typeof onRegisterPastExercise !== "function") return;
+    const firstDay = registerDays[0] || null;
+    setRegisterDayTitle(firstDay?.title || "");
+    setRegisterEntries(buildEntries(firstDay));
+    setRegisterSelected(buildSelected(firstDay));
+    setRegisterSaved({});
+    setRegisterMsg("");
+    setShowRegister(true);
+  };
+
+  const onChangeDay = (title) => {
+    setRegisterDayTitle(title);
+    const day = registerDays.find((d) => d.title === title) || null;
+    setRegisterEntries(buildEntries(day));
+    setRegisterSelected(buildSelected(day));
+    setRegisterSaved({});
+    setRegisterMsg("");
+  };
+
+  const updateEntry = (key, patch) => {
+    setRegisterEntries((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), ...patch },
+    }));
+    setRegisterSaved((prev) => ({ ...prev, [key]: false }));
+  };
+
+  const toggleSelected = (key, checked) => {
+    setRegisterSelected((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const onSaveExercise = (ex, idx) => {
+    if (!selectedDay || typeof onRegisterPastExercise !== "function") return;
+    const key = exerciseFormKey(ex, idx);
+    const entry = registerEntries[key] || makeDefaultEntry(ex);
+    const payload = {
+      date: registerDate,
+      dayTitle: selectedDay.title,
+      exercise: ex,
+      detail:
+        entry.type === "time"
+          ? { type: "time", workSec: Number(entry.workSec || ex.prescription?.workSec || 30) }
+          : {
+              type: "reps",
+              repsBySet:
+                Array.isArray(entry.repsBySet) && entry.repsBySet.length
+                  ? entry.repsBySet.map((n) => Number(n || 0))
+                  : Array.from({ length: ex.prescription?.sets || 3 }).map(
+                      () => ex.prescription?.reps || 10
+                    ),
+            },
+    };
+    const ok = onRegisterPastExercise(payload);
+    if (ok) {
+      setRegisterSaved((prev) => ({ ...prev, [key]: true }));
+      const exName =
+        lang === "en"
+          ? ex.name_en || ex.name || ex.name_es
+          : ex.name_es || ex.name || ex.name_en;
+      setRegisterMsg(`Guardado: ${exName}`);
+    }
+  };
+
+  const onSaveAll = () => {
+    const list = Array.isArray(selectedDay?.exercises) ? selectedDay.exercises : [];
+    if (!list.length) return;
+    let okCount = 0;
+    list.forEach((ex, idx) => {
+      const key = exerciseFormKey(ex, idx);
+      if (!registerSelected[key]) return;
+      const entry = registerEntries[key] || makeDefaultEntry(ex);
+      const payload = {
+        date: registerDate,
+        dayTitle: selectedDay.title,
+        exercise: ex,
+        detail:
+          entry.type === "time"
+            ? {
+                type: "time",
+                workSec: Number(entry.workSec || ex.prescription?.workSec || 30),
+              }
+            : {
+                type: "reps",
+                repsBySet:
+                  Array.isArray(entry.repsBySet) && entry.repsBySet.length
+                    ? entry.repsBySet.map((n) => Number(n || 0))
+                    : Array.from({ length: ex.prescription?.sets || 3 }).map(
+                        () => ex.prescription?.reps || 10
+                      ),
+              },
+      };
+      if (onRegisterPastExercise(payload)) {
+        okCount += 1;
+        setRegisterSaved((prev) => ({ ...prev, [key]: true }));
+      }
+    });
+    setRegisterMsg(`Guardados: ${okCount}`);
+  };
 
   return (
     <div className="history">
       <div className="history-header">
         <h2>Historial semanal</h2>
+        {onRegisterPastExercise && (
+          <button type="button" className="tiny" onClick={openRegister}>
+            Registrar ejercicio anterior
+          </button>
+        )}
         <div className="history-nav">
           <button
             type="button"
@@ -121,6 +285,144 @@ export default function HistoryWeek({ history, lang }) {
           </div>
         </div>
       </div>
+
+      {showRegister && (
+        <div className="history-register">
+          <div className="history-register-head">
+            <strong>Registrar ejercicio anterior</strong>
+            <div className="history-register-head-actions">
+              <button type="button" className="tiny" onClick={onSaveAll}>
+                Guardar todo
+              </button>
+              <button type="button" className="tiny" onClick={() => setShowRegister(false)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+          <div className="history-register-grid">
+            <label>
+              Fecha
+              <input
+                type="date"
+                value={registerDate}
+                onChange={(e) => setRegisterDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Día del plan
+              <select
+                value={selectedDay?.title || ""}
+                onChange={(e) => onChangeDay(e.target.value)}
+              >
+                {registerDays.map((day) => (
+                  <option key={day.title} value={day.title}>
+                    {day.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="history-register-list">
+            {(selectedDay?.exercises || []).map((ex, idx) => {
+              const key = exerciseFormKey(ex, idx);
+              const entry = registerEntries[key] || makeDefaultEntry(ex);
+              const name =
+                lang === "en"
+                  ? ex.name_en || ex.name || ex.name_es
+                  : ex.name_es || ex.name || ex.name_en;
+
+              return (
+                <div className="history-register-item" key={key}>
+                  <div className="history-register-item-head">
+                    <label className="history-register-check">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(registerSelected[key])}
+                        onChange={(e) => toggleSelected(key, e.target.checked)}
+                      />
+                      <strong>{name}</strong>
+                    </label>
+                    <div className="history-register-item-actions">
+                      <span className="note">{ex.target} • {ex.equipment}</span>
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={() =>
+                          onPreviewExercise &&
+                          onPreviewExercise({ ex, dayTitle: selectedDay?.title })
+                        }
+                      >
+                        Ayuda
+                      </button>
+                    </div>
+                  </div>
+
+                  {entry.type === "reps" && (
+                    <div className="history-register-series">
+                      <span>Reps por serie</span>
+                      <div className="series-grid">
+                        {Array.from({ length: ex.prescription?.sets || 3 }).map((_, setIdx) => {
+                          const value =
+                            entry.repsBySet?.[setIdx] ?? ex.prescription?.reps ?? 10;
+                          return (
+                            <label key={`${key}-set-${setIdx}`}>
+                              Serie {setIdx + 1}
+                              <input
+                                type="number"
+                                min="1"
+                                value={value}
+                                onChange={(e) => {
+                                  const next = [...(entry.repsBySet || [])];
+                                  next[setIdx] = Number(e.target.value || 0);
+                                  updateEntry(key, { type: "reps", repsBySet: next });
+                                }}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {entry.type === "time" && (
+                    <div className="history-register-series">
+                      <label>
+                        Tiempo real (s)
+                        <input
+                          type="number"
+                          min="5"
+                          value={entry.workSec ?? ex.prescription?.workSec ?? 30}
+                          onChange={(e) =>
+                            updateEntry(key, {
+                              type: "time",
+                              workSec: Number(e.target.value || 0),
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="history-register-actions">
+                    <button
+                      type="button"
+                      className="tiny primary-btn"
+                      disabled={!registerSelected[key] || Boolean(registerSaved[key])}
+                      onClick={() => onSaveExercise(ex, idx)}
+                    >
+                      {registerSaved[key] ? "Guardado" : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {registerMsg && <span className="note">{registerMsg}</span>}
+        </div>
+      )}
+
       <div className="history-summary">
         <div>
           <span>XP semanal</span>
@@ -153,17 +455,9 @@ export default function HistoryWeek({ history, lang }) {
                         ? item.name_en || item.name || item.name_es
                         : item.name_es || item.name || item.name_en}
                     </strong>
-                    {item.type === "replace" && (
-                      <span>Motivo: {item.reason}</span>
-                    )}
-                    {item.type === "reps" && (
-                      <span>
-                        {item.repsBySet?.join(" / ")} reps
-                      </span>
-                    )}
-                    {item.type === "time" && (
-                      <span>{item.workSec}s</span>
-                    )}
+                    {item.type === "replace" && <span>Motivo: {item.reason}</span>}
+                    {item.type === "reps" && <span>{item.repsBySet?.join(" / ")} reps</span>}
+                    {item.type === "time" && <span>{item.workSec}s</span>}
                   </li>
                 ))}
               </ul>

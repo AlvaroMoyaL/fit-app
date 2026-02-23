@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DayCard from "./DayCard";
 
 function startOfWeek(date) {
@@ -30,9 +30,20 @@ export default function Plan({
   onInfoMetrics,
   activeExerciseKey,
   equipmentGroups,
+  selectedDayIndex,
+  onSelectDayIndex,
 }) {
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [showAllDays, setShowAllDays] = useState(false);
+
+  useEffect(() => {
+    if (!Number.isFinite(selectedDayIndex)) return;
+    const total = Array.isArray(plan?.days) ? plan.days.length : 0;
+    if (!total) return;
+    const next = Math.max(0, Math.min(total - 1, Number(selectedDayIndex)));
+    setMobileDayIndex(next);
+    setShowAllDays(false);
+  }, [selectedDayIndex, plan?.days?.length]);
 
   const progress = totalPossibleXp ? Math.min(1, earnedXp / totalPossibleXp) : 0;
   const weekStart = startOfWeek(new Date());
@@ -142,12 +153,14 @@ export default function Plan({
               onClick={() => {
                 setMobileDayIndex(index);
                 setShowAllDays(false);
+                onSelectDayIndex?.(index);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   setMobileDayIndex(index);
                   setShowAllDays(false);
+                  onSelectDayIndex?.(index);
                 }
               }}
             >
@@ -176,7 +189,11 @@ export default function Plan({
             <label>Ver día</label>
             <select
               value={mobileDayIndex}
-              onChange={(e) => setMobileDayIndex(Number(e.target.value))}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setMobileDayIndex(next);
+                onSelectDayIndex?.(next);
+              }}
             >
               {plan.days.map((day, index) => (
                 <option key={day.title} value={index}>

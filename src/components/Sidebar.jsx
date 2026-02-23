@@ -21,8 +21,13 @@ export default function Sidebar({
   plan,
   completedCount,
   totalExercises,
-  onContinuePlan,
+  trainedDaysTotal,
+  trainedDaysThisMonth,
+  trainingStreak,
+  selectedPlanDayIndex,
   onResetPlan,
+  onGoToPlanDay,
+  onAddExtraDay,
   dbStatus,
   onStartDbDownload,
   gifStatus,
@@ -78,117 +83,44 @@ export default function Sidebar({
     if (a < b) return "↓";
     return "→";
   };
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+  const activeProfileName = activeProfile?.name || "—";
 
   return (
     <aside className="sidebar">
       <div className="sidebar-section">
-        <h3>Cuenta</h3>
-        {!authEnabled && (
-          <p className="note">
-            Configura Supabase en .env para activar login.
-          </p>
-        )}
-        {authEnabled && !authReady && (
-          <div className="auth-box">
-            <span className="note">Comprobando sesión…</span>
-          </div>
-        )}
-        {authEnabled && authReady && !authUser && (
-          <div className="auth-box">
-            <input
-              name="email"
-              placeholder="Email"
-              value={authForm.email}
-              onChange={onAuthChange}
-            />
-            <input
-              name="password"
-              type="password"
-              placeholder="Contraseña"
-              value={authForm.password}
-              onChange={onAuthChange}
-            />
-            {authError && <span className="note">{authError}</span>}
-            <div className="sidebar-actions">
-              <button type="button" className="tiny" onClick={onSignIn} disabled={authLoading}>
-                Entrar
-              </button>
-              <button type="button" className="tiny" onClick={onSignUp} disabled={authLoading}>
-                Crear cuenta
-              </button>
-              <button type="button" className="tiny" onClick={onMagicLink} disabled={authLoading}>
-                Enviar link
-              </button>
-            </div>
-          </div>
-        )}
-        {authEnabled && authUser && (
-          <div className="auth-box">
-            <span className="note">Conectado: {authUser.email}</span>
-            <div className="sidebar-actions">
-              <button type="button" className="tiny" onClick={onSyncUp} disabled={!canSyncUp}>
-                Subir
-              </button>
-              <button type="button" className="tiny" onClick={onSyncDown}>
-                Descargar
-              </button>
-              <button type="button" className="tiny danger" onClick={onSignOut}>
-                Salir
-              </button>
-            </div>
-            {syncStatus && <span className="note">{syncStatus}</span>}
-          </div>
-        )}
-      </div>
-      {dbStatus && (
-        <div className="sidebar-section">
-          <LocalDbStatus status={dbStatus} />
-          <div className="sidebar-actions">
-            <button
-              type="button"
-              className="tiny"
-              onClick={onStartDbDownload}
-              disabled={!canStartDownload}
-            >
-              {downloadLabel}
-            </button>
-          </div>
+        <div className="sidebar-tabs">
+          <button
+            type="button"
+            className={`tab ${activeTab === "profile" ? "active" : ""}`}
+            onClick={() => onChangeTab("profile")}
+          >
+            Perfil
+          </button>
+          <button
+            type="button"
+            className={`tab ${activeTab === "plan" ? "active" : ""}`}
+            onClick={() => onChangeTab("plan")}
+          >
+            Plan
+          </button>
+          <button
+            type="button"
+            className={`tab ${activeTab === "history" ? "active" : ""}`}
+            onClick={() => onChangeTab("history")}
+          >
+            Historial
+          </button>
         </div>
-      )}
-      {gifStatus && (
-        <div className="sidebar-section">
-          <GifDbStatus status={gifStatus} />
-          <div className="sidebar-actions">
-            <button
-              type="button"
-              className="tiny"
-              onClick={onStartGifDownload}
-              disabled={!canStartGifDownload}
-            >
-              {gifDownloadLabel}
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="sidebar-section">
-        <h3>Idioma</h3>
-        <select
-          className="lang-select"
-          value={lang}
-          onChange={(e) => onChangeLang(e.target.value)}
-        >
-          <option value="es">Español</option>
-          <option value="en">English</option>
-        </select>
       </div>
+
       <div className="sidebar-section">
-        <h3>Accesibilidad</h3>
-        <button type="button" className="tiny" onClick={onToggleContrast}>
-          Contraste alto: {highContrast ? "On" : "Off"}
-        </button>
+        <h3>Perfil activo</h3>
+        <strong>{activeProfileName}</strong>
       </div>
-      <div className="sidebar-section">
-        <h3>Perfiles</h3>
+
+      <details className="sidebar-section sidebar-collapsible">
+        <summary>Opciones de perfil</summary>
         <div className="profile-list">
           {profiles.map((p) => (
             <button
@@ -226,32 +158,46 @@ export default function Sidebar({
             </button>
           </div>
         </div>
-      </div>
+      </details>
 
       <div className="sidebar-section">
-        <div className="sidebar-tabs">
-          <button
-            type="button"
-            className={`tab ${activeTab === "profile" ? "active" : ""}`}
-            onClick={() => onChangeTab("profile")}
-          >
-            Perfil
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "plan" ? "active" : ""}`}
-            onClick={() => onChangeTab("plan")}
-          >
-            Plan
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "history" ? "active" : ""}`}
-            onClick={() => onChangeTab("history")}
-          >
-            Historial
-          </button>
+        <h3>Estado actual</h3>
+        <div className="sidebar-progress">
+          <strong>Nivel {level}</strong>
+          <span>
+            XP: {earnedXp} / {totalPossibleXp}
+          </span>
+          <div className="xp-bar">
+            <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
+          </div>
         </div>
+        <div className="sidebar-kv">
+          <div>
+            <span>Días entrenados</span>
+            <strong>{trainedDaysTotal || 0}</strong>
+          </div>
+          <div>
+            <span>Este mes</span>
+            <strong>{trainedDaysThisMonth || 0}</strong>
+          </div>
+          <div>
+            <span>Racha actual</span>
+            <strong>{trainingStreak || 0}</strong>
+          </div>
+          <div>
+            <span>Ejercicios</span>
+            <strong>
+              {completedCount} / {totalExercises}
+            </strong>
+          </div>
+        </div>
+        {plan && (
+          <div className="sidebar-actions">
+            <button type="button" className="tiny" onClick={onAddExtraDay}>
+              Entreno adicional
+            </button>
+          </div>
+        )}
       </div>
 
       {activeTab === "profile" && (
@@ -314,15 +260,6 @@ export default function Sidebar({
 
           <div className="sidebar-section">
             <h3>Progreso</h3>
-            <div className="sidebar-progress">
-              <strong>Nivel {level}</strong>
-              <span>
-                XP: {earnedXp} / {totalPossibleXp}
-              </span>
-              <div className="xp-bar">
-                <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
-              </div>
-            </div>
             <div className="sidebar-kv">
               <div>
                 <span>Ejercicios</span>
@@ -343,26 +280,147 @@ export default function Sidebar({
         <div className="sidebar-section">
           <h3>Plan</h3>
           <div className="sidebar-actions">
-            <button type="button" className="tiny" onClick={onContinuePlan}>
-              Continuar plan
+            <button type="button" className="tiny" onClick={onAddExtraDay}>
+              Entreno adicional
             </button>
             <button type="button" className="tiny danger" onClick={onResetPlan}>
               Reiniciar plan
             </button>
           </div>
           <ul className="sidebar-plan">
-            {plan?.days?.map((d) => (
+            {plan?.days?.map((d, index) => (
               <li key={d.title}>
-                <strong>{d.title}</strong>
-                <span>{d.exercises.length} ejercicios</span>
+                <button
+                  type="button"
+                  className={`sidebar-plan-day-btn ${
+                    Number(selectedPlanDayIndex) === index ? "active" : ""
+                  }`}
+                  onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
+                >
+                  <strong>{d.title}</strong>
+                  <span>{d.exercises.length} ejercicios</span>
+                </button>
               </li>
             )) || <li>Sin plan</li>}
           </ul>
         </div>
       )}
 
+      <details className="sidebar-section sidebar-collapsible">
+        <summary>Cuenta</summary>
+        {!authEnabled && (
+          <p className="note">
+            Configura Supabase en .env para activar login.
+          </p>
+        )}
+        {authEnabled && !authReady && (
+          <div className="auth-box">
+            <span className="note">Comprobando sesión…</span>
+          </div>
+        )}
+        {authEnabled && authReady && !authUser && (
+          <div className="auth-box">
+            <input
+              name="email"
+              placeholder="Email"
+              value={authForm.email}
+              onChange={onAuthChange}
+            />
+            <input
+              name="password"
+              type="password"
+              placeholder="Contraseña"
+              value={authForm.password}
+              onChange={onAuthChange}
+            />
+            {authError && <span className="note">{authError}</span>}
+            <div className="sidebar-actions">
+              <button type="button" className="tiny" onClick={onSignIn} disabled={authLoading}>
+                Entrar
+              </button>
+              <button type="button" className="tiny" onClick={onSignUp} disabled={authLoading}>
+                Crear cuenta
+              </button>
+              <button type="button" className="tiny" onClick={onMagicLink} disabled={authLoading}>
+                Enviar link
+              </button>
+            </div>
+          </div>
+        )}
+        {authEnabled && authUser && (
+          <div className="auth-box">
+            <span className="note">Conectado: {authUser.email}</span>
+            <div className="sidebar-actions">
+              <button type="button" className="tiny" onClick={onSyncUp} disabled={!canSyncUp}>
+                Subir
+              </button>
+              <button type="button" className="tiny" onClick={onSyncDown}>
+                Descargar
+              </button>
+              <button type="button" className="tiny danger" onClick={onSignOut}>
+                Salir
+              </button>
+            </div>
+            {syncStatus && <span className="note">{syncStatus}</span>}
+          </div>
+        )}
+      </details>
+
+      {(dbStatus || gifStatus) && (
+        <details className="sidebar-section sidebar-collapsible">
+          <summary>Datos offline</summary>
+          {dbStatus && (
+            <div className="sidebar-offline-block">
+              <LocalDbStatus status={dbStatus} />
+              <div className="sidebar-actions">
+                <button
+                  type="button"
+                  className="tiny"
+                  onClick={onStartDbDownload}
+                  disabled={!canStartDownload}
+                >
+                  {downloadLabel}
+                </button>
+              </div>
+            </div>
+          )}
+          {gifStatus && (
+            <div className="sidebar-offline-block">
+              <GifDbStatus status={gifStatus} />
+              <div className="sidebar-actions">
+                <button
+                  type="button"
+                  className="tiny"
+                  onClick={onStartGifDownload}
+                  disabled={!canStartGifDownload}
+                >
+                  {gifDownloadLabel}
+                </button>
+              </div>
+            </div>
+          )}
+        </details>
+      )}
+
       <div className="sidebar-section">
-        <h3>Respaldo</h3>
+        <h3>Configuración</h3>
+        <div className="sidebar-actions">
+          <select
+            className="lang-select"
+            value={lang}
+            onChange={(e) => onChangeLang(e.target.value)}
+          >
+            <option value="es">Español</option>
+            <option value="en">English</option>
+          </select>
+          <button type="button" className="tiny" onClick={onToggleContrast}>
+            Contraste alto: {highContrast ? "On" : "Off"}
+          </button>
+        </div>
+      </div>
+
+      <details className="sidebar-section sidebar-collapsible">
+        <summary>Respaldo</summary>
         <div className="sidebar-actions">
           <button type="button" className="tiny" onClick={onExport}>
             Exportar
@@ -398,7 +456,7 @@ export default function Sidebar({
             <strong>{backupPrevLabel || "—"}</strong>
           </div>
         </div>
-      </div>
+      </details>
     </aside>
   );
 }

@@ -75,6 +75,13 @@
 - Se agregó trazabilidad visual en miniaturas para depuración: `ID ex`, `ID gif` y `fuente` (`exact`, `exact-local`, `fallback`).
 - Carga de GIF prioriza coincidencia exacta por ID de ejercicio; solo usa fallback si no existe el GIF exacto.
 - Ajuste de mapeo local: `l019` (Hip Stretch) ahora apunta a `1419` (bodyweight mobility) en lugar de `2202` (roller).
+- Generación de plan ajustada para estructura fija por día en templates principales: `3` fuerza + `3` core (6 total), con foco muscular rotativo.
+- `HistoryWeek` migrado a formulario visual para registro de ejercicios anteriores (sin prompts), con lista completa de ejercicios por día, guardado por ejercicio, `Guardar todo`, selección por checkbox y botón `Ayuda` que abre drawer.
+- Botón de guardado por ejercicio en registro histórico cambia a estado `Guardado` y queda deshabilitado tras guardar.
+- Sidebar reestructurado por prioridad de uso: navegación arriba, perfil activo + opciones de perfil colapsables, estado actual, contenido por pestaña, y secciones técnicas colapsables.
+- En `Sidebar > Plan`, los días ahora son navegables: seleccionan día en la vista principal y hacen scroll al bloque de plan.
+- Se agregó acción `Entreno adicional` en sidebar para crear un nuevo día de entrenamiento y navegar automáticamente a ese día.
+- Se añadió indicador visual de día seleccionado en el listado de días del sidebar con relleno completo.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.
@@ -99,6 +106,8 @@
 - Se añadió diagnóstico visible en miniaturas para validar mapeo ejercicio↔gif durante pruebas.
 - Se reforzó la resolución de gifs para preferir `exact` antes de `fallback`.
 - Se corrigió el caso reportado de `l019` para mejorar coherencia del gif en local fallback.
+- Se consolidó el registro de entrenamientos pasados en una UX consistente con el registro diario (campos por serie/tiempo y acceso al drawer de ayuda).
+- Se priorizó la navegación operativa del sidebar (uso diario primero; cuenta/datos offline/respaldo como colapsables).
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

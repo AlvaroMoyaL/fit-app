@@ -215,16 +215,105 @@ function clamp(min, max, v) {
   return Math.max(min, Math.min(max, v));
 }
 
+const LEVEL_PROFILES = [
+  {
+    minSets: 2,
+    maxSets: 3,
+    repBase: 8,
+    repStep: 1,
+    workBase: 22,
+    workStep: 3,
+    restBase: 70,
+    restStep: -3,
+    dayExerciseCount: 4,
+  },
+  {
+    minSets: 2,
+    maxSets: 3,
+    repBase: 9,
+    repStep: 1,
+    workBase: 24,
+    workStep: 3,
+    restBase: 65,
+    restStep: -3,
+    dayExerciseCount: 4,
+  },
+  {
+    minSets: 3,
+    maxSets: 3,
+    repBase: 10,
+    repStep: 1,
+    workBase: 28,
+    workStep: 4,
+    restBase: 60,
+    restStep: -3,
+    dayExerciseCount: 5,
+  },
+  {
+    minSets: 3,
+    maxSets: 4,
+    repBase: 10,
+    repStep: 1,
+    workBase: 30,
+    workStep: 4,
+    restBase: 55,
+    restStep: -3,
+    dayExerciseCount: 5,
+  },
+  {
+    minSets: 3,
+    maxSets: 4,
+    repBase: 11,
+    repStep: 1,
+    workBase: 34,
+    workStep: 4,
+    restBase: 50,
+    restStep: -3,
+    dayExerciseCount: 6,
+  },
+  {
+    minSets: 4,
+    maxSets: 4,
+    repBase: 11,
+    repStep: 1,
+    workBase: 36,
+    workStep: 4,
+    restBase: 45,
+    restStep: -3,
+    dayExerciseCount: 6,
+  },
+  {
+    minSets: 4,
+    maxSets: 5,
+    repBase: 12,
+    repStep: 1,
+    workBase: 38,
+    workStep: 4,
+    restBase: 40,
+    restStep: -3,
+    dayExerciseCount: 7,
+  },
+];
+
+function getLevelProfile(levelIndex) {
+  return LEVEL_PROFILES[clamp(0, LEVEL_PROFILES.length - 1, levelIndex)];
+}
+
 function makePrescription(ex, levelIndex) {
   const diff = difficultyAdj(ex.difficulty);
+  const level = getLevelProfile(levelIndex);
   if (isTimedExercise(ex)) {
-    const work = clamp(20, 60, 25 + levelIndex * 5 + diff * 5);
-    const rest = clamp(10, 40, 20 - levelIndex * 2);
+    const work = clamp(
+      20,
+      70,
+      level.workBase + levelIndex * level.workStep + diff * 4
+    );
+    const rest = clamp(10, 60, level.restBase + levelIndex * level.restStep);
     return { type: "time", workSec: work, restSec: rest };
   }
-  const reps = clamp(6, 15, 8 + levelIndex + diff);
-  const sets = levelIndex < 2 ? 2 : levelIndex < 4 ? 3 : 4;
-  const rest = clamp(30, 90, 70 - levelIndex * 5);
+  const reps = clamp(6, 18, level.repBase + levelIndex * level.repStep + diff);
+  const sets = clamp(level.minSets, level.maxSets, level.minSets + Math.floor(levelIndex / 2));
+  const rest = clamp(20, 90, level.restBase + levelIndex * level.restStep);
   return { type: "reps", sets, reps, restSec: rest };
 }
 
@@ -255,7 +344,7 @@ function filterPoolByEquipmentList(pool, equipmentList, quiet) {
 }
 
 function filterPoolByLevel(pool, levelIndex) {
-  if (levelIndex > 1) return pool;
+  if (levelIndex >= 4) return pool;
   const hardKeywords = [
     "pistol",
     "handstand",
@@ -295,17 +384,213 @@ function filterPoolByLevel(pool, levelIndex) {
   const filtered = pool.filter((e) => {
     const diff = (e.difficulty || "").toLowerCase();
     if (diff.includes("advanced")) return false;
-    if (diff.includes("intermediate")) return false;
+    if (levelIndex <= 1 && diff.includes("intermediate")) return false;
     const name = (e.name || "").toLowerCase();
     if (name.includes("advanced")) return false;
     if (hardKeywords.some((k) => name.includes(k))) return false;
     const equipment = normalizeEquipment(e.equipment);
-    if (equipment === "barbell" || equipment === "kettlebell") return false;
+    if (levelIndex <= 1 && (equipment === "barbell" || equipment === "kettlebell")) {
+      return false;
+    }
     const category = (e.category || "").toLowerCase();
-    if (category.includes("olympic") || category.includes("power")) return false;
+    if (levelIndex <= 2 && (category.includes("olympic") || category.includes("power"))) {
+      return false;
+    }
     return true;
   });
   return filtered.length ? filtered : pool;
+}
+
+function uniqueById(list) {
+  const seen = new Set();
+  return list.filter((item) => {
+    const id = String(item?.id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function pickWithExclusions(list, count, excludedIds) {
+  const filtered = list.filter((it) => !excludedIds.has(String(it.id || "")));
+  return pickRandom(filtered, count);
+}
+
+function isCoreExercise(ex) {
+  const body = normalizeBodyPart(ex?.bodyPart);
+  const target = normalizeTarget(ex?.target);
+  const category = String(ex?.category || "").toLowerCase();
+  return (
+    body === "waist" ||
+    target === "core" ||
+    target === "abs" ||
+    target === "obliques" ||
+    category === "core"
+  );
+}
+
+function isStrengthExercise(ex) {
+  const category = String(ex?.category || "").toLowerCase();
+  if (isCoreExercise(ex)) return false;
+  return !["cardio", "mobility", "stretching", "balance"].includes(category);
+}
+
+function buildDayBlueprint(template, dayIndex, goal) {
+  const strengthCycle = [
+    {
+      focus: "Pecho + Espalda",
+      strengthBodyParts: ["chest", "back"],
+    },
+    {
+      focus: "Piernas",
+      strengthBodyParts: ["upper legs", "lower legs"],
+    },
+    {
+      focus: "Hombros + Brazos",
+      strengthBodyParts: ["shoulders", "upper arms", "lower arms"],
+    },
+  ];
+  const cycle = strengthCycle[dayIndex % strengthCycle.length];
+
+  if (template === "upper_lower") {
+    const isUpper = dayIndex % 2 === 0;
+    return isUpper
+      ? {
+          focus: "Upper",
+          bodyParts: [...BODY_UPPER],
+          strengthBodyParts: [...BODY_UPPER],
+          dailyCount: 6,
+          split: { strength: 3, core: 3 },
+          primaryCount: 3,
+          secondaryCount: 1,
+        }
+      : {
+          focus: "Lower",
+          bodyParts: [...BODY_LOWER],
+          strengthBodyParts: [...BODY_LOWER],
+          dailyCount: 6,
+          split: { strength: 3, core: 3 },
+          primaryCount: 3,
+          secondaryCount: 1,
+        };
+  }
+  if (template === "ppl") {
+    const phase = dayIndex % 3;
+    if (phase === 0) {
+      return {
+        focus: "Push",
+        targets: [...TARGET_PUSH],
+        strengthTargets: [...TARGET_PUSH],
+        dailyCount: 6,
+        split: { strength: 3, core: 3 },
+        primaryCount: 3,
+        secondaryCount: 1,
+      };
+    }
+    if (phase === 1) {
+      return {
+        focus: "Pull",
+        targets: [...TARGET_PULL],
+        strengthTargets: [...TARGET_PULL],
+        dailyCount: 6,
+        split: { strength: 3, core: 3 },
+        primaryCount: 3,
+        secondaryCount: 1,
+      };
+    }
+    return {
+      focus: "Legs",
+      targets: [...TARGET_LEGS],
+      strengthTargets: [...TARGET_LEGS],
+      dailyCount: 6,
+      split: { strength: 3, core: 3 },
+      primaryCount: 3,
+      secondaryCount: 1,
+    };
+  }
+  if (template === "cardio_core") {
+    return {
+      focus: "Cardio + Core",
+      bodyParts: [...BODY_CARDIO, ...BODY_CORE],
+      categories: ["cardio", "mobility", "stretching", "core"],
+      primaryCount: 3,
+      secondaryCount: 2,
+    };
+  }
+  if (template === "mobility") {
+    return {
+      focus: "Movilidad",
+      categories: ["mobility", "stretching", "cardio"],
+      bodyParts: ["waist", "upper legs", "lower legs", "back", "neck"],
+      primaryCount: 4,
+      secondaryCount: 1,
+    };
+  }
+  if (template === "full_body") {
+    return {
+      focus: `${cycle.focus} + Core`,
+      bodyParts: [
+        "upper legs",
+        "lower legs",
+        "upper arms",
+        "chest",
+        "back",
+        "shoulders",
+        "waist",
+      ],
+      strengthBodyParts: cycle.strengthBodyParts,
+      dailyCount: 6,
+      split: { strength: 3, core: 3 },
+      primaryCount: 4,
+      secondaryCount: 2,
+    };
+  }
+  if (template === "goal") {
+    if (goal === "Movilidad") {
+      return {
+        focus: "Movilidad + Core",
+        categories: ["mobility", "stretching", "cardio", "core"],
+        bodyParts: ["waist", "upper legs", "lower legs", "back", "neck"],
+        primaryCount: 4,
+        secondaryCount: 2,
+      };
+    }
+    return {
+      focus: `${cycle.focus} + Core`,
+      strengthBodyParts: cycle.strengthBodyParts,
+      dailyCount: 6,
+      split: { strength: 3, core: 3 },
+      primaryCount: 3,
+      secondaryCount: 2,
+    };
+  }
+
+  return {
+    focus: `${cycle.focus} + Core`,
+    strengthBodyParts: cycle.strengthBodyParts,
+    dailyCount: 6,
+    split: { strength: 3, core: 3 },
+    primaryCount: 3,
+    secondaryCount: 2,
+  };
+}
+
+function filterByBlueprint(pool, blueprint) {
+  let primaryPool = pool;
+  if (Array.isArray(blueprint.bodyParts) && blueprint.bodyParts.length) {
+    primaryPool = filterPoolByBodyParts(primaryPool, new Set(blueprint.bodyParts));
+  }
+  if (Array.isArray(blueprint.targets) && blueprint.targets.length) {
+    primaryPool = filterPoolByTargets(primaryPool, new Set(blueprint.targets));
+  }
+  if (Array.isArray(blueprint.categories) && blueprint.categories.length) {
+    const allowed = new Set(blueprint.categories.map((x) => x.toLowerCase()));
+    const byCat = primaryPool.filter((e) =>
+      allowed.has(String(e.category || "").toLowerCase())
+    );
+    primaryPool = byCat.length ? byCat : primaryPool;
+  }
+  return uniqueById(primaryPool);
 }
 
 const BODY_UPPER = new Set([
@@ -713,12 +998,140 @@ async function fetchGifMeta(input) {
   };
 }
 
-async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentList) {
+async function buildExercises(pool, mode, quiet, count, levelIndex, equipmentList, options = {}) {
   const byMode = filterPoolByMode(pool, mode, quiet);
   const byEquipment = filterPoolByEquipmentList(pool, equipmentList, quiet);
   const basePool = equipmentList && equipmentList.length ? byEquipment : byMode;
   const filtered = filterPoolByLevel(basePool, levelIndex);
-  const picked = pickRandom(filtered, count).map((ex) => ({
+  const blueprint = options.blueprint || null;
+  const excludedIds = new Set((options.excludedIds || []).map((x) => String(x)));
+  const uniqueFiltered = uniqueById(filtered);
+
+  let selected = [];
+  if (blueprint) {
+    const primaryPool = filterByBlueprint(uniqueFiltered, blueprint);
+    const split = blueprint.split || null;
+    if (split) {
+      const uniqueBase = uniqueById(basePool);
+      const strengthTarget = Math.min(count, Math.max(0, split.strength || 0));
+      const coreTarget = Math.min(
+        Math.max(0, count - strengthTarget),
+        Math.max(0, split.core || 0)
+      );
+      let strengthPool = primaryPool.filter(isStrengthExercise);
+      if (Array.isArray(blueprint.strengthBodyParts) && blueprint.strengthBodyParts.length) {
+        const focused = filterPoolByBodyParts(
+          strengthPool,
+          new Set(blueprint.strengthBodyParts.map((x) => normalizeBodyPart(x)))
+        );
+        strengthPool = focused.length ? focused : strengthPool;
+      }
+      if (Array.isArray(blueprint.strengthTargets) && blueprint.strengthTargets.length) {
+        const focused = filterPoolByTargets(
+          strengthPool,
+          new Set(blueprint.strengthTargets.map((x) => normalizeTarget(x)))
+        );
+        strengthPool = focused.length ? focused : strengthPool;
+      }
+      if (!strengthPool.length) {
+        strengthPool = uniqueFiltered.filter(isStrengthExercise);
+      }
+      let corePool = primaryPool.filter(isCoreExercise);
+      if (!corePool.length) corePool = uniqueFiltered.filter(isCoreExercise);
+      if (!corePool.length) corePool = uniqueBase.filter(isCoreExercise);
+
+      let pickedStrength = pickWithExclusions(strengthPool, strengthTarget, excludedIds);
+      if (pickedStrength.length < strengthTarget) {
+        const fallbackStrength = pickWithExclusions(
+          uniqueFiltered.filter(isStrengthExercise),
+          strengthTarget - pickedStrength.length,
+          new Set([
+            ...excludedIds,
+            ...pickedStrength.map((ex) => String(ex.id || "")),
+          ])
+        );
+        pickedStrength = [...pickedStrength, ...fallbackStrength];
+      }
+      pickedStrength.forEach((ex) => excludedIds.add(String(ex.id || "")));
+
+      let pickedCore = pickWithExclusions(corePool, coreTarget, excludedIds);
+      if (pickedCore.length < coreTarget) {
+        const fallbackCore = pickWithExclusions(
+          uniqueFiltered.filter(isCoreExercise),
+          coreTarget - pickedCore.length,
+          new Set([
+            ...excludedIds,
+            ...pickedCore.map((ex) => String(ex.id || "")),
+          ])
+        );
+        pickedCore = [...pickedCore, ...fallbackCore];
+      }
+      pickedCore.forEach((ex) => excludedIds.add(String(ex.id || "")));
+      selected = [...pickedStrength.slice(0, strengthTarget), ...pickedCore.slice(0, coreTarget)];
+
+      if (selected.length < count) {
+        const rest = pickWithExclusions(uniqueFiltered, count - selected.length, excludedIds);
+        selected = [...selected, ...rest];
+      }
+      selected = selected.slice(0, count);
+      // For split-based plans keep strict structure and avoid extra rebalancing.
+      const picked = selected.map((ex) => ({
+        id: ex.id,
+        name: ex.name || ex.name_es || ex.name_en,
+        name_es: ex.name_es,
+        name_en: ex.name_en,
+        bodyPart: ex.bodyPart,
+        target: ex.target,
+        secondaryMuscles: ex.secondaryMuscles || [],
+        instructions: ex.instructions || [],
+        instructions_es: ex.instructions_es,
+        instructions_en: ex.instructions_en,
+        description: ex.description || "",
+        description_es: ex.description_es,
+        description_en: ex.description_en,
+        difficulty: ex.difficulty || "",
+        equipment: ex.equipment || "",
+        category: ex.category || "",
+      }));
+
+      const withPrescription = picked.map((ex) => ({
+        ...ex,
+        instanceId:
+          ex.instanceId || `${ex.id || ex.name}-${Math.random().toString(36).slice(2, 8)}`,
+        prescription: makePrescription(ex, levelIndex),
+      }));
+
+      return withPrescription.map((ex) => ({ ...ex, gifUrl: "" }));
+    }
+
+    const remainingAfterSplit = Math.max(0, count - selected.length);
+    const primaryCount = Math.min(
+      remainingAfterSplit,
+      blueprint.primaryCount || Math.ceil(count * 0.6)
+    );
+    const primary = pickWithExclusions(primaryPool, primaryCount, excludedIds);
+    primary.forEach((ex) => excludedIds.add(String(ex.id || "")));
+    const remaining = Math.max(0, count - selected.length - primary.length);
+    const secondaryPool =
+      uniqueFiltered.filter((e) => !primary.some((p) => String(p.id) === String(e.id))) ||
+      uniqueFiltered;
+    const secondary = pickWithExclusions(
+      secondaryPool,
+      Math.min(remaining, blueprint.secondaryCount || remaining),
+      excludedIds
+    );
+    secondary.forEach((ex) => excludedIds.add(String(ex.id || "")));
+    const restCount = Math.max(
+      0,
+      count - selected.length - primary.length - secondary.length
+    );
+    const rest = pickWithExclusions(uniqueFiltered, restCount, excludedIds);
+    selected = [...selected, ...primary, ...secondary, ...rest];
+  } else {
+    selected = pickWithExclusions(uniqueFiltered, count, excludedIds);
+  }
+
+  const picked = selected.map((ex) => ({
     id: ex.id,
     name: ex.name || ex.name_es || ex.name_en,
     name_es: ex.name_es,
@@ -757,7 +1170,8 @@ async function generatePlan(form, options = {}) {
     ? form.trainDays.length
     : 0;
   const days = clamp(1, 7, trainDaysCount || 3);
-  const mainCount = 4 + Math.floor(levelIndex / 2);
+  const levelProfile = getLevelProfile(levelIndex);
+  const mainCount = levelProfile.dayExerciseCount;
 
   const bodyPartsByGoal = {
     Salud: ["cardio", "upper legs", "waist"],
@@ -862,25 +1276,28 @@ async function generatePlan(form, options = {}) {
     Array.from({ length: days }).map(async (_, idx) => {
       const mode = "week";
       const quiet = true;
-      const { pool: templatePool, focus } = filterPoolByTemplate(
+      const { pool: templatePool } = filterPoolByTemplate(
         pool,
         template,
         idx
       );
+      const blueprint = buildDayBlueprint(template, idx, form.objetivo);
+      const dayCount = blueprint.dailyCount || mainCount;
       const exercises = await buildExercises(
         templatePool,
         mode,
         quiet,
-        mainCount,
+        dayCount,
         levelIndex,
-        []
+        [],
+        { blueprint }
       );
       const xp = 50 + levelIndex * 10 + exercises.length * 5;
       return {
         title: `Día ${idx + 1}`,
         mode,
         quiet,
-        focus,
+        focus: blueprint.focus || "Objetivo",
         equipmentList: [],
         exercises,
         xp,

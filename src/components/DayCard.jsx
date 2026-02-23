@@ -45,6 +45,71 @@ export default function DayCard({
     return "Fuerza";
   };
 
+  const isCoreExercise = (ex) => {
+    const body = (ex.bodyPart || "").toLowerCase();
+    const target = (ex.target || "").toLowerCase();
+    const category = (ex.category || "").toLowerCase();
+    return (
+      body === "waist" ||
+      target === "core" ||
+      target === "abs" ||
+      target === "obliques" ||
+      category === "core"
+    );
+  };
+
+  const isStrengthExercise = (ex) => {
+    const category = (ex.category || "").toLowerCase();
+    if (isCoreExercise(ex)) return false;
+    return !["cardio", "mobility", "stretching", "balance"].includes(category);
+  };
+
+  const strengthExercises = day.exercises.filter(isStrengthExercise);
+  const coreExercises = day.exercises.filter(isCoreExercise);
+
+  const renderExercise = (ex, i, sectionKey) => (
+    <li
+      key={`${sectionKey}-${ex.instanceId || ex.id || ex.name}-${i}`}
+      className={`ex-item ${
+        activeExerciseKey === getExerciseKey(day.title, ex) ? "active" : ""
+      }`}
+    >
+      {ex.gifUrl ? (
+        <img src={ex.gifUrl} alt={ex.name} />
+      ) : (
+        <div className="gif-placeholder">Sin gif</div>
+      )}
+      <div className="ex-info">
+        <span className="ex-name">{getName(ex)}</span>
+        <span className="ex-meta">
+          {ex.target} • {ex.equipment}
+        </span>
+        <span className="ex-meta">
+          {ex.prescription?.type === "reps" &&
+            `${ex.prescription.sets}x${ex.prescription.reps} • ${ex.prescription.restSec}s descanso`}
+          {ex.prescription?.type === "time" &&
+            `${ex.prescription.workSec}s trabajo • ${ex.prescription.restSec}s descanso`}
+        </span>
+        <span className="ex-meta">
+          ID ex: {ex.id || "—"} • ID gif: {ex.gifResolvedId || "—"} • fuente:{" "}
+          {ex.gifSource || "—"}
+        </span>
+        <span className={`type-pill ${typeLabel(ex).toLowerCase()}`}>
+          {typeLabel(ex)}
+        </span>
+      </div>
+      <div className="ex-actions">
+        <button
+          className="tiny"
+          type="button"
+          onClick={() => onSelectExercise({ ex, dayTitle: day.title })}
+        >
+          {lang === "en" ? "View / log" : "Ver / registrar"}
+        </button>
+      </div>
+    </li>
+  );
+
   const selectedEquipment = Array.isArray(day.equipmentList) ? day.equipmentList : [];
   const formatEquipment = (value) => {
     if (!value) return value;
@@ -76,6 +141,7 @@ export default function DayCard({
       <div className="day-head">
         <div className="day-title">
           <strong>{day.title}</strong>
+          {day.focus && <span className="day-focus">{day.focus}</span>}
         </div>
         <span className="day-xp">
           {dayEarned} / {dayPossible} XP
@@ -163,50 +229,25 @@ export default function DayCard({
         </details>
       )}
 
-      <ul className="ex-list">
-        {day.exercises.map((ex, i) => (
-          <li
-            key={ex.name + i}
-            className={`ex-item ${
-              activeExerciseKey === getExerciseKey(day.title, ex) ? "active" : ""
-            }`}
-          >
-            {ex.gifUrl ? (
-              <img src={ex.gifUrl} alt={ex.name} />
-            ) : (
-              <div className="gif-placeholder">Sin gif</div>
-            )}
-            <div className="ex-info">
-              <span className="ex-name">{getName(ex)}</span>
-              <span className="ex-meta">
-                {ex.target} • {ex.equipment}
-              </span>
-              <span className="ex-meta">
-                {ex.prescription?.type === "reps" &&
-                  `${ex.prescription.sets}x${ex.prescription.reps} • ${ex.prescription.restSec}s descanso`}
-                {ex.prescription?.type === "time" &&
-                  `${ex.prescription.workSec}s trabajo • ${ex.prescription.restSec}s descanso`}
-              </span>
-              <span className="ex-meta">
-                ID ex: {ex.id || "—"} • ID gif: {ex.gifResolvedId || "—"} • fuente:{" "}
-                {ex.gifSource || "—"}
-              </span>
-              <span className={`type-pill ${typeLabel(ex).toLowerCase()}`}>
-                {typeLabel(ex)}
-              </span>
-            </div>
-            <div className="ex-actions">
-              <button
-                className="tiny"
-                type="button"
-                onClick={() => onSelectExercise({ ex, dayTitle: day.title })}
-              >
-                {lang === "en" ? "View / log" : "Ver / registrar"}
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="ex-section">
+        <div className="ex-section-head">
+          <strong>{lang === "en" ? "Strength" : "Fuerza"}</strong>
+          <span>{strengthExercises.length}/3</span>
+        </div>
+        <ul className="ex-list">
+          {strengthExercises.map((ex, i) => renderExercise(ex, i, "strength"))}
+        </ul>
+      </div>
+
+      <div className="ex-section">
+        <div className="ex-section-head">
+          <strong>Core</strong>
+          <span>{coreExercises.length}/3</span>
+        </div>
+        <ul className="ex-list">
+          {coreExercises.map((ex, i) => renderExercise(ex, i, "core"))}
+        </ul>
+      </div>
       <div className="day-actions">
         <button
           className="tiny primary-btn"

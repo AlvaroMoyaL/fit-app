@@ -44,6 +44,7 @@ const LOCAL_SYNC_KEY = "fit_last_local_change";
 const AUTO_BACKUP_KEY = "fit_backup_auto";
 const AUTO_BACKUP_PREV_KEY = "fit_backup_auto_prev";
 const SYNC_RELOAD_GUARD_KEY = "fit_sync_reload_guard";
+const LAST_SYNC_RESTORE_KEY = "fit_last_sync_restore_summary";
 
 function toNum(v) {
   const n = Number(v);
@@ -328,6 +329,19 @@ function getCloudAppSyncScore(payload) {
   return ids.reduce((sum, id) => sum + getCloudProfileSyncScore(payload, id), 0);
 }
 
+function summarizeCloudPayload(payload) {
+  if (!payload) return { profiles: 0, metrics: 0 };
+  const ids = Array.isArray(payload.profiles) && payload.profiles.length
+    ? payload.profiles.map((p) => p.id).filter(Boolean)
+    : Object.keys(payload.dataByProfile || {});
+  const metrics = ids.reduce((sum, id) => {
+    const block = payload?.dataByProfile?.[id] || {};
+    const log = safeParseJson(block.metricsLog ?? block.metrics, []);
+    return sum + (Array.isArray(log) ? log.length : 0);
+  }, 0);
+  return { profiles: ids.length, metrics };
+}
+
 function reloadAfterSyncOnce() {
   try {
     if (sessionStorage.getItem(SYNC_RELOAD_GUARD_KEY) === "1") return false;
@@ -378,6 +392,9 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [syncStatus, setSyncStatus] = useState("");
+  const [lastSyncRestoreSummary, setLastSyncRestoreSummary] = useState(
+    () => localStorage.getItem(LAST_SYNC_RESTORE_KEY) || ""
+  );
   const authEnabled = Boolean(supabase);
   const [localChangeTick, setLocalChangeTick] = useState(0);
   const lastAutoSyncRef = useRef(0);
@@ -1631,6 +1648,13 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
+  const markSyncRestoreSummary = (summary) => {
+    const timestamp = new Date().toLocaleString();
+    const text = `Última descarga: perfiles ${summary.profiles} · métricas ${summary.metrics} · ${timestamp}`;
+    setLastSyncRestoreSummary(text);
+    localStorage.setItem(LAST_SYNC_RESTORE_KEY, text);
+  };
+
   const autoSync = async () => {
     if (!authUser || !progressReady) return;
     try {
@@ -1653,12 +1677,20 @@ export default function App() {
       const cloudUpdated = cloudPayload?.meta?.updatedAt || null;
       const cloudScore = getCloudAppSyncScore(cloudPayload);
       if (!localUpdated || localScore === 0) {
+        const summary = summarizeCloudPayload(cloudPayload);
         applyCloudPayload(cloudPayload);
+        markSyncRestoreSummary(summary);
         setCanUploadSync(true);
-        setSyncStatus("Datos restaurados ✓");
+        setSyncStatus(
+          `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+        );
         setTimeout(() => {
           const didReload = reloadAfterSyncOnce();
-          if (!didReload) setSyncStatus("Datos restaurados ✓");
+          if (!didReload) {
+            setSyncStatus(
+              `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+            );
+          }
         }, 300);
         return;
       }
@@ -1668,12 +1700,20 @@ export default function App() {
           "Se encontraron datos más recientes en la nube. ¿Quieres usarlos? (Cancelar mantiene tus datos locales)"
         );
         if (ok) {
+          const summary = summarizeCloudPayload(cloudPayload);
           applyCloudPayload(cloudPayload);
+          markSyncRestoreSummary(summary);
           setCanUploadSync(true);
-          setSyncStatus("Datos restaurados ✓");
+          setSyncStatus(
+            `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+          );
           setTimeout(() => {
             const didReload = reloadAfterSyncOnce();
-            if (!didReload) setSyncStatus("Datos restaurados ✓");
+            if (!didReload) {
+              setSyncStatus(
+                `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+              );
+            }
           }, 300);
           return;
         }
@@ -1684,12 +1724,20 @@ export default function App() {
           "La nube parece tener más progreso que este dispositivo. ¿Quieres usar los datos de la nube para evitar sobrescribirlos?"
         );
         if (keepCloud) {
+          const summary = summarizeCloudPayload(cloudPayload);
           applyCloudPayload(cloudPayload);
+          markSyncRestoreSummary(summary);
           setCanUploadSync(true);
-          setSyncStatus("Datos restaurados ✓");
+          setSyncStatus(
+            `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+          );
           setTimeout(() => {
             const didReload = reloadAfterSyncOnce();
-            if (!didReload) setSyncStatus("Datos restaurados ✓");
+            if (!didReload) {
+              setSyncStatus(
+                `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+              );
+            }
           }, 300);
           return;
         }
@@ -1728,9 +1776,13 @@ export default function App() {
         setTimeout(() => setSyncStatus(""), 2000);
         return;
       }
+      const summary = summarizeCloudPayload(payload);
       applyCloudPayload(payload);
+      markSyncRestoreSummary(summary);
       setCanUploadSync(true);
-      setSyncStatus("Datos restaurados ✓");
+      setSyncStatus(
+        `Datos restaurados ✓ · perfiles: ${summary.profiles} · métricas: ${summary.metrics}`
+      );
       setTimeout(() => window.location.reload(), 400);
     } catch (e) {
       setSyncStatus(e?.message || "Error al descargar");
@@ -2652,6 +2704,7 @@ export default function App() {
         authLoading={authLoading}
         authError={authError}
         syncStatus={syncStatus}
+        syncRestoreSummary={lastSyncRestoreSummary}
         onSyncUp={onSyncUp}
         onSyncDown={onSyncDown}
         canSyncUp={canUploadSync}
@@ -3245,6 +3298,7 @@ export default function App() {
               authLoading={authLoading}
               authError={authError}
               syncStatus={syncStatus}
+              syncRestoreSummary={lastSyncRestoreSummary}
               onSyncUp={onSyncUp}
               onSyncDown={onSyncDown}
               canSyncUp={canUploadSync}

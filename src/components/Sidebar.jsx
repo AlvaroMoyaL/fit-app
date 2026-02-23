@@ -63,6 +63,7 @@ export default function Sidebar({
   authLoading,
   authError,
   syncStatus,
+  syncRestoreSummary,
   onSyncUp,
   onSyncDown,
   canSyncUp,
@@ -438,6 +439,7 @@ export default function Sidebar({
               </button>
             </div>
             {syncStatus && <span className="note">{syncStatus}</span>}
+            {syncRestoreSummary && <span className="note">{syncRestoreSummary}</span>}
           </div>
         )}
       </details>

@@ -109,6 +109,9 @@
 - Fix adicional en descarga/restauración cloud (`src/utils/cloudSync.js`):
   - `downloadCloud` ahora filtra por `user_id` del usuario autenticado para evitar restaurar payload ambiguo/no correspondiente,
   - restauración de métricas soporta tanto `metricsLog` como fallback `metrics` para compatibilidad de payloads antiguos.
+- UX de sincronización reforzada en sidebar:
+  - tras restaurar desde nube se guarda un resumen persistente (`fit_last_sync_restore_summary`) con `perfiles`, `métricas` y hora de la última descarga,
+  - el resumen se muestra en `Cuenta` bajo los botones `Subir/Descargar` para validar rápidamente qué se restauró.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

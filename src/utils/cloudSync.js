@@ -95,8 +95,13 @@ export function applyCloudPayload(payload) {
       if (block.history !== undefined && block.history !== null) {
         localStorage.setItem(keys.history, block.history);
       }
-      if (block.metricsLog)
-        localStorage.setItem(keys.metricsLog, block.metricsLog);
+      const metricsLogRaw =
+        block.metricsLog !== undefined && block.metricsLog !== null
+          ? block.metricsLog
+          : block.metrics;
+      if (metricsLogRaw !== undefined && metricsLogRaw !== null) {
+        localStorage.setItem(keys.metricsLog, metricsLogRaw);
+      }
       if (block.lang) localStorage.setItem(keys.lang, block.lang);
     });
   }
@@ -129,9 +134,13 @@ export async function uploadCloud() {
 
 export async function downloadCloud() {
   if (!supabase) throw new Error("Supabase no configurado");
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  if (!userId) throw new Error("No hay sesión activa");
   const { data, error } = await supabase
     .from("fit_cloud")
     .select("payload")
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
   return data?.payload || null;

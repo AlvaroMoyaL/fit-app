@@ -106,6 +106,9 @@
   - si el payload no trae `profiles`, ahora reconstruye la lista desde `dataByProfile`,
   - asegura `activeProfileId` válido tras restaurar,
   - evita el caso de "Datos restaurados ✓" sin perfiles visibles en el listado.
+- Fix adicional en descarga/restauración cloud (`src/utils/cloudSync.js`):
+  - `downloadCloud` ahora filtra por `user_id` del usuario autenticado para evitar restaurar payload ambiguo/no correspondiente,
+  - restauración de métricas soporta tanto `metricsLog` como fallback `metrics` para compatibilidad de payloads antiguos.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

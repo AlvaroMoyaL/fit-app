@@ -557,6 +557,7 @@ function buildDayBlueprint(template, dayIndex, goal) {
     }
     return {
       focus: `${cycle.focus} + Core`,
+      bodyParts: [...cycle.strengthBodyParts, "waist"],
       strengthBodyParts: cycle.strengthBodyParts,
       dailyCount: 6,
       split: { strength: 3, core: 3 },
@@ -567,6 +568,7 @@ function buildDayBlueprint(template, dayIndex, goal) {
 
   return {
     focus: `${cycle.focus} + Core`,
+    bodyParts: [...cycle.strengthBodyParts, "waist"],
     strengthBodyParts: cycle.strengthBodyParts,
     dailyCount: 6,
     split: { strength: 3, core: 3 },
@@ -1174,10 +1176,47 @@ async function generatePlan(form, options = {}) {
   const mainCount = levelProfile.dayExerciseCount;
 
   const bodyPartsByGoal = {
-    Salud: ["cardio", "upper legs", "waist"],
-    "Perder grasa": ["cardio", "upper legs", "waist"],
-    "Ganar músculo": ["chest", "back", "upper legs", "upper arms", "shoulders"],
-    Resistencia: ["cardio", "lower legs", "upper legs"],
+    Salud: [
+      "chest",
+      "back",
+      "shoulders",
+      "upper arms",
+      "lower arms",
+      "upper legs",
+      "lower legs",
+      "waist",
+      "cardio",
+    ],
+    "Perder grasa": [
+      "chest",
+      "back",
+      "shoulders",
+      "upper arms",
+      "lower arms",
+      "upper legs",
+      "lower legs",
+      "waist",
+      "cardio",
+    ],
+    "Ganar músculo": [
+      "chest",
+      "back",
+      "shoulders",
+      "upper arms",
+      "lower arms",
+      "upper legs",
+      "lower legs",
+      "waist",
+    ],
+    Resistencia: [
+      "cardio",
+      "upper legs",
+      "lower legs",
+      "waist",
+      "back",
+      "chest",
+      "shoulders",
+    ],
     Movilidad: ["waist", "upper legs", "lower legs"],
   };
 

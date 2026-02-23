@@ -112,6 +112,28 @@
 - UX de sincronización reforzada en sidebar:
   - tras restaurar desde nube se guarda un resumen persistente (`fit_last_sync_restore_summary`) con `perfiles`, `métricas` y hora de la última descarga,
   - el resumen se muestra en `Cuenta` bajo los botones `Subir/Descargar` para validar rápidamente qué se restauró.
+- Foco muscular por día mejorado:
+  - se añadió `src/utils/dayFocus.js` para derivar el foco real desde ejercicios del día (bodyPart/target/category),
+  - se muestra en `DayCard` y en tarjetas de `Sidebar > Plan`,
+  - se corrigió sesgo de clasificación que mostraba `Pierna` en todos los días.
+- Generación de plan (`goal`) ajustada para rotación muscular real:
+  - el blueprint diario ahora restringe explícitamente fuerza a grupos del ciclo (`pecho/espalda`, `pierna`, `hombros/brazos`) + `core`,
+  - evita días etiquetados con un foco pero construidos con otro grupo muscular dominante.
+- Nueva acción `Regenerar plan` (sin borrar progreso histórico):
+  - recalcula solo el plan actual del perfil activo,
+  - mantiene historial, métricas y cuenta,
+  - conserva el día seleccionado cuando es posible.
+- UX de regeneración reforzada:
+  - estado visible `Regenerando...` / `Plan regenerado ✓`,
+  - fallback automático a `forceLocal: true` si falla la regeneración estándar,
+  - mensaje de error real visible para diagnóstico.
+- Fix de cuota `localStorage` en guardado de plan:
+  - `stripGifs` ahora persiste el plan sin `pool` pesado (`pool: []`),
+  - evita error `Setting the value ... exceeded the quota` al regenerar.
+- Versionado visible en cabecera de `Plan`:
+  - bajo `Tu plan inicial` se muestra `Version X.Y.Z`,
+  - versión inyectada desde `package.json` vía `vite.config.js` (`import.meta.env.VITE_APP_VERSION`).
+- Versión actual de app definida en `package.json`: `0.9.0`.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

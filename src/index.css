@@ -392,6 +392,12 @@ body.hc .help-icon {
   color: #6a5f55;
 }
 
+.sidebar-day-focus {
+  font-size: 12px;
+  color: #4f463f;
+  font-weight: 600;
+}
+
 .sidebar-day-type {
   display: inline-flex;
   width: fit-content;
@@ -1669,6 +1675,13 @@ select:focus {
   font-size: 16px;
   font-weight: 700;
   color: #0b5f58;
+}
+
+.plan-version {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #7a6f65;
+  font-weight: 600;
 }
 
 .plan-head-main {

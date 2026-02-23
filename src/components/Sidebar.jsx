@@ -1,6 +1,7 @@
 import LocalDbStatus from "./LocalDbStatus";
 import GifDbStatus from "./GifDbStatus";
 import { getLevelProgress } from "../utils/levelProgress";
+import { buildDayFocusLabel } from "../utils/dayFocus";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -37,6 +38,9 @@ export default function Sidebar({
   trainingStreak,
   selectedPlanDayIndex,
   onResetPlan,
+  onRegeneratePlan,
+  loadingPlan,
+  planActionStatus,
   onGoToPlanDay,
   onAddExtraDay,
   dbStatus,
@@ -325,10 +329,14 @@ export default function Sidebar({
             <button type="button" className="tiny" onClick={onAddExtraDay}>
               Entreno adicional
             </button>
+            <button type="button" className="tiny" onClick={onRegeneratePlan} disabled={loadingPlan}>
+              {loadingPlan ? "Regenerando..." : "Regenerar plan"}
+            </button>
             <button type="button" className="tiny danger" onClick={onResetPlan}>
               Reiniciar plan
             </button>
           </div>
+          {planActionStatus && <p className="note">{planActionStatus}</p>}
           <ul className="sidebar-plan">
             {plan?.days?.map((d, index) => (
               <li key={d.title}>
@@ -341,6 +349,9 @@ export default function Sidebar({
                 >
                   <strong>{d.title}</strong>
                   <span>{getPlanDateLabel(index)}</span>
+                  <span className="sidebar-day-focus">
+                    {buildDayFocusLabel(d, lang, d.focus || "")}
+                  </span>
                   <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
                     {getPlanDayTypeLabel(index)}
                   </span>

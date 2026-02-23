@@ -1,4 +1,5 @@
 import { EQUIPMENT_MODES } from "../utils/plan";
+import { buildDayFocusLabel } from "../utils/dayFocus";
 
 export default function DayCard({
   day,
@@ -21,6 +22,7 @@ export default function DayCard({
     return sum + (completedMap[key] ? getExerciseXp(ex) : 0);
   }, 0);
   const dayCompleted = day.exercises.every((ex) => completedMap[getExerciseKey(day.title, ex)]);
+  const resolvedFocus = buildDayFocusLabel(day, lang, day.focus);
 
   const getName = (ex) => {
     if (lang === "en") return ex.name_en || ex.name || ex.name_es;
@@ -141,7 +143,7 @@ export default function DayCard({
       <div className="day-head">
         <div className="day-title">
           <strong>{day.title}</strong>
-          {day.focus && <span className="day-focus">{day.focus}</span>}
+          {resolvedFocus && <span className="day-focus">{resolvedFocus}</span>}
         </div>
         <span className="day-xp">
           {dayEarned} / {dayPossible} XP

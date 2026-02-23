@@ -26,6 +26,7 @@ export default function Plan({
 }) {
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [showAllDays, setShowAllDays] = useState(false);
+  const appVersion = import.meta.env.VITE_APP_VERSION || "0.0.0";
 
   useEffect(() => {
     if (!Number.isFinite(selectedDayIndex)) return;
@@ -80,6 +81,7 @@ export default function Plan({
       <div className="plan-head">
         <div className="plan-head-main">
           <h2 className="plan-title">Tu plan inicial</h2>
+          <p className="plan-version">Version {appVersion}</p>
           {activeProfileName && <p className="plan-subtitle">{activeProfileName}</p>}
           <div className="plan-head-meta">
             <span>XP estimado de la semana: {estimatedWeeklyXp}</span>

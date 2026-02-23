@@ -369,6 +369,7 @@ export default function App() {
   const [plan, setPlan] = useState(null);
   const [exercisePool, setExercisePool] = useState([]);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [planActionStatus, setPlanActionStatus] = useState("");
   const [error, setError] = useState("");
   const [detailEx, setDetailEx] = useState(null);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -553,6 +554,8 @@ export default function App() {
 
   const stripGifs = (planToStore) => ({
     ...planToStore,
+    // Keep pool only in-memory (exercisePool state). Persisting full pool can exceed localStorage quota.
+    pool: [],
     days: planToStore.days.map((d) => ({
       ...d,
       exercises: d.exercises.map((ex) => ({ ...ex, gifUrl: "" })),
@@ -2528,6 +2531,54 @@ export default function App() {
     setCompletedDetails({});
   };
 
+  const onRegeneratePlan = async () => {
+    if (!activeProfileId) return;
+    if (loadingPlan) return;
+    setError("");
+    setPlanActionStatus("Regenerando plan...");
+    setLoadingPlan(true);
+    try {
+      const adjustDelta = computeAdjustDelta(history, form);
+      let newPlan;
+      try {
+        newPlan = await generatePlan(form, {
+          forceLocal: dbStatus.state !== "ready",
+          adjustLevelDelta: adjustDelta,
+        });
+      } catch (firstErr) {
+        // Fallback: force local dataset if remote/local DB path fails.
+        newPlan = await generatePlan(form, {
+          forceLocal: true,
+          adjustLevelDelta: adjustDelta,
+        });
+        console.warn("Regenerate fallback to local pool", firstErr);
+      }
+      setExercisePool(newPlan.pool);
+      const finalPlan = { ...newPlan };
+      const keys = profileKeys(activeProfileId);
+      localStorage.setItem(keys.plan, JSON.stringify(stripGifs(finalPlan)));
+      touchLocalChange();
+      setPlan(finalPlan);
+      setSidebarTab("plan");
+      setDetailEx(null);
+      setSelectedPlanDayIndex((prev) => {
+        const total = Array.isArray(finalPlan?.days) ? finalPlan.days.length : 0;
+        if (!total) return 0;
+        const current = Number.isFinite(prev) ? Number(prev) : 0;
+        return Math.max(0, Math.min(total - 1, current));
+      });
+      setPlanActionStatus("Plan regenerado ✓");
+      setTimeout(() => setPlanActionStatus(""), 1800);
+    } catch (err) {
+      const msg = err?.message || "No se pudo regenerar el plan.";
+      setError(msg);
+      setPlanActionStatus(`Error al regenerar plan: ${msg}`);
+      setTimeout(() => setPlanActionStatus(""), 2200);
+    } finally {
+      setLoadingPlan(false);
+    }
+  };
+
   const buildBackupPayload = (keys) => ({
     profile: localStorage.getItem(keys.profile),
     plan: localStorage.getItem(keys.plan),
@@ -2678,6 +2729,9 @@ export default function App() {
         trainingStreak={trainingStreak}
         selectedPlanDayIndex={selectedPlanDayIndex}
         onResetPlan={onResetPlan}
+        onRegeneratePlan={onRegeneratePlan}
+        loadingPlan={loadingPlan}
+        planActionStatus={planActionStatus}
         onGoToPlanDay={onGoToPlanDay}
         onAddExtraDay={onAddExtraDay}
         dbStatus={dbStatus}
@@ -3266,6 +3320,9 @@ export default function App() {
               trainingStreak={trainingStreak}
               selectedPlanDayIndex={selectedPlanDayIndex}
               onResetPlan={onResetPlan}
+              onRegeneratePlan={onRegeneratePlan}
+              loadingPlan={loadingPlan}
+              planActionStatus={planActionStatus}
               onGoToPlanDay={(idx) => {
                 onGoToPlanDay(idx);
                 setMobileMenuOpen(false);

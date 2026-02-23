@@ -20,6 +20,8 @@ import MuscleSummary from "./components/MuscleSummary";
 import WeeklyCharts from "./components/WeeklyCharts";
 import MetricsLogForm from "./components/MetricsLogForm";
 import MetricsCharts from "./components/MetricsCharts";
+import StatsMetricDrawer from "./components/StatsMetricDrawer";
+import { getLevelProgress } from "./utils/levelProgress";
 import {
   countExercises,
   countGifs,
@@ -54,7 +56,7 @@ function computeDerivedMetrics(entry, profile) {
   const weight = toNum(entry.weight);
   const waist = toNum(entry.waist);
   const hip = toNum(entry.hip) || toNum(profile?.cadera);
-  const neck = toNum(profile?.cuello);
+  const neck = toNum(entry.neck) || toNum(profile?.cuello);
   const sex = profile?.sexo || "Hombre";
 
   const bmi = heightM ? weight / (heightM * heightM) : 0;
@@ -242,6 +244,50 @@ function countTrainedDaysThisMonth(history) {
   }, 0);
 }
 
+function countHistoryXp(history) {
+  return Object.values(history || {}).reduce((sum, day) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    return (
+      sum +
+      items.reduce((acc, it) => {
+        if (it?.type === "replace") return acc;
+        return acc + Number(it?.xp || 0);
+      }, 0)
+    );
+  }, 0);
+}
+
+function buildPlanCompletionKeySet(plan, completed, getExerciseKey) {
+  const set = new Set();
+  if (!plan) return set;
+  (plan.days || []).forEach((d) => {
+    (d.exercises || []).forEach((ex) => {
+      const key = getExerciseKey(d.title, ex);
+      if (completed?.[key]) {
+        set.add(`${d.title}::${String(ex.name || ex.name_es || ex.name_en || "").toLowerCase()}`);
+      }
+    });
+  });
+  return set;
+}
+
+function countHistoryXpExcludingPlanCompleted(history, completedSet) {
+  return Object.values(history || {}).reduce((sum, day) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    return (
+      sum +
+      items.reduce((acc, it) => {
+        if (it?.type === "replace") return acc;
+        const key = `${it?.dayTitle || ""}::${String(
+          it?.name || it?.name_es || it?.name_en || ""
+        ).toLowerCase()}`;
+        if (completedSet.has(key)) return acc;
+        return acc + Number(it?.xp || 0);
+      }, 0)
+    );
+  }, 0);
+}
+
 function computeProgressScore({ progress, history, metricsLog }) {
   const completedCount = Object.values(progress || {}).filter(Boolean).length;
   const historyCount = countHistoryItems(history);
@@ -341,6 +387,13 @@ export default function App() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [selectedPlanDayIndex, setSelectedPlanDayIndex] = useState(0);
+  const [garminFiles, setGarminFiles] = useState([]);
+  const [garminImportNote, setGarminImportNote] = useState("");
+  const [statsDrawer, setStatsDrawer] = useState({
+    open: false,
+    metricKey: "weight",
+    compareKey: "waist",
+  });
   const [highContrast, setHighContrast] = useState(() => {
     return localStorage.getItem("fit_high_contrast") === "1";
   });
@@ -376,6 +429,54 @@ export default function App() {
   const supabaseGifBucket = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
   const metrics = useMemo(() => calculateMetrics(form), [form]);
+  const activeProfileName = useMemo(() => {
+    return profiles.find((p) => p.id === activeProfileId)?.name || form.nombre || "";
+  }, [profiles, activeProfileId, form.nombre]);
+  const lastMetric = useMemo(
+    () => (metricsLog && metricsLog.length ? metricsLog[metricsLog.length - 1] : null),
+    [metricsLog]
+  );
+  const prevMetric = useMemo(
+    () => (metricsLog && metricsLog.length > 1 ? metricsLog[metricsLog.length - 2] : null),
+    [metricsLog]
+  );
+  const trendSymbol = (key) => {
+    const a = Number(lastMetric?.[key] || 0);
+    const b = Number(prevMetric?.[key] || 0);
+    if (!a || !b) return "→";
+    if (a > b) return "↑";
+    if (a < b) return "↓";
+    return "→";
+  };
+  const openStatsMetric = (metricKey, compareKey = "") => {
+    if (!metricKey) return;
+    setStatsDrawer({
+      open: true,
+      metricKey,
+      compareKey: compareKey || "",
+    });
+  };
+  const renderStatsCard = (label, value, metricKey, compareKey = "") => {
+    if (!metricKey) {
+      return (
+        <div className="stats-metric-static" key={`${label}-static`}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      );
+    }
+    return (
+      <button
+        key={`${label}-${metricKey}`}
+        type="button"
+        className="stats-metric-btn"
+        onClick={() => openStatsMetric(metricKey, compareKey)}
+      >
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </button>
+    );
+  };
   const allExercises = useMemo(() => {
     if (!plan) return [];
     return plan.days.flatMap((d) => d.exercises);
@@ -478,7 +579,17 @@ export default function App() {
     }, 0);
   }, [plan, completed]);
 
-  const level = Math.max(1, Math.floor(earnedXp / 300) + 1);
+  const completedPlanSet = useMemo(
+    () => buildPlanCompletionKeySet(plan, completed, getExerciseKey),
+    [plan, completed]
+  );
+  const historyXpUnique = useMemo(
+    () => countHistoryXpExcludingPlanCompleted(history, completedPlanSet),
+    [history, completedPlanSet]
+  );
+  const earnedXpTotal = earnedXp + historyXpUnique;
+  const levelProgress = useMemo(() => getLevelProgress(earnedXpTotal), [earnedXpTotal]);
+  const level = levelProgress.level;
 
   const totalExercises = plan
     ? plan.days.reduce((sum, d) => sum + d.exercises.length, 0)
@@ -1658,10 +1769,18 @@ export default function App() {
   };
 
   const onAddMetricsEntry = (entry) => {
-    const derived = computeDerivedMetrics(entry, form);
     setMetricsLog((prev) => {
+      const existing = prev.find((e) => e.date === entry.date) || {};
+      const keys = ["weight", "waist", "hip", "neck", "bodyFat", "restHr", "sleepHours", "steps"];
+      const merged = { ...existing, ...entry };
+      keys.forEach((key) => {
+        if (entry[key] === null || entry[key] === undefined) merged[key] = existing[key];
+      });
+      if ((entry.notes || "").trim() === "" && existing.notes) merged.notes = existing.notes;
+      const derived = computeDerivedMetrics(merged, form);
+
       const cleaned = prev.filter((e) => e.date !== entry.date);
-      const next = [...cleaned, { ...entry, ...derived }];
+      const next = [...cleaned, { ...merged, ...derived }];
       next.sort((a, b) => (a.date < b.date ? -1 : 1));
       return next;
     });
@@ -1671,6 +1790,21 @@ export default function App() {
   const onDeleteMetricsEntry = (date) => {
     setMetricsLog((prev) => prev.filter((e) => e.date !== date));
     touchLocalChange();
+  };
+
+  const onSelectGarminFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    setGarminFiles(files);
+    if (!files.length) {
+      setGarminImportNote("");
+      return;
+    }
+    const zipCount = files.filter((f) => /\.zip$/i.test(f.name)).length;
+    const csvCount = files.filter((f) => /\.csv$/i.test(f.name)).length;
+    const fitCount = files.filter((f) => /\.(fit|tcx|gpx)$/i.test(f.name)).length;
+    setGarminImportNote(
+      `Listo para procesar: ${files.length} archivo(s) · ZIP: ${zipCount} · CSV: ${csvCount} · FIT/TCX/GPX: ${fitCount}`
+    );
   };
 
   const onChangeDayMode = async (dayIndex, mode) => {
@@ -2480,8 +2614,9 @@ export default function App() {
         activeTab={sidebarTab}
         onChangeTab={setSidebarTab}
         profile={form}
+        metrics={metrics}
         level={level}
-        earnedXp={earnedXp}
+        earnedXp={earnedXpTotal}
         totalPossibleXp={totalPossibleXp}
         plan={plan}
         completedCount={completedCount}
@@ -2643,15 +2778,14 @@ export default function App() {
                 completedMap={completed}
                 getExerciseKey={getExerciseKey}
                 getExerciseXp={getExerciseXp}
-                earnedXp={earnedXp}
+                earnedXp={earnedXpTotal}
                 totalPossibleXp={totalPossibleXp}
                 level={level}
                 gifsLoading={gifsLoading}
                 lang={lang}
                 onStartSession={startSession}
                 onStartFreeSession={startFreeSessionToday}
-                metrics={metrics}
-                onInfoMetrics={() => setShowInfo(true)}
+                activeProfileName={activeProfileName}
                 activeExerciseKey={
                   detailEx?.ex ? getExerciseKey(detailEx.dayTitle, detailEx.ex) : ""
                 }
@@ -2704,12 +2838,214 @@ export default function App() {
               )}
             </>
           )}
+
+          {sidebarTab === "stats" && (
+            <>
+              <h2>Vista Stats</h2>
+              <p className="note">
+                Panel orientado a métricas de salud, tendencias y carga de datos Garmin.
+              </p>
+              {renderCollapsible(
+                "Importar Garmin",
+                <div className="metrics-log">
+                  <p className="note">
+                    Carga aquí la exportación de Garmin Connect (ZIP completo o archivos por actividad).
+                  </p>
+                  <div className="sidebar-actions">
+                    <button
+                      type="button"
+                      className="tiny"
+                      onClick={() => document.getElementById("garmin-import-input")?.click()}
+                    >
+                      Seleccionar archivos
+                    </button>
+                    {garminFiles.length > 0 && (
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={() => {
+                          setGarminFiles([]);
+                          setGarminImportNote("");
+                        }}
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                    <input
+                      id="garmin-import-input"
+                      type="file"
+                      accept=".zip,.csv,.fit,.tcx,.gpx"
+                      multiple
+                      onChange={onSelectGarminFiles}
+                      style={{ display: "none" }}
+                    />
+                  </div>
+                  {garminImportNote && <p className="note">{garminImportNote}</p>}
+                  {garminFiles.length > 0 && (
+                    <ul className="history-list">
+                      {garminFiles.slice(0, 10).map((f) => (
+                        <li key={`${f.name}-${f.size}`}>
+                          <strong>{f.name}</strong>
+                          <span>{Math.round(f.size / 1024)} KB</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {garminFiles.length > 10 && (
+                    <p className="note">+{garminFiles.length - 10} archivo(s) más…</p>
+                  )}
+                  <p className="note">
+                    Próximo paso: parsear estos archivos y mapearlos a estadísticas de sueño, HRV,
+                    FC reposo, carga y recuperación.
+                  </p>
+                </div>,
+                true
+              )}
+              {renderCollapsible(
+                "Estadísticas por tipo",
+                <div className="stats-groups">
+                  <section className="stats-group">
+                    <h4>Recuperación y sueño</h4>
+                    <div className="metrics-grid">
+                      {renderStatsCard(
+                        "Sueño (h)",
+                        lastMetric?.sleepHours ? `${lastMetric.sleepHours} h` : "—",
+                        "sleepHours",
+                        "restHr"
+                      )}
+                      {renderStatsCard("Sleep score", "—", "sleepScore", "readiness")}
+                      {renderStatsCard("HRV nocturna", "—", "hrv", "restHr")}
+                      {renderStatsCard("Body Battery AM", "—", "bodyBattery", "sleepHours")}
+                      {renderStatsCard("Readiness", "—", "readiness", "sleepHours")}
+                      {renderStatsCard("Estrés diario", "—", "stress", "sleepHours")}
+                    </div>
+                  </section>
+                  <section className="stats-group">
+                    <h4>Cardio y carga</h4>
+                    <div className="metrics-grid">
+                      {renderStatsCard(
+                        "FC reposo",
+                        `${lastMetric?.restHr || "—"} bpm`,
+                        "restHr",
+                        "sleepHours"
+                      )}
+                      {renderStatsCard("VO2 max", "—", "vo2max", "restHr")}
+                      {renderStatsCard("Carga 7d / 28d", "—", "loadRatio", "steps")}
+                      {renderStatsCard("Pasos", lastMetric?.steps || "—", "steps", "sleepHours")}
+                      {renderStatsCard("Días entrenados (mes)", trainedDaysThisMonth, "")}
+                      {renderStatsCard("Racha actual", trainingStreak, "")}
+                    </div>
+                  </section>
+                  <section className="stats-group">
+                    <h4>Composición corporal</h4>
+                    <div className="metrics-grid">
+                      {renderStatsCard(
+                        "Peso",
+                        lastMetric?.weight ? `${lastMetric.weight} kg` : "—",
+                        "weight",
+                        "waist"
+                      )}
+                      {renderStatsCard(
+                        "Cintura",
+                        lastMetric?.waist ? `${lastMetric.waist} cm` : "—",
+                        "waist",
+                        "weight"
+                      )}
+                      {renderStatsCard(
+                        "IMC",
+                        metrics?.bmi ? metrics.bmi.toFixed(1) : "—",
+                        "bmi",
+                        "weight"
+                      )}
+                      {renderStatsCard("Categoría IMC", metrics?.bmiCat || "—", "")}
+                      {renderStatsCard(
+                        "WHtR",
+                        metrics?.whtr ? metrics.whtr.toFixed(2) : "—",
+                        "whtr",
+                        "waist"
+                      )}
+                      {renderStatsCard(
+                        "WHR",
+                        metrics?.whr ? metrics.whr.toFixed(2) : "—",
+                        "whr",
+                        "waist"
+                      )}
+                      {renderStatsCard(
+                        "% Grasa",
+                        metrics?.bodyFat ? `${metrics.bodyFat.toFixed(1)}%` : "—",
+                        "bodyFat",
+                        "waist"
+                      )}
+                      {renderStatsCard(
+                        "Masa magra",
+                        metrics?.leanMass ? `${metrics.leanMass.toFixed(1)} kg` : "—",
+                        "leanMass",
+                        "weight"
+                      )}
+                      {renderStatsCard(
+                        "FFMI",
+                        metrics?.ffmi ? metrics.ffmi.toFixed(1) : "—",
+                        "ffmi",
+                        "leanMass"
+                      )}
+                    </div>
+                  </section>
+                  <section className="stats-group">
+                    <h4>Metabolismo y tendencia</h4>
+                    <div className="metrics-grid">
+                      {renderStatsCard(
+                        "TMB (BMR)",
+                        metrics?.bmr ? `${Math.round(metrics.bmr)} kcal` : "—",
+                        ""
+                      )}
+                      {renderStatsCard(
+                        "TDEE",
+                        metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—",
+                        ""
+                      )}
+                      {renderStatsCard("Tendencia peso", trendSymbol("weight"), "weight", "waist")}
+                      {renderStatsCard("Tendencia cintura", trendSymbol("waist"), "waist", "weight")}
+                    </div>
+                  </section>
+                </div>,
+                true
+              )}
+              {renderCollapsible(
+                "Tendencia de métricas",
+                <MetricsCharts metricsLog={metricsLog} lang={lang} />,
+                false
+              )}
+              {renderCollapsible(
+                "Registrar métricas",
+                <div id="metrics-log-stats">
+                  <MetricsLogForm
+                    metricsLog={metricsLog}
+                    onAddEntry={onAddMetricsEntry}
+                    onDeleteEntry={onDeleteMetricsEntry}
+                    lang={lang}
+                  />
+                </div>,
+                false
+              )}
+            </>
+          )}
         </div>
 
         <MetricsInfoModal
           open={showInfo}
           onClose={() => setShowInfo(false)}
         />
+
+      <StatsMetricDrawer
+        open={statsDrawer.open}
+        metricKey={statsDrawer.metricKey}
+        compareKey={statsDrawer.compareKey}
+        metricsLog={metricsLog}
+        onClose={() => setStatsDrawer((prev) => ({ ...prev, open: false }))}
+        onChangeCompareKey={(nextKey) =>
+          setStatsDrawer((prev) => ({ ...prev, compareKey: nextKey }))
+        }
+      />
 
       <ExerciseDrawer
         exercise={detailEx?.ex}
@@ -2828,7 +3164,17 @@ export default function App() {
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
         >
-          Progreso
+          Historial
+        </button>
+        <button
+          type="button"
+          className={sidebarTab === "stats" ? "active" : ""}
+          onClick={() => {
+            setSidebarTab("stats");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          Stats
         </button>
       </nav>
 
@@ -2855,8 +3201,9 @@ export default function App() {
               activeTab={sidebarTab}
               onChangeTab={setSidebarTab}
               profile={form}
+              metrics={metrics}
               level={level}
-              earnedXp={earnedXp}
+              earnedXp={earnedXpTotal}
               totalPossibleXp={totalPossibleXp}
               plan={plan}
               completedCount={completedCount}

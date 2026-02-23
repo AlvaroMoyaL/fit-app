@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import DayCard from "./DayCard";
-
-function startOfWeek(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+import { getLevelProgress } from "../utils/levelProgress";
 
 export default function Plan({
   plan,
@@ -26,8 +18,7 @@ export default function Plan({
   lang,
   onStartSession,
   onStartFreeSession,
-  metrics,
-  onInfoMetrics,
+  activeProfileName,
   activeExerciseKey,
   equipmentGroups,
   selectedDayIndex,
@@ -45,17 +36,37 @@ export default function Plan({
     setShowAllDays(false);
   }, [selectedDayIndex, plan?.days?.length]);
 
-  const progress = totalPossibleXp ? Math.min(1, earnedXp / totalPossibleXp) : 0;
-  const weekStart = startOfWeek(new Date());
-  const dateFormatter = useMemo(() => {
-    const locale = lang === "es" ? "es-ES" : "en-US";
-    return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" });
-  }, [lang]);
-  const getDateLabel = (index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    return dateFormatter.format(date);
-  };
+  const levelProgress = useMemo(() => getLevelProgress(earnedXp), [earnedXp]);
+  const xpInLevel = levelProgress.xpInLevel;
+  const levelXpRequired = levelProgress.levelXpRequired;
+  const progress = levelProgress.progress;
+  const estimatedWeeklyXp = useMemo(() => {
+    if (!plan) return 0;
+    if (!Array.isArray(plan.weekSchedule) || !Array.isArray(plan.days)) return Number(plan.totalXp || 0);
+    const xpByTitle = new Map(plan.days.map((d) => [d.title, Number(d.xp || 0)]));
+    return plan.weekSchedule.reduce((sum, slot) => {
+      if (slot?.type !== "train") return sum;
+      return sum + Number(xpByTitle.get(slot.title) || 0);
+    }, 0);
+  }, [plan]);
+  const weeklyEarnedXp = useMemo(() => {
+    if (!plan || !Array.isArray(plan.days)) return 0;
+    const trainTitles = new Set(
+      Array.isArray(plan.weekSchedule)
+        ? plan.weekSchedule
+            .filter((slot) => slot?.type === "train" && slot.title)
+            .map((slot) => slot.title)
+        : plan.days.map((d) => d.title)
+    );
+    return plan.days.reduce((sum, day) => {
+      if (!trainTitles.has(day.title)) return sum;
+      const dayEarned = day.exercises.reduce((acc, ex) => {
+        const key = getExerciseKey(day.title, ex);
+        return acc + (completedMap[key] ? getExerciseXp(ex) : 0);
+      }, 0);
+      return sum + dayEarned;
+    }, 0);
+  }, [plan, completedMap, getExerciseKey, getExerciseXp]);
   const todayWeekIndex = (new Date().getDay() + 6) % 7;
   const todaySchedule = Array.isArray(plan?.weekSchedule)
     ? plan.weekSchedule[todayWeekIndex]
@@ -67,110 +78,26 @@ export default function Plan({
   return (
     <div className="plan" id="plan">
       <div className="plan-head">
-        <div>
-          <h2>Tu plan inicial</h2>
-          <p className="note">XP total estimado: {plan.totalXp}</p>
+        <div className="plan-head-main">
+          <h2 className="plan-title">Tu plan inicial</h2>
+          {activeProfileName && <p className="plan-subtitle">{activeProfileName}</p>}
+          <div className="plan-head-meta">
+            <span>XP estimado de la semana: {estimatedWeeklyXp}</span>
+            <span>XP que se lleva en la semana: {weeklyEarnedXp}</span>
+          </div>
           {gifsLoading && <p className="note">Cargando gifs…</p>}
         </div>
-        <div className="xp-summary">
+        <div className="xp-summary plan-xp-summary">
           <strong>Nivel {level}</strong>
           <span>
-            XP: {earnedXp} / {totalPossibleXp}
+            XP nivel: {xpInLevel} / {levelXpRequired}
           </span>
+          <small>XP total: {earnedXp}</small>
           <div className="xp-bar">
             <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
           </div>
         </div>
       </div>
-      {metrics && (
-        <div className="plan-metrics">
-          <div className="plan-metrics-head">
-            <h3>Métricas calculadas</h3>
-            <button type="button" className="link" onClick={onInfoMetrics}>
-              ¿Qué significan estas métricas?
-            </button>
-          </div>
-          <div className="metrics-grid">
-            <div>
-              <span>IMC</span>
-              <strong>{metrics.bmi.toFixed(1)}</strong>
-            </div>
-            <div>
-              <span>Categoría IMC</span>
-              <strong>{metrics.bmiCat}</strong>
-            </div>
-            <div>
-              <span>TMB (BMR)</span>
-              <strong>{Math.round(metrics.bmr)} kcal</strong>
-            </div>
-            <div>
-              <span>TDEE</span>
-              <strong>{Math.round(metrics.tdee)} kcal</strong>
-            </div>
-            <div>
-              <span>WHtR</span>
-              <strong>{metrics.whtr.toFixed(2)}</strong>
-            </div>
-            <div>
-              <span>WHR</span>
-              <strong>{metrics.whr.toFixed(2)}</strong>
-            </div>
-            <div>
-              <span>% Grasa</span>
-              <strong>
-                {metrics.bodyFat ? metrics.bodyFat.toFixed(1) + "%" : "—"}
-              </strong>
-            </div>
-            <div>
-              <span>Masa magra</span>
-              <strong>
-                {metrics.leanMass ? metrics.leanMass.toFixed(1) + " kg" : "—"}
-              </strong>
-            </div>
-            <div>
-              <span>FFMI</span>
-              <strong>{metrics.ffmi ? metrics.ffmi.toFixed(1) : "—"}</strong>
-            </div>
-          </div>
-          <p className="note">
-            * Las métricas son aproximadas y no sustituyen consejo médico.
-          </p>
-        </div>
-      )}
-      {plan.weekSchedule && (
-        <div className="week-schedule">
-          {plan.weekSchedule.map((d, index) => {
-            const dateLabel = getDateLabel(index);
-            const isSelected = index === mobileDayIndex;
-            return (
-            <div
-              key={d.label}
-              className={`week-day ${d.type === "rest" ? "rest" : "train"} ${
-                isSelected ? "active" : ""
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                setMobileDayIndex(index);
-                setShowAllDays(false);
-                onSelectDayIndex?.(index);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setMobileDayIndex(index);
-                  setShowAllDays(false);
-                  onSelectDayIndex?.(index);
-                }
-              }}
-            >
-              <span className="week-date">{dateLabel}</span>
-              <strong>{d.type === "rest" ? "Descanso" : d.title}</strong>
-            </div>
-            );
-          })}
-        </div>
-      )}
       {todayIsRest && (
         <div className="rest-panel">
           <p className="note">

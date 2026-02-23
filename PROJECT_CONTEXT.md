@@ -82,6 +82,26 @@
 - En `Sidebar > Plan`, los días ahora son navegables: seleccionan día en la vista principal y hacen scroll al bloque de plan.
 - Se agregó acción `Entreno adicional` en sidebar para crear un nuevo día de entrenamiento y navegar automáticamente a ese día.
 - Se añadió indicador visual de día seleccionado en el listado de días del sidebar con relleno completo.
+- Vista `Stats` reorganizada por tipo de estadística en un bloque unificado (`Recuperación y sueño`, `Cardio y carga`, `Composición corporal`, `Metabolismo y tendencia`), eliminando separación previa confusa.
+- `Stats` ahora incluye las mismas métricas calculadas clave que aparecían en `Plan` (IMC categoría, TMB, TDEE, WHR, masa magra, FFMI), además de peso/cintura visibles.
+- Se implementó `StatsMetricDrawer` (`src/components/StatsMetricDrawer.jsx`): al hacer click en tarjetas de stats abre drawer con serie temporal, comparación opcional con otra métrica y tabla de valores por fecha.
+- El cruce de métricas en el drawer soporta modo `Auto` con recomendación basada en datos reales (solapamiento temporal + correlación), manteniendo override manual.
+- Corregido bug en registro de métricas: campos vacíos ya no se convierten al mínimo por `clamp` (ej. peso 20), y guardado por fecha ahora hace merge sin pisar datos previos cuando un campo llega vacío.
+- `Registrar medidas` ahora incluye `Cuello (cm)` por fecha; los cálculos derivados usan `entry.neck` (si existe) con fallback al cuello del perfil.
+- Mejoras visuales de selectores/tabs:
+  - navegación móvil corregida a 5 columnas reales para evitar espacios desiguales,
+  - botones/tabs con ancho/alto uniforme y texto estable (sin solaparse ni cambiar tamaño entre pestañas activas/inactivas).
+- Vista `Plan` simplificada: se eliminaron métricas calculadas y selector semanal de días dentro del contenido principal para reducir ruido.
+- `Sidebar > Plan` ahora concentra navegación diaria: cada botón muestra día, fecha (`dd/mm`), tipo (`Entreno`/`Descanso`/`Extra`) y cantidad de ejercicios.
+- Cabecera de `Plan` mejor alineada:
+  - título más destacado,
+  - subtítulo con nombre del perfil activo,
+  - chips informativos con `XP estimado de la semana` y `XP que se lleva en la semana`.
+- Barra de XP en `Plan` corregida para reflejar progreso del nivel actual (igual criterio que sidebar) y con tamaño visual ajustado.
+- Cambio mayor de progresión de niveles:
+  - se reemplazó umbral fijo de `300 XP` por curva progresiva centralizada en `src/utils/levelProgress.js`,
+  - tramos actuales: 800, 1000, 1200, 1500, y luego +300 por nivel,
+  - `App`, `Sidebar` y `Plan` usan la misma utilidad para nivel, XP en nivel y porcentaje de barra.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

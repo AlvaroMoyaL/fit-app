@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -28,6 +28,13 @@ function formatDayLabel(date) {
     day: "2-digit",
     month: "short",
   });
+}
+
+function getWeekIndexFromDateKey(dateKey) {
+  if (!dateKey) return -1;
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return -1;
+  return (date.getDay() + 6) % 7; // Monday=0 ... Sunday=6
 }
 
 function exerciseFormKey(ex, idx) {
@@ -64,6 +71,22 @@ function buildSelected(day) {
   return out;
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSameExercise(item, dayTitle, ex) {
+  if (!item || item.type === "replace") return false;
+  if (normalizeText(item.dayTitle) !== normalizeText(dayTitle)) return false;
+  const itemNames = new Set(
+    [item.name, item.name_es, item.name_en].map(normalizeText).filter(Boolean)
+  );
+  const exNames = [ex?.name, ex?.name_es, ex?.name_en]
+    .map(normalizeText)
+    .filter(Boolean);
+  return exNames.some((n) => itemNames.has(n));
+}
+
 export default function HistoryWeek({
   history,
   lang,
@@ -78,7 +101,6 @@ export default function HistoryWeek({
     now.setDate(now.getDate() - 1);
     return toKey(now);
   });
-  const [registerDayTitle, setRegisterDayTitle] = useState("");
   const [registerEntries, setRegisterEntries] = useState({});
   const [registerSelected, setRegisterSelected] = useState({});
   const [registerSaved, setRegisterSaved] = useState({});
@@ -120,31 +142,45 @@ export default function HistoryWeek({
 
   const weekInput = toWeekInput(baseDate);
   const registerDays = Array.isArray(plan?.days) ? plan.days : [];
+  const linkedDayTitle = useMemo(() => {
+    const idx = getWeekIndexFromDateKey(registerDate);
+    if (idx < 0) return "";
+    const slot = Array.isArray(plan?.weekSchedule) ? plan.weekSchedule[idx] : null;
+    if (!slot || slot.type !== "train" || !slot.title) return "";
+    return String(slot.title);
+  }, [plan?.weekSchedule, registerDate]);
+
   const selectedDay = useMemo(() => {
     if (!registerDays.length) return null;
-    const first = registerDays[0] || null;
-    if (!registerDayTitle) return first;
-    return registerDays.find((d) => d.title === registerDayTitle) || first;
-  }, [registerDays, registerDayTitle]);
+    if (!linkedDayTitle) return null;
+    return registerDays.find((d) => d.title === linkedDayTitle) || null;
+  }, [registerDays, linkedDayTitle]);
+
+  useEffect(() => {
+    if (!showRegister) return;
+    setRegisterEntries(buildEntries(selectedDay));
+    setRegisterSelected(buildSelected(selectedDay));
+    setRegisterSaved({});
+    setRegisterMsg("");
+  }, [selectedDay?.title, registerDate, showRegister]);
+  const existingSavedByKey = useMemo(() => {
+    const out = {};
+    const list = Array.isArray(selectedDay?.exercises) ? selectedDay.exercises : [];
+    const items = history?.[registerDate]?.items || [];
+    list.forEach((ex, idx) => {
+      const key = exerciseFormKey(ex, idx);
+      out[key] = items.some((it) => isSameExercise(it, selectedDay?.title || "", ex));
+    });
+    return out;
+  }, [history, registerDate, selectedDay]);
 
   const openRegister = () => {
     if (typeof onRegisterPastExercise !== "function") return;
-    const firstDay = registerDays[0] || null;
-    setRegisterDayTitle(firstDay?.title || "");
-    setRegisterEntries(buildEntries(firstDay));
-    setRegisterSelected(buildSelected(firstDay));
+    setRegisterEntries(buildEntries(selectedDay));
+    setRegisterSelected(buildSelected(selectedDay));
     setRegisterSaved({});
     setRegisterMsg("");
     setShowRegister(true);
-  };
-
-  const onChangeDay = (title) => {
-    setRegisterDayTitle(title);
-    const day = registerDays.find((d) => d.title === title) || null;
-    setRegisterEntries(buildEntries(day));
-    setRegisterSelected(buildSelected(day));
-    setRegisterSaved({});
-    setRegisterMsg("");
   };
 
   const updateEntry = (key, patch) => {
@@ -162,6 +198,7 @@ export default function HistoryWeek({
   const onSaveExercise = (ex, idx) => {
     if (!selectedDay || typeof onRegisterPastExercise !== "function") return;
     const key = exerciseFormKey(ex, idx);
+    if (existingSavedByKey[key] || registerSaved[key]) return;
     const entry = registerEntries[key] || makeDefaultEntry(ex);
     const payload = {
       date: registerDate,
@@ -198,6 +235,7 @@ export default function HistoryWeek({
     list.forEach((ex, idx) => {
       const key = exerciseFormKey(ex, idx);
       if (!registerSelected[key]) return;
+      if (existingSavedByKey[key] || registerSaved[key]) return;
       const entry = registerEntries[key] || makeDefaultEntry(ex);
       const payload = {
         date: registerDate,
@@ -309,24 +347,26 @@ export default function HistoryWeek({
               />
             </label>
             <label>
-              Día del plan
-              <select
-                value={selectedDay?.title || ""}
-                onChange={(e) => onChangeDay(e.target.value)}
-              >
-                {registerDays.map((day) => (
-                  <option key={day.title} value={day.title}>
-                    {day.title}
-                  </option>
-                ))}
-              </select>
+              Día asociado
+              <input
+                type="text"
+                value={selectedDay?.title || "Descanso (sin día de plan)"}
+                readOnly
+              />
             </label>
           </div>
+
+          {!selectedDay && (
+            <p className="note">
+              La fecha seleccionada corresponde a descanso. Cambia la fecha para registrar ejercicios del plan.
+            </p>
+          )}
 
           <div className="history-register-list">
             {(selectedDay?.exercises || []).map((ex, idx) => {
               const key = exerciseFormKey(ex, idx);
               const entry = registerEntries[key] || makeDefaultEntry(ex);
+              const isSaved = Boolean(existingSavedByKey[key] || registerSaved[key]);
               const name =
                 lang === "en"
                   ? ex.name_en || ex.name || ex.name_es
@@ -408,10 +448,10 @@ export default function HistoryWeek({
                     <button
                       type="button"
                       className="tiny primary-btn"
-                      disabled={!registerSelected[key] || Boolean(registerSaved[key])}
+                      disabled={!registerSelected[key] || isSaved}
                       onClick={() => onSaveExercise(ex, idx)}
                     >
-                      {registerSaved[key] ? "Guardado" : "Guardar"}
+                      {isSaved ? "Guardado" : "Guardar"}
                     </button>
                   </div>
                 </div>

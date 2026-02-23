@@ -2,11 +2,18 @@ import { useState } from "react";
 
 export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, lang }) {
   const clamp = (min, max, v) => Math.max(min, Math.min(max, v));
+  const parseOptional = (value, min, max) => {
+    if (value === "" || value === null || value === undefined) return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return clamp(min, max, n);
+  };
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     weight: "",
     waist: "",
     hip: "",
+    neck: "",
     bodyFat: "",
     restHr: "",
     sleepHours: "",
@@ -22,18 +29,20 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
   const onSubmit = (e) => {
     e.preventDefault();
     if (!form.date) return;
-    const weight = clamp(20, 300, Number(form.weight || 0));
-    const waist = clamp(40, 200, Number(form.waist || 0));
-    const hip = clamp(40, 200, Number(form.hip || 0));
-    const bodyFat = clamp(2, 60, Number(form.bodyFat || 0));
-    const restHr = clamp(30, 200, Number(form.restHr || 0));
-    const sleepHours = clamp(0, 16, Number(form.sleepHours || 0));
-    const steps = clamp(0, 100000, Number(form.steps || 0));
+    const weight = parseOptional(form.weight, 20, 300);
+    const waist = parseOptional(form.waist, 40, 200);
+    const hip = parseOptional(form.hip, 40, 200);
+    const neck = parseOptional(form.neck, 20, 80);
+    const bodyFat = parseOptional(form.bodyFat, 2, 60);
+    const restHr = parseOptional(form.restHr, 30, 200);
+    const sleepHours = parseOptional(form.sleepHours, 0, 16);
+    const steps = parseOptional(form.steps, 0, 100000);
     onAddEntry({
       date: form.date,
       weight,
       waist,
       hip,
+      neck,
       bodyFat,
       restHr,
       sleepHours,
@@ -45,6 +54,7 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
       weight: "",
       waist: "",
       hip: "",
+      neck: "",
       bodyFat: "",
       restHr: "",
       sleepHours: "",
@@ -74,6 +84,10 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
         <label>
           {lang === "en" ? "Hip (cm)" : "Cadera (cm)"}
           <input type="number" min="40" max="200" name="hip" value={form.hip} onChange={onChange} />
+        </label>
+        <label>
+          {lang === "en" ? "Neck (cm)" : "Cuello (cm)"}
+          <input type="number" min="20" max="80" name="neck" value={form.neck} onChange={onChange} />
         </label>
         <label>
           {lang === "en" ? "Body fat (%)" : "% Grasa (BIA)"}
@@ -122,6 +136,7 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
               <span>{e.weight ? `${e.weight} kg` : "-"}</span>
               <span>{e.waist ? `${e.waist} cm` : "-"}</span>
               <span>{e.hip ? `${e.hip} cm` : "-"}</span>
+              <span>{e.neck ? `${e.neck} cm` : "-"}</span>
               <span>{e.bodyFat ? `${e.bodyFat}%` : "-"}</span>
               <span>{e.restHr ? `${e.restHr} bpm` : "-"}</span>
               <span>{e.sleepHours ? `${e.sleepHours} h` : "-"}</span>

@@ -1,5 +1,15 @@
 import LocalDbStatus from "./LocalDbStatus";
 import GifDbStatus from "./GifDbStatus";
+import { getLevelProgress } from "../utils/levelProgress";
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 export default function Sidebar({
   profiles,
@@ -15,6 +25,7 @@ export default function Sidebar({
   activeTab,
   onChangeTab,
   profile,
+  metrics,
   level,
   earnedXp,
   totalPossibleXp,
@@ -59,9 +70,10 @@ export default function Sidebar({
   highContrast,
   onToggleContrast,
 }) {
-  const progress = totalPossibleXp
-    ? Math.min(1, earnedXp / totalPossibleXp)
-    : 0;
+  const levelProgress = getLevelProgress(earnedXp);
+  const xpInLevel = levelProgress.xpInLevel;
+  const levelXpRequired = levelProgress.levelXpRequired;
+  const progress = levelProgress.progress;
 
   const lastMetric = metricsLog && metricsLog.length > 0 ? metricsLog[metricsLog.length - 1] : null;
   const prevMetric = metricsLog && metricsLog.length > 1 ? metricsLog[metricsLog.length - 2] : null;
@@ -83,8 +95,70 @@ export default function Sidebar({
     if (a < b) return "↓";
     return "→";
   };
+  const healthClass = (status) => {
+    if (status === "ok") return "ok";
+    if (status === "warn") return "warn";
+    if (status === "bad") return "bad";
+    return "neutral";
+  };
+  const trendClass = (key, invert = false) => {
+    if (!lastMetric || !prevMetric) return "neutral";
+    const a = Number(lastMetric[key] || 0);
+    const b = Number(prevMetric[key] || 0);
+    if (!a || !b) return "neutral";
+    if (a === b) return "neutral";
+    if (invert) return a < b ? "ok" : "bad";
+    return a > b ? "ok" : "bad";
+  };
+  const bmiValue = Number(metrics?.bmi || 0);
+  const whtrValue = Number(metrics?.whtr || 0);
+  const bodyFatValue = Number(metrics?.bodyFat || 0);
+  const restHrValue = Number(lastMetric?.restHr || 0);
+  const bmiStatus =
+    !bmiValue ? "neutral" : bmiValue < 18.5 ? "warn" : bmiValue < 25 ? "ok" : bmiValue < 30 ? "warn" : "bad";
+  const whtrStatus =
+    !whtrValue ? "neutral" : whtrValue < 0.5 ? "ok" : whtrValue < 0.6 ? "warn" : "bad";
+  const bfStatus =
+    !bodyFatValue
+      ? "neutral"
+      : bodyFatValue < 12
+      ? "warn"
+      : bodyFatValue <= 28
+      ? "ok"
+      : bodyFatValue <= 35
+      ? "warn"
+      : "bad";
+  const hrStatus =
+    !restHrValue
+      ? "neutral"
+      : restHrValue <= 60
+      ? "ok"
+      : restHrValue <= 75
+      ? "warn"
+      : "bad";
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
   const activeProfileName = activeProfile?.name || "—";
+  const weekStart = startOfWeek(new Date());
+  const dayDateFormatter = new Intl.DateTimeFormat(lang === "en" ? "en-US" : "es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+  const getPlanDateLabel = (index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    return dayDateFormatter.format(date);
+  };
+  const getPlanDayType = (index) => {
+    const slot = Array.isArray(plan?.weekSchedule) ? plan.weekSchedule[index] : null;
+    if (!slot) return "extra";
+    return slot.type === "rest" ? "rest" : "train";
+  };
+  const getPlanDayTypeLabel = (index) => {
+    const type = getPlanDayType(index);
+    if (type === "rest") return "Descanso";
+    if (type === "train") return "Entreno";
+    return "Extra";
+  };
 
   return (
     <aside className="sidebar">
@@ -111,62 +185,29 @@ export default function Sidebar({
           >
             Historial
           </button>
-        </div>
-      </div>
-
-      <div className="sidebar-section">
-        <h3>Perfil activo</h3>
-        <strong>{activeProfileName}</strong>
-      </div>
-
-      <details className="sidebar-section sidebar-collapsible">
-        <summary>Opciones de perfil</summary>
-        <div className="profile-list">
-          {profiles.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`profile-item ${p.id === activeProfileId ? "active" : ""}`}
-              onClick={() => onSwitchProfile(p.id)}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-        <div className="profile-new">
-          <input
-            placeholder="Nuevo perfil"
-            value={newProfileName}
-            onChange={(e) => onChangeNewProfileName(e.target.value)}
-          />
-          <button type="button" className="tiny" onClick={onAddProfile}>
-            Crear
+          <button
+            type="button"
+            className={`tab ${activeTab === "stats" ? "active" : ""}`}
+            onClick={() => onChangeTab("stats")}
+          >
+            Stats
           </button>
         </div>
-        <div className="profile-actions">
-          <input
-            placeholder="Renombrar perfil"
-            value={renameProfileName}
-            onChange={(e) => onChangeRenameProfileName(e.target.value)}
-          />
-          <div className="profile-action-buttons">
-            <button type="button" className="tiny" onClick={onRenameProfile}>
-              Renombrar
-            </button>
-            <button type="button" className="tiny danger" onClick={onDeleteProfile}>
-              Eliminar
-            </button>
-          </div>
-        </div>
-      </details>
+      </div>
+
+      <div className="sidebar-section active-profile-section">
+        <span className="active-profile-label">Perfil activo</span>
+        <strong className="active-profile-name">{activeProfileName}</strong>
+      </div>
 
       <div className="sidebar-section">
         <h3>Estado actual</h3>
         <div className="sidebar-progress">
           <strong>Nivel {level}</strong>
           <span>
-            XP: {earnedXp} / {totalPossibleXp}
+            XP nivel: {xpInLevel} / {levelXpRequired}
           </span>
+          <span>XP total: {earnedXp}</span>
           <div className="xp-bar">
             <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
           </div>
@@ -298,11 +339,46 @@ export default function Sidebar({
                   onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
                 >
                   <strong>{d.title}</strong>
+                  <span>{getPlanDateLabel(index)}</span>
+                  <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
+                    {getPlanDayTypeLabel(index)}
+                  </span>
                   <span>{d.exercises.length} ejercicios</span>
                 </button>
               </li>
             )) || <li>Sin plan</li>}
           </ul>
+        </div>
+      )}
+
+      {activeTab === "stats" && (
+        <div className="sidebar-section">
+          <h3>Estadísticas</h3>
+          <div className="sidebar-metric-cards">
+            <div className={`sidebar-metric-card ${healthClass(bmiStatus)}`}>
+              <span>IMC</span>
+              <strong>{bmiValue ? bmiValue.toFixed(1) : "—"}</strong>
+              <em className={`trend ${trendClass("bmi", true)}`}>{trend("bmi")}</em>
+            </div>
+            <div className={`sidebar-metric-card ${healthClass(whtrStatus)}`}>
+              <span>WHtR</span>
+              <strong>{whtrValue ? whtrValue.toFixed(2) : "—"}</strong>
+              <em className={`trend ${trendClass("whtr", true)}`}>{trend("whtr")}</em>
+            </div>
+            <div className={`sidebar-metric-card ${healthClass(bfStatus)}`}>
+              <span>% Grasa</span>
+              <strong>{bodyFatValue ? `${bodyFatValue.toFixed(1)}%` : "—"}</strong>
+              <em className={`trend ${trendClass("bodyFat", true)}`}>{trend("bodyFat")}</em>
+            </div>
+            <div className={`sidebar-metric-card ${healthClass(hrStatus)}`}>
+              <span>FC reposo</span>
+              <strong>{restHrValue || "—"} bpm</strong>
+              <em className={`trend ${trendClass("restHr", true)}`}>{trend("restHr")}</em>
+            </div>
+          </div>
+          <p className="note">
+            Verde: bien, ámbar: revisar, rojo: prioridad de mejora.
+          </p>
         </div>
       )}
 
@@ -364,6 +440,47 @@ export default function Sidebar({
             {syncStatus && <span className="note">{syncStatus}</span>}
           </div>
         )}
+      </details>
+
+      <details className="sidebar-section sidebar-collapsible">
+        <summary>Opciones de perfil</summary>
+        <div className="profile-list">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`profile-item ${p.id === activeProfileId ? "active" : ""}`}
+              onClick={() => onSwitchProfile(p.id)}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+        <div className="profile-new">
+          <input
+            placeholder="Nuevo perfil"
+            value={newProfileName}
+            onChange={(e) => onChangeNewProfileName(e.target.value)}
+          />
+          <button type="button" className="tiny" onClick={onAddProfile}>
+            Crear
+          </button>
+        </div>
+        <div className="profile-actions">
+          <input
+            placeholder="Renombrar perfil"
+            value={renameProfileName}
+            onChange={(e) => onChangeRenameProfileName(e.target.value)}
+          />
+          <div className="profile-action-buttons">
+            <button type="button" className="tiny" onClick={onRenameProfile}>
+              Renombrar
+            </button>
+            <button type="button" className="tiny danger" onClick={onDeleteProfile}>
+              Eliminar
+            </button>
+          </div>
+        </div>
       </details>
 
       {(dbStatus || gifStatus) && (

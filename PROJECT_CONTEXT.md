@@ -133,7 +133,7 @@
 - Versionado visible en cabecera de `Plan`:
   - bajo `Tu plan inicial` se muestra `Version X.Y.Z`,
   - versión inyectada desde `package.json` vía `vite.config.js` (`import.meta.env.VITE_APP_VERSION`).
-- Versión actual de app definida en `package.json`: `0.9.0`.
+- Versión actual de app definida en `package.json`: `0.9.1`.
 - Consistencia de versión local/prod:
   - `vite.config.js` ahora resuelve `VITE_APP_VERSION` con fallback a `package.json` (evita mostrar `0.0.0` en local cuando no viene `npm_package_version`).
 - Selector de equipo del día refinado:

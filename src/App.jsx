@@ -204,31 +204,35 @@ function computeTrainingStreak(history) {
   );
   if (trainedDates.size === 0) return 0;
 
-  const cursor = new Date();
+  const toDateKey = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  const parseKey = (key) => {
+    const [y, m, d] = String(key).split("-").map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = toDateKey(yesterday);
+
+  let anchorKey = "";
+  if (trainedDates.has(todayKey)) anchorKey = todayKey;
+  else if (trainedDates.has(yesterdayKey)) anchorKey = yesterdayKey;
+  else {
+    const latest = Array.from(trainedDates).sort().pop();
+    anchorKey = latest || "";
+  }
+  if (!anchorKey) return 0;
+
+  let cursor = parseKey(anchorKey);
   let streak = 0;
-  for (;;) {
-    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(cursor.getDate()).padStart(2, "0")}`;
-    if (trainedDates.has(key)) {
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-      continue;
-    }
-    if (streak === 0) {
-      cursor.setDate(cursor.getDate() - 1);
-      const prevKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(
-        2,
-        "0"
-      )}-${String(cursor.getDate()).padStart(2, "0")}`;
-      if (trainedDates.has(prevKey)) {
-        streak = 1;
-        cursor.setDate(cursor.getDate() - 1);
-        continue;
-      }
-    }
-    break;
+  while (trainedDates.has(toDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
 }
@@ -288,6 +292,43 @@ function countHistoryXpExcludingPlanCompleted(history, completedSet) {
       }, 0)
     );
   }, 0);
+}
+
+function countPlanCompletionsFromHistory(plan, history) {
+  if (!plan?.days?.length) return 0;
+  const normalizeName = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  const planNameCount = new Map();
+  (plan.days || []).forEach((d) => {
+    (d.exercises || []).forEach((ex) => {
+      const name = normalizeName(ex.name || ex.name_es || ex.name_en || "");
+      if (!name) return;
+      planNameCount.set(name, (planNameCount.get(name) || 0) + 1);
+    });
+  });
+  if (!planNameCount.size) return 0;
+
+  const historyNameCount = new Map();
+  Object.values(history || {}).forEach((day) => {
+    const items = Array.isArray(day?.items) ? day.items : [];
+    items.forEach((it) => {
+      if (it?.type === "replace") return;
+      const name = normalizeName(it?.name || it?.name_es || it?.name_en || "");
+      if (!name) return;
+      historyNameCount.set(name, (historyNameCount.get(name) || 0) + 1);
+    });
+  });
+
+  let completed = 0;
+  planNameCount.forEach((planCount, name) => {
+    const doneCount = historyNameCount.get(name) || 0;
+    completed += Math.min(planCount, doneCount);
+  });
+  return completed;
 }
 
 function computeProgressScore({ progress, history, metricsLog }) {
@@ -638,6 +679,14 @@ export default function App() {
         );
       }, 0)
     : 0;
+  const completedCountFromHistory = useMemo(
+    () => countPlanCompletionsFromHistory(plan, history),
+    [plan, history]
+  );
+  const completedCountForSidebar = Math.min(
+    totalExercises,
+    Math.max(completedCount, completedCountFromHistory)
+  );
 
   const equipmentGroups = useMemo(() => {
     const poolFromPlanDays = Array.isArray(plan?.days)
@@ -2940,7 +2989,7 @@ export default function App() {
         earnedXp={earnedXpTotal}
         totalPossibleXp={totalPossibleXp}
         plan={plan}
-        completedCount={completedCount}
+        completedCount={completedCountForSidebar}
         totalExercises={totalExercises}
         trainedDaysTotal={trainedDaysTotal}
         trainedDaysThisMonth={trainedDaysThisMonth}
@@ -3100,7 +3149,7 @@ export default function App() {
                 onToggleQuiet={onToggleQuiet}
                 onChangeDayEquipment={onChangeDayEquipment}
                 onSelectExercise={onSelectExercise}
-                completedMap={completed}
+              completedMap={completed}
                 getExerciseKey={getExerciseKey}
                 getExerciseXp={getExerciseXp}
                 earnedXp={earnedXpTotal}
@@ -3538,7 +3587,7 @@ export default function App() {
               earnedXp={earnedXpTotal}
               totalPossibleXp={totalPossibleXp}
               plan={plan}
-              completedCount={completedCount}
+              completedCount={completedCountForSidebar}
               totalExercises={totalExercises}
               trainedDaysTotal={trainedDaysTotal}
               trainedDaysThisMonth={trainedDaysThisMonth}

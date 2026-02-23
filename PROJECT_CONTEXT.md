@@ -133,9 +133,17 @@
 - Versionado visible en cabecera de `Plan`:
   - bajo `Tu plan inicial` se muestra `Version X.Y.Z`,
   - versión inyectada desde `package.json` vía `vite.config.js` (`import.meta.env.VITE_APP_VERSION`).
+- Identificación por commit para validar despliegues:
+  - se agregó `import.meta.env.VITE_APP_BUILD` (hash corto de commit) en `vite.config.js`,
+  - cabecera de `Plan` ahora muestra `Version X.Y.Z · build abc1234`.
 - Versión actual de app definida en `package.json`: `0.9.1`.
 - Consistencia de versión local/prod:
   - `vite.config.js` ahora resuelve `VITE_APP_VERSION` con fallback a `package.json` (evita mostrar `0.0.0` en local cuando no viene `npm_package_version`).
+- Service Worker en local:
+  - registro de SW limitado a producción (`import.meta.env.PROD`) para evitar cache viejo en `localhost`.
+- Coherencia de métricas en sidebar:
+  - `Racha actual` ahora toma racha consecutiva desde último día entrenado (no cae a `0` solo por no entrenar hoy),
+  - `Ejercicios X/Y` cruza historial vs plan por nombre normalizado para reflejar mejor ejercicios ya registrados.
 - Selector de equipo del día refinado:
   - se removió el selector manual de “equipo del día” y se consolidó en `¿Tienes equipo?` + checklist.
   - `Modo silencioso` se movió al encabezado del día para mejorar jerarquía visual.

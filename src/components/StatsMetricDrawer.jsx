@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+
+const AUTO_COMPARE_VALUE = "__auto__";
+const CHART_WINDOW_SIZE = 30;
 
 const METRIC_META = {
   weight: {
@@ -216,20 +219,39 @@ function absCorrelation(pairs) {
   return Math.abs(num / den);
 }
 
-function buildLinePoints(series, width = 380, height = 180, pad = 14) {
-  if (!series.length) return "";
+function getScaleBounds(series) {
+  if (!Array.isArray(series) || !series.length) return { min: 0, max: 1, range: 1 };
   const values = series.map((s) => s.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = Math.max(1, max - min);
+  return { min, max, range };
+}
+
+function buildLinePoints(series, bounds, width = 380, height = 180, pad = 14) {
+  if (!series.length) return { polyline: "", dots: [] };
+  const { min, range } = bounds;
   const stepX = series.length > 1 ? (width - pad * 2) / (series.length - 1) : 0;
-  return series
-    .map((s, idx) => {
-      const x = pad + idx * stepX;
-      const y = height - pad - ((s.value - min) / range) * (height - pad * 2);
-      return `${x},${Math.round(y * 10) / 10}`;
-    })
-    .join(" ");
+  const dots = series.map((s, idx) => {
+    const x = pad + idx * stepX;
+    const y = height - pad - ((s.value - min) / range) * (height - pad * 2);
+    return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, date: s.date, value: s.value };
+  });
+  return { polyline: dots.map((p) => `${p.x},${p.y}`).join(" "), dots };
+}
+
+function seriesStats(series) {
+  if (!Array.isArray(series) || !series.length) return null;
+  const values = series.map((s) => s.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+  return {
+    min: Math.round(min * 10) / 10,
+    max: Math.round(max * 10) / 10,
+    avg: Math.round(avg * 10) / 10,
+    last: Math.round(values[values.length - 1] * 10) / 10,
+  };
 }
 
 function formatValue(value, unit = "") {
@@ -426,7 +448,98 @@ function medicalMessage(metricKey, current, latestRow, delta = 0) {
     return "Tu volumen de pasos es alto y favorable para salud cardiometabólica y control de peso.";
   }
 
-  return "";
+  if (metricKey === "hip") {
+    return "La cadera por sí sola se interpreta junto a cintura y peso. Úsala para vigilar distribución de grasa y tendencia de composición corporal.";
+  }
+
+  if (metricKey === "bodyFat") {
+    if (current >= 35) return "El porcentaje de grasa corporal es alto; esto suele asociarse a mayor riesgo metabólico y menor eficiencia funcional.";
+    if (current >= 25) return "El porcentaje de grasa corporal está por encima de un rango atlético/saludable y conviene reducirlo de forma progresiva.";
+    if (current < 10) return "El porcentaje de grasa corporal es bajo; conviene vigilar energía disponible, recuperación y estado hormonal.";
+    return "El porcentaje de grasa corporal está en un rango funcional favorable.";
+  }
+
+  if (metricKey === "whr") {
+    if (current >= 1) return "La relación cintura/cadera es alta y sugiere mayor adiposidad central, asociada a mayor riesgo cardiometabólico.";
+    if (current >= 0.9) return "La relación cintura/cadera está en rango intermedio-alto; conviene priorizar reducción de cintura.";
+    return "La relación cintura/cadera es favorable.";
+  }
+
+  if (metricKey === "leanMass") {
+    if (delta < 0) return "La masa magra va a la baja; si se mantiene, puede afectar fuerza, metabolismo y salud músculo-esquelética.";
+    if (delta > 0) return "La masa magra muestra mejora, señal favorable para rendimiento y salud metabólica.";
+    return "La masa magra se mantiene estable.";
+  }
+
+  if (metricKey === "ffmi") {
+    if (current < 17) return "El FFMI sugiere baja reserva muscular relativa; conviene priorizar fuerza y proteína adecuada.";
+    if (current > 23) return "FFMI alto; útil para rendimiento si se sostiene con buena recuperación y salud articular.";
+    return "FFMI en rango funcional, con buena base para progresar.";
+  }
+
+  if (metricKey === "sleepStress") {
+    if (current >= 35) return "El estrés durante el sueño es alto y suele reducir la calidad real de recuperación nocturna.";
+    if (current >= 20) return "El estrés nocturno está en rango medio; puede limitar la recuperación si se acumula.";
+    return "El estrés durante el sueño está en rango favorable para recuperar.";
+  }
+
+  if (metricKey === "spo2") {
+    if (current < 92) return "SpO2 baja para reposo. Si se repite con síntomas (fatiga marcada, disnea, cefalea), requiere evaluación médica.";
+    if (current < 95) return "SpO2 ligeramente baja; conviene vigilar tendencia, sueño y posibles factores respiratorios.";
+    return "SpO2 en rango favorable para oxigenación en reposo.";
+  }
+
+  if (metricKey === "respiration") {
+    if (current > 18) return "La frecuencia respiratoria está elevada; puede indicar estrés fisiológico, mala recuperación o carga alta.";
+    if (current < 10) return "Frecuencia respiratoria baja; interpreta junto a síntomas y contexto de entrenamiento.";
+    return "Frecuencia respiratoria en rango habitual de reposo.";
+  }
+
+  if (metricKey === "loadRatio") {
+    if (current > 1.5) return "La relación de carga está alta; aumenta riesgo de fatiga y de lesión por incremento brusco.";
+    if (current < 0.8) return "La relación de carga está baja; útil en descarga, pero sostenida puede reducir adaptación.";
+    return "La relación de carga está en zona razonable para progresar con menor riesgo.";
+  }
+
+  if (metricKey === "acuteLoad") {
+    if (delta > 0) return "La carga aguda viene subiendo; si el aumento es continuo sin recuperación suficiente, sube el riesgo de sobrecarga.";
+    return "La carga aguda está estable o bajando, lo que favorece consolidar recuperación.";
+  }
+
+  if (metricKey === "chronicLoad") {
+    if (current < 100) return "La carga crónica es baja; puede limitar tolerancia futura a sesiones más exigentes.";
+    return "La carga crónica aporta base de tolerancia; lo clave es aumentar de forma gradual y sostenida.";
+  }
+
+  if (metricKey === "activeKcal") {
+    if (current < 250) return "El gasto activo diario es bajo; mantenerlo bajo reduce estímulo cardiometabólico total.";
+    if (current < 600) return "El gasto activo es moderado y funcional para salud general.";
+    return "El gasto activo es alto; vigila recuperación e ingesta acorde para sostener rendimiento.";
+  }
+
+  if (metricKey === "totalKcal") {
+    return "El gasto total diario se interpreta junto a peso y actividad: si hay desbalance sostenido entre ingesta y gasto, impacta composición corporal y recuperación.";
+  }
+
+  if (metricKey === "distanceKm") {
+    if (current < 4) return "La distancia diaria es baja; aumentar volumen aeróbico suave suele mejorar salud cardiovascular.";
+    if (current < 8) return "La distancia diaria es moderada y útil para salud general.";
+    return "La distancia diaria es alta; combina con recuperación para evitar sobreuso.";
+  }
+
+  if (metricKey === "activeMinutes") {
+    if (current < 30) return "Minutos activos bajos para el día; subirlos mejora control metabólico y capacidad funcional.";
+    if (current < 60) return "Minutos activos en rango aceptable; más consistencia semanal mejora resultados.";
+    return "Buen volumen de minutos activos para salud cardiovascular y control de peso.";
+  }
+
+  if (metricKey === "vo2max") {
+    if (current < 35) return "VO2 max bajo para rendimiento aeróbico; hay margen amplio de mejora con trabajo progresivo.";
+    if (current < 45) return "VO2 max intermedio; buen punto para seguir mejorando capacidad aeróbica.";
+    return "VO2 max favorable para capacidad cardiorrespiratoria.";
+  }
+
+  return "Impacto clínico moderado: usa la tendencia de esta métrica junto a sueño, FC reposo y carga para ajustar riesgo y recuperación.";
 }
 
 function coachMessage(metricKey, current, delta = 0) {
@@ -453,7 +566,32 @@ function coachMessage(metricKey, current, delta = 0) {
   if (metricKey === "steps") {
     return "Coach: sube progresivamente tu NEAT (pasos). Sumar bloques cortos caminando durante el día suele ser la vía más sostenible.";
   }
-  return "Coach: usa esta métrica para decidir intensidad diaria y mantener consistencia sin sobrecarga.";
+  if (metricKey === "hip" || metricKey === "whr") {
+    return "Coach: céntrate en bajar cintura más que peso rápido. Fuerza + pasos + adherencia nutricional te darán mejor cambio corporal.";
+  }
+  if (metricKey === "bodyFat") {
+    return "Coach: objetivo práctico, bajar grasa sin perder músculo. Mantén proteína alta, fuerza 3-4 días y déficit moderado.";
+  }
+  if (metricKey === "leanMass" || metricKey === "ffmi") {
+    return "Coach: prioriza progresión de fuerza, proteína diaria y sueño. Eso protege y mejora tu masa magra.";
+  }
+  if (metricKey === "sleepStress" || metricKey === "stress") {
+    return "Coach: hoy suma recuperación activa: respiración, caminata suave y baja estímulos tarde-noche para dormir mejor.";
+  }
+  if (metricKey === "spo2" || metricKey === "respiration") {
+    return "Coach: mantén trabajo aeróbico base (zona 2) y calidad de sueño; evita picos intensos si te notas fatigado.";
+  }
+  if (metricKey === "loadRatio" || metricKey === "acuteLoad" || metricKey === "chronicLoad") {
+    if (delta > 0) return "Coach: la carga sube; progresa en pasos pequeños y planifica descarga antes de acumular fatiga.";
+    return "Coach: buena fase para consolidar técnica y constancia antes de volver a subir carga.";
+  }
+  if (metricKey === "activeKcal" || metricKey === "totalKcal" || metricKey === "distanceKm" || metricKey === "activeMinutes") {
+    return "Coach: usa esta métrica para asegurar movimiento diario real. Lo clave es consistencia semanal, no un solo día alto.";
+  }
+  if (metricKey === "vo2max") {
+    return "Coach: para subir VO2 max combina base aeróbica constante con 1-2 sesiones de intervalos bien dosificados por semana.";
+  }
+  return "Coach: ajusta intensidad y volumen según tendencia, manteniendo progresión sostenible y recuperación suficiente.";
 }
 
 export default function StatsMetricDrawer({
@@ -464,6 +602,7 @@ export default function StatsMetricDrawer({
   onChangeCompareKey,
   metricsLog,
 }) {
+  const [activeTooltip, setActiveTooltip] = useState(null);
   const meta = METRIC_META[metricKey] || { label: metricKey || "Métrica", unit: "", related: [] };
   const primary = useMemo(() => getSeries(metricsLog, metricKey), [metricsLog, metricKey]);
 
@@ -490,12 +629,31 @@ export default function StatsMetricDrawer({
     return best;
   }, [primary, compareOptions, metricsLog]);
 
-  const effectiveCompareKey = compareKey || recommendedCompareKey || "";
+  const effectiveCompareKey =
+    compareKey === AUTO_COMPARE_VALUE ? recommendedCompareKey || "" : compareKey || "";
   const compare = useMemo(
     () => getSeries(metricsLog, effectiveCompareKey),
     [metricsLog, effectiveCompareKey]
   );
   const compareMeta = METRIC_META[effectiveCompareKey] || null;
+  const chartPrimary = useMemo(() => primary.slice(-CHART_WINDOW_SIZE), [primary]);
+  const chartCompare = useMemo(() => {
+    if (!effectiveCompareKey) return [];
+    const dateSet = new Set(chartPrimary.map((p) => p.date));
+    return compare.filter((p) => dateSet.has(p.date)).slice(-CHART_WINDOW_SIZE);
+  }, [compare, chartPrimary, effectiveCompareKey]);
+  const chartPrimaryBounds = useMemo(() => getScaleBounds(chartPrimary), [chartPrimary]);
+  const chartCompareBounds = useMemo(() => getScaleBounds(chartCompare), [chartCompare]);
+  const primaryPlot = useMemo(
+    () => buildLinePoints(chartPrimary, chartPrimaryBounds),
+    [chartPrimary, chartPrimaryBounds]
+  );
+  const comparePlot = useMemo(
+    () => buildLinePoints(chartCompare, chartCompareBounds),
+    [chartCompare, chartCompareBounds]
+  );
+  const primaryStats = useMemo(() => seriesStats(chartPrimary), [chartPrimary]);
+  const compareStats = useMemo(() => seriesStats(chartCompare), [chartCompare]);
 
   const primaryCurrent = primary.length ? primary[primary.length - 1].value : 0;
   const primaryPrev = primary.length > 1 ? primary[primary.length - 2].value : 0;
@@ -559,10 +717,11 @@ export default function StatsMetricDrawer({
               value={compareKey || ""}
               onChange={(e) => onChangeCompareKey(e.target.value)}
             >
-              <option value="">
+              <option value="">Ninguna</option>
+              <option value={AUTO_COMPARE_VALUE}>
                 {recommendedCompareKey
                   ? `Auto (recomendado: ${METRIC_META[recommendedCompareKey]?.label || recommendedCompareKey})`
-                  : "Auto"}
+                  : "Auto (sin recomendación)"}
               </option>
               {compareOptions.map((key) => (
                 <option key={key} value={key}>
@@ -589,23 +748,141 @@ export default function StatsMetricDrawer({
         </div>
 
         <div className="stats-drawer-chart">
-          {primary.length < 2 ? (
+          {chartPrimary.length < 2 ? (
             <p className="note">No hay suficientes datos para graficar esta métrica.</p>
           ) : (
             <svg viewBox="0 0 380 180" role="img" aria-label={`Tendencia ${meta.label}`}>
-              <polyline points={buildLinePoints(primary)} className="stats-line-primary" />
-              {compare.length >= 2 && (
-                <polyline points={buildLinePoints(compare)} className="stats-line-compare" />
+              {[0, 1, 2, 3, 4].map((idx) => (
+                <line
+                  key={`grid-${idx}`}
+                  x1="14"
+                  y1={14 + idx * 38}
+                  x2="366"
+                  y2={14 + idx * 38}
+                  className="stats-line-grid"
+                />
+              ))}
+              <polyline points={primaryPlot.polyline} className="stats-line-primary" />
+              {primaryPlot.dots.map((p) => (
+                <circle
+                  key={`p-${p.date}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r="2.8"
+                  className="stats-dot-primary"
+                  onMouseEnter={() =>
+                    setActiveTooltip({
+                      x: p.x,
+                      y: p.y,
+                      date: p.date,
+                      label: meta.label,
+                      value: formatValue(p.value, meta.unit),
+                    })
+                  }
+                  onFocus={() =>
+                    setActiveTooltip({
+                      x: p.x,
+                      y: p.y,
+                      date: p.date,
+                      label: meta.label,
+                      value: formatValue(p.value, meta.unit),
+                    })
+                  }
+                  onMouseLeave={() => setActiveTooltip(null)}
+                  onBlur={() => setActiveTooltip(null)}
+                >
+                  <title>
+                    {p.date} · {meta.label}: {formatValue(p.value, meta.unit)}
+                  </title>
+                </circle>
+              ))}
+              {chartCompare.length >= 2 && (
+                <>
+                  <polyline points={comparePlot.polyline} className="stats-line-compare" />
+                  {comparePlot.dots.map((p) => (
+                    <circle
+                      key={`c-${p.date}`}
+                      cx={p.x}
+                      cy={p.y}
+                      r="2.5"
+                      className="stats-dot-compare"
+                      onMouseEnter={() =>
+                        setActiveTooltip({
+                          x: p.x,
+                          y: p.y,
+                          date: p.date,
+                          label: compareMeta?.label || effectiveCompareKey,
+                          value: formatValue(p.value, compareMeta?.unit || ""),
+                        })
+                      }
+                      onFocus={() =>
+                        setActiveTooltip({
+                          x: p.x,
+                          y: p.y,
+                          date: p.date,
+                          label: compareMeta?.label || effectiveCompareKey,
+                          value: formatValue(p.value, compareMeta?.unit || ""),
+                        })
+                      }
+                      onMouseLeave={() => setActiveTooltip(null)}
+                      onBlur={() => setActiveTooltip(null)}
+                    >
+                      <title>
+                        {p.date} · {compareMeta?.label || effectiveCompareKey}:{" "}
+                        {formatValue(p.value, compareMeta?.unit || "")}
+                      </title>
+                    </circle>
+                  ))}
+                </>
+              )}
+              {activeTooltip && (
+                <g
+                  transform={`translate(${Math.max(
+                    14,
+                    Math.min(246, activeTooltip.x + 10)
+                  )},${Math.max(16, activeTooltip.y - 46)})`}
+                  className="stats-tooltip"
+                >
+                  <rect width="120" height="40" rx="6" ry="6" />
+                  <text x="8" y="15" className="stats-tooltip-date">
+                    {activeTooltip.date}
+                  </text>
+                  <text x="8" y="30" className="stats-tooltip-value">
+                    {activeTooltip.label}: {activeTooltip.value}
+                  </text>
+                </g>
               )}
             </svg>
           )}
           <div className="stats-drawer-legend">
             <span className="primary-dot">{meta.label}</span>
-            {compare.length >= 2 && (
+            {chartCompare.length >= 2 && (
               <span className="compare-dot">{compareMeta?.label || effectiveCompareKey}</span>
             )}
           </div>
-          <p className="note">El gráfico compara tendencia normalizada por métrica.</p>
+          <div className="stats-chart-meta">
+            <span>
+              Ventana: últimos {chartPrimary.length} registros ({chartPrimary[0]?.date || "—"} a{" "}
+              {chartPrimary[chartPrimary.length - 1]?.date || "—"}).
+            </span>
+            {primaryStats && (
+              <span>
+                {meta.label}: min {formatValue(primaryStats.min, meta.unit)} · prom{" "}
+                {formatValue(primaryStats.avg, meta.unit)} · max {formatValue(primaryStats.max, meta.unit)}
+              </span>
+            )}
+            {compareStats && compareMeta && (
+              <span>
+                {compareMeta.label}: min {formatValue(compareStats.min, compareMeta.unit || "")} · prom{" "}
+                {formatValue(compareStats.avg, compareMeta.unit || "")} · max{" "}
+                {formatValue(compareStats.max, compareMeta.unit || "")}
+              </span>
+            )}
+          </div>
+          <p className="note">
+            Escala visual por serie (cada línea se normaliza para ver tendencia), con valores reales
+            resumidos arriba.
+          </p>
         </div>
 
         <div className="stats-drawer-insight">

@@ -105,6 +105,7 @@ export default function HistoryWeek({
   const [registerSelected, setRegisterSelected] = useState({});
   const [registerSaved, setRegisterSaved] = useState({});
   const [registerMsg, setRegisterMsg] = useState("");
+  const [expandedDayKey, setExpandedDayKey] = useState("");
 
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() + offset * 7);
@@ -126,6 +127,12 @@ export default function HistoryWeek({
 
   const weekXp = days.reduce((sum, d) => sum + (d.xp || 0), 0);
   const weekMinutes = days.reduce((sum, d) => sum + (d.minutes || 0), 0);
+  const weekSessions = days.filter((d) => d.items.length > 0).length;
+  const weekAvgXpPerSession = weekSessions ? Math.round(weekXp / weekSessions) : 0;
+  const weekExercises = days.reduce((sum, d) => sum + d.items.length, 0);
+  const bestDay = [...days].sort((a, b) => (a.xp < b.xp ? 1 : -1))[0];
+  const avgMinutesPerActiveDay = weekSessions ? Math.round(weekMinutes / weekSessions) : 0;
+  const adherence = Math.round((weekSessions / 7) * 100);
 
   const toWeekInput = (date) => {
     const year = date.getFullYear();
@@ -463,47 +470,92 @@ export default function HistoryWeek({
         </div>
       )}
 
-      <div className="history-summary">
+      <div className="history-summary history-summary-exec">
         <div>
           <span>XP semanal</span>
           <strong>{weekXp}</strong>
         </div>
         <div>
-          <span>Tiempo total</span>
+          <span>Consistencia</span>
+          <strong>{adherence}%</strong>
+        </div>
+        <div>
+          <span>Día más fuerte</span>
+          <strong>{bestDay?.xp ? `${formatDayLabel(bestDay.date)} (${bestDay.xp} XP)` : "—"}</strong>
+        </div>
+        <div>
+          <span>Carga semanal</span>
           <strong>{weekMinutes} min</strong>
         </div>
+        <div>
+          <span>Ejercicios registrados</span>
+          <strong>{weekExercises}</strong>
+        </div>
+        <div>
+          <span>Promedio por sesión</span>
+          <strong>
+            {weekAvgXpPerSession} XP · {avgMinutesPerActiveDay} min
+          </strong>
+        </div>
       </div>
-      <div className="history-grid">
-        {days.map((d) => (
-          <div className="history-day" key={d.key}>
-            <div className="history-head">
-              <strong>{formatDayLabel(d.date)}</strong>
-              <span>{d.items.length} ejercicios</span>
+      <p className="history-insight">
+        {weekSessions < 3
+          ? "Semana con baja frecuencia. Prioriza sumar días de cumplimiento antes de subir intensidad."
+          : weekSessions < 5
+            ? "Semana intermedia. Buen punto para mejorar constancia y cerrar más sesiones completas."
+            : "Semana sólida de adherencia. Mantén consistencia y gestiona recuperación para sostener progreso."}
+      </p>
+      <div className="history-day-list">
+        {days.map((d) => {
+          const isOpen = expandedDayKey === d.key;
+          return (
+            <div className={`history-day-row ${d.items.length ? "has-data" : "is-empty"}`} key={d.key}>
+              <button
+                type="button"
+                className="history-day-row-head"
+                onClick={() => setExpandedDayKey((prev) => (prev === d.key ? "" : d.key))}
+              >
+                <div className="history-day-row-date">
+                  <strong>{formatDayLabel(d.date)}</strong>
+                  <small>{d.key}</small>
+                </div>
+                <div className="history-day-row-metrics">
+                  <span className="history-pill">{d.items.length} ej</span>
+                  <span className="history-pill">XP {d.xp || 0}</span>
+                  <span className="history-pill">{d.minutes || 0} min</span>
+                </div>
+                <span className="history-row-toggle">{isOpen ? "Ocultar" : "Ver"}</span>
+              </button>
+              {isOpen && (
+                <div className="history-day-row-body">
+                  {d.items.length === 0 ? (
+                    <p className="note">Sin registro</p>
+                  ) : (
+                    <ul className="history-list">
+                      {d.items.map((item) => (
+                        <li key={item.key} className="history-item">
+                          <div className="history-item-top">
+                            <strong>
+                              {lang === "en"
+                                ? item.name_en || item.name || item.name_es
+                                : item.name_es || item.name || item.name_en}
+                            </strong>
+                            <span className="history-item-xp">+{item.xp || 0} XP</span>
+                          </div>
+                          {item.type === "replace" && <span>Motivo: {item.reason}</span>}
+                          {item.type === "reps" && (
+                            <span>{item.repsBySet?.join(" / ") || "—"} reps</span>
+                          )}
+                          {item.type === "time" && <span>{item.workSec || 0}s</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="history-day-meta">
-              <span>XP: {d.xp || 0}</span>
-              <span>{d.minutes || 0} min</span>
-            </div>
-            {d.items.length === 0 ? (
-              <p className="note">Sin registro</p>
-            ) : (
-              <ul className="history-list">
-                {d.items.map((item) => (
-                  <li key={item.key}>
-                    <strong>
-                      {lang === "en"
-                        ? item.name_en || item.name || item.name_es
-                        : item.name_es || item.name || item.name_en}
-                    </strong>
-                    {item.type === "replace" && <span>Motivo: {item.reason}</span>}
-                    {item.type === "reps" && <span>{item.repsBySet?.join(" / ")} reps</span>}
-                    {item.type === "time" && <span>{item.workSec}s</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

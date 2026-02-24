@@ -726,7 +726,7 @@ export default function App() {
   const [statsDrawer, setStatsDrawer] = useState({
     open: false,
     metricKey: "weight",
-    compareKey: "waist",
+    compareKey: "",
   });
   const [highContrast, setHighContrast] = useState(() => {
     return localStorage.getItem("fit_high_contrast") === "1";
@@ -792,15 +792,15 @@ export default function App() {
     if (a < b) return "↓";
     return "→";
   };
-  const openStatsMetric = (metricKey, compareKey = "") => {
+  const openStatsMetric = (metricKey) => {
     if (!metricKey) return;
     setStatsDrawer({
       open: true,
       metricKey,
-      compareKey: compareKey || "",
+      compareKey: "",
     });
   };
-  const renderStatsCard = (label, value, metricKey, compareKey = "") => {
+  const renderStatsCard = (label, value, metricKey) => {
     if (!metricKey) {
       return (
         <div className="stats-metric-static" key={`${label}-static`}>
@@ -814,7 +814,7 @@ export default function App() {
         key={`${label}-${metricKey}`}
         type="button"
         className="stats-metric-btn"
-        onClick={() => openStatsMetric(metricKey, compareKey)}
+        onClick={() => openStatsMetric(metricKey)}
       >
         <span>{label}</span>
         <strong>{value}</strong>
@@ -3531,24 +3531,15 @@ export default function App() {
               )}
               {renderCollapsible(
                 "Resumen semanal",
-                <WeeklyCharts history={history} lang={lang} goals={form} />,
-                false
-              )}
-              {renderCollapsible(
-                "Tendencia de métricas",
-                <MetricsCharts metricsLog={metricsLog} lang={lang} />,
-                false
-              )}
-              {renderCollapsible(
-                "Registrar métricas",
-                <div id="metrics-log">
-                  <MetricsLogForm
-                    metricsLog={metricsLog}
-                    onAddEntry={onAddMetricsEntry}
-                    onDeleteEntry={onDeleteMetricsEntry}
-                    lang={lang}
-                  />
-                </div>,
+                <WeeklyCharts
+                  history={history}
+                  lang={lang}
+                  goals={form}
+                  onGoToPlanDay={(dayIndex) => {
+                    setSidebarTab("plan");
+                    setSelectedPlanDayIndex(dayIndex);
+                  }}
+                />,
                 false
               )}
               {renderCollapsible(

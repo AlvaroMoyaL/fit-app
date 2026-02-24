@@ -177,6 +177,21 @@
 - `StatsMetricDrawer` mejorado para interpretación:
   - añade bloque bajo el gráfico con `Qué mide`, `Lectura actual`, `Estado actual vs recomendado` e `Impacto actual`,
   - el texto de impacto usa evaluación contextual (ej. peso vs estatura/IMC y posibles riesgos asociados).
+- `StatsMetricDrawer` UX mejorada:
+  - por defecto `Cruzar con` queda en `Ninguna` (no auto-cruza al abrir),
+  - mantiene opción manual `Auto (recomendado)` y métricas afines,
+  - gráfico mejorado con ventana reciente, rejilla, puntos y tooltip flotante por punto (fecha + valor exacto),
+  - añade resumen numérico visible (`min`, `prom`, `max`) para evitar interpretación ambigua.
+- Historial y tendencias rediseñados:
+  - `MetricsCharts` pasó a mini-líneas por métrica (últimos 14 registros), con tooltip y bloque de stats (`último/prom/rango`),
+  - `History` ya no muestra `Tendencia de métricas` ni `Registrar métricas` (concentrado en `Stats`),
+  - `HistoryWeek` cambió a formato más ejecutivo: resumen semanal ampliado + lista diaria expandible con detalle bajo demanda.
+- `WeeklyCharts` mejorado para decisión:
+  - añade KPIs semanales comparativos (delta vs semana previa),
+  - barras de `XP` y `Sesiones` ahora abren drawer por semana seleccionada,
+  - nuevo `Weekly Drawer` con semáforo (`verde/amarillo/rojo`), desglose diario y top ejercicios,
+  - recomendación de coach ampliada a plan accionable (resumen + 3 acciones concretas),
+  - botón `Ir al día más débil` conecta directamente con `Plan` y selecciona ese día.
 - Dev server:
   - se mantiene decisión previa de integración: `port 5175` y `strictPort: true` en `vite.config.js`.
 
@@ -207,6 +222,8 @@
 - Se priorizó la navegación operativa del sidebar (uso diario primero; cuenta/datos offline/respaldo como colapsables).
 - Se habilitó importación Garmin real desde la vista `Stats` para evitar depender de `Cuenta/Backup` en el flujo de métricas.
 - Se mejoró la legibilidad clínica en `Stats` con interpretación automática y mensajes de riesgo orientativos por métrica.
+- Se consolidó `Stats` como centro de métricas (registro/tendencias/importación), dejando `History` enfocado en análisis operativo de entrenamientos.
+- Se introdujo navegación accionable desde analítica semanal hacia ejecución de plan (`Ir al día más débil`).
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

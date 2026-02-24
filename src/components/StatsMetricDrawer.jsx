@@ -79,6 +79,12 @@ const METRIC_META = {
     related: ["sleepHours", "readiness", "bodyBattery"],
     description: "Puntaje de calidad y recuperación del sueño.",
   },
+  sleepStress: {
+    label: "Estrés en sueño",
+    unit: "",
+    related: ["sleepScore", "sleepHours", "stress"],
+    description: "Promedio de estrés durante el periodo de sueño.",
+  },
   hrv: {
     label: "HRV",
     unit: "ms",
@@ -97,11 +103,59 @@ const METRIC_META = {
     related: ["sleepHours", "restHr", "bodyBattery"],
     description: "Indicador de carga fisiológica diaria.",
   },
+  spo2: {
+    label: "SpO2 promedio",
+    unit: "%",
+    related: ["respiration", "restHr", "sleepScore"],
+    description: "Saturación promedio de oxígeno.",
+  },
+  respiration: {
+    label: "Respiración",
+    unit: "rpm",
+    related: ["spo2", "sleepHours", "stress"],
+    description: "Frecuencia respiratoria promedio.",
+  },
   loadRatio: {
     label: "Carga 7d/28d",
     unit: "",
     related: ["steps", "vo2max", "readiness"],
     description: "Relación de carga reciente contra carga base.",
+  },
+  acuteLoad: {
+    label: "Carga aguda",
+    unit: "",
+    related: ["chronicLoad", "loadRatio", "readiness"],
+    description: "Carga reciente de entrenamiento.",
+  },
+  chronicLoad: {
+    label: "Carga crónica",
+    unit: "",
+    related: ["acuteLoad", "loadRatio", "readiness"],
+    description: "Carga de base usada para contextualizar la carga reciente.",
+  },
+  activeKcal: {
+    label: "Kcal activas",
+    unit: "kcal",
+    related: ["steps", "activeMinutes", "distanceKm"],
+    description: "Gasto energético activo diario.",
+  },
+  totalKcal: {
+    label: "Kcal totales",
+    unit: "kcal",
+    related: ["activeKcal", "steps"],
+    description: "Gasto energético total diario estimado.",
+  },
+  distanceKm: {
+    label: "Distancia",
+    unit: "km",
+    related: ["steps", "activeMinutes", "activeKcal"],
+    description: "Distancia total diaria recorrida.",
+  },
+  activeMinutes: {
+    label: "Min activos",
+    unit: "min",
+    related: ["steps", "activeKcal", "distanceKm"],
+    description: "Minutos diarios en actividad.",
   },
   vo2max: {
     label: "VO2 max",
@@ -249,7 +303,7 @@ function bmiCategory(bmi) {
   return "obesidad";
 }
 
-function riskMessage(metricKey, current, latestRow) {
+function medicalMessage(metricKey, current, latestRow, delta = 0) {
   if (!Number.isFinite(current) || current <= 0) return "";
 
   const bmi = Number(latestRow?.bmi || 0);
@@ -257,26 +311,26 @@ function riskMessage(metricKey, current, latestRow) {
 
   if (metricKey === "weight") {
     if (bmi >= 30) {
-      return "Tu peso actual es elevado para tu estatura (IMC en obesidad), lo que aumenta riesgo cardiometabólico y de sobrecarga articular.";
+      return "Tu peso actual es elevado para tu estatura (IMC en obesidad). Esto aumenta riesgo cardiometabólico (presión arterial, glucosa y perfil lipídico) y también sobrecarga articular. Si esta tendencia sigue al alza, el impacto acumulado crece. Prioridad práctica: déficit calórico moderado, fuerza regular y más movimiento diario.";
     }
     if (bmi >= 25) {
-      return "Tu peso actual está por encima de lo recomendado para tu estatura (IMC en sobrepeso), con mayor riesgo metabólico si se mantiene en el tiempo.";
+      return "Tu peso actual está por encima de lo recomendado para tu estatura (IMC en sobrepeso). Mantener este rango durante meses aumenta el riesgo metabólico y suele empeorar recuperación y rendimiento. Objetivo útil: reducir 5-10% de peso de forma progresiva.";
     }
     if (bmi > 0 && bmi < 18.5) {
-      return "Tu peso actual está por debajo de lo esperado para tu estatura (IMC bajo), lo que puede comprometer rendimiento y recuperación.";
+      return "Tu peso actual está por debajo de lo esperado para tu estatura (IMC bajo). Esto puede comprometer rendimiento, recuperación y reserva energética. Conviene priorizar fuerza, proteína suficiente y progresión nutricional.";
     }
     if (bmi > 0) {
-      return "Tu peso actual es compatible con un rango saludable para tu estatura.";
+      return "Tu peso actual es compatible con un rango saludable para tu estatura. El foco aquí es mantener estabilidad y buena composición corporal.";
     }
   }
 
   if (metricKey === "bmi") {
     const cat = bmiCategory(current);
     if (cat === "obesidad") {
-      return "Tu IMC indica obesidad, asociado a mayor riesgo de hipertensión, resistencia a la insulina y enfermedad cardiovascular.";
+      return "Tu IMC indica obesidad, asociado a mayor riesgo de hipertensión, resistencia a la insulina y enfermedad cardiovascular. Reducir peso de forma gradual mejora estos marcadores incluso antes de llegar a rango normal.";
     }
     if (cat === "sobrepeso") {
-      return "Tu IMC indica sobrepeso, con riesgo cardiometabólico moderado si no revierte.";
+      return "Tu IMC indica sobrepeso; es una fase donde intervenir temprano tiene alta rentabilidad en salud y rendimiento.";
     }
     if (cat === "bajo peso") {
       return "Tu IMC indica bajo peso; conviene vigilar energía disponible y masa muscular.";
@@ -287,10 +341,10 @@ function riskMessage(metricKey, current, latestRow) {
   if (metricKey === "whtr" || metricKey === "waist") {
     const ratio = metricKey === "whtr" ? current : whtr;
     if (ratio >= 0.6) {
-      return "La distribución de grasa abdominal es alta; esto eleva el riesgo cardiometabólico.";
+      return "La distribución de grasa abdominal es alta; este patrón aumenta riesgo cardiometabólico aun si el peso total no parece extremo. Reducir cintura suele mejorar riesgo global.";
     }
     if (ratio >= 0.5) {
-      return "La grasa abdominal está por encima de lo ideal; conviene reducir perímetro de cintura.";
+      return "La grasa abdominal está por encima de lo ideal. Es una señal temprana para ajustar nutrición, fuerza y pasos diarios.";
     }
     if (ratio > 0) {
       return "La relación cintura-altura está en rango favorable.";
@@ -299,17 +353,17 @@ function riskMessage(metricKey, current, latestRow) {
 
   if (metricKey === "restHr") {
     if (current > 70) {
-      return "Tu FC de reposo está alta para entrenamiento habitual; puede reflejar fatiga, estrés o recuperación incompleta.";
+      return "Tu FC de reposo está alta para tu contexto de entrenamiento. Puede reflejar fatiga acumulada, estrés o recuperación incompleta. Si se mantiene elevada varios días, conviene bajar intensidad y priorizar sueño/hidratación.";
     }
     if (current >= 60) {
-      return "Tu FC de reposo está en zona intermedia; prioriza sueño y recuperación si ves tendencia al alza.";
+      return "Tu FC de reposo está en zona intermedia; la tendencia es clave. Si sube respecto a tu base, reduce carga temporalmente.";
     }
     return "Tu FC de reposo está en rango favorable.";
   }
 
   if (metricKey === "sleepHours") {
     if (current < 6) {
-      return "Duermes por debajo de lo recomendado; esto puede aumentar fatiga, peor control de apetito y menor recuperación.";
+      return "Duermes por debajo de lo recomendado. Esto suele aumentar fatiga, elevar percepción de esfuerzo y reducir capacidad de recuperación. También puede afectar apetito y control del estrés.";
     }
     if (current <= 9) return "Tu duración de sueño está dentro de lo recomendado para recuperación.";
     return "Duración de sueño alta; revisa también calidad y energía diurna.";
@@ -317,7 +371,7 @@ function riskMessage(metricKey, current, latestRow) {
 
   if (metricKey === "sleepScore") {
     if (current < 50) {
-      return "Tu recuperación nocturna es baja, con posible impacto en rendimiento y carga tolerable.";
+      return "Tu recuperación nocturna es baja. Impacto esperado: peor calidad de sesión, menor tolerancia a cargas altas y más riesgo de encadenar fatiga.";
     }
     if (current < 70) return "Recuperación intermedia; hay margen de mejora en hábitos de descanso.";
     return "Tu recuperación nocturna es buena.";
@@ -325,13 +379,81 @@ function riskMessage(metricKey, current, latestRow) {
 
   if (metricKey === "readiness") {
     if (current < 50) {
-      return "Tu readiness es baja; forzar alta intensidad hoy eleva riesgo de sobrecarga.";
+      return "Tu readiness es baja; forzar alta intensidad hoy eleva riesgo de sobrecarga y mala recuperación posterior. Es mejor sesión suave o descarga activa.";
     }
     if (current < 70) return "Readiness moderada; conviene ajustar intensidad al estado de recuperación.";
     return "Readiness alta; mejor contexto para cargas exigentes.";
   }
 
+  if (metricKey === "bodyBattery") {
+    if (current < 30) {
+      return "Tu Body Battery está bajo. Esto sugiere energía limitada para sesiones duras y más riesgo de fatiga si fuerzas la carga.";
+    }
+    if (current < 60) {
+      return "Tu Body Battery está en rango medio; entrenar es posible, pero ajustando volumen/intensidad.";
+    }
+    return "Tu Body Battery es favorable para sostener carga de entrenamiento.";
+  }
+
+  if (metricKey === "stress") {
+    if (current >= 60) {
+      return "Tu estrés diario está alto. Si coincide con mal sueño o FC reposo elevada, aumenta riesgo de fatiga sistémica y bajo rendimiento.";
+    }
+    if (current >= 40) return "Tu estrés está en rango medio; vigila acumulación semanal.";
+    return "Tu estrés está controlado para recuperación.";
+  }
+
+  if (metricKey === "hrv") {
+    if (delta < 0) {
+      return "Tu HRV va a la baja frente a registros recientes; puede ser señal de mayor carga interna o recuperación insuficiente.";
+    }
+    if (delta > 0) {
+      return "Tu HRV mejora respecto a registros previos, señal compatible con mejor recuperación autonómica.";
+    }
+    return "Tu HRV se mantiene estable respecto a tu base reciente.";
+  }
+
+  if (metricKey === "steps") {
+    if (current < 5000) {
+      return "Tu volumen de pasos es bajo. Mantener niveles bajos de actividad diaria se asocia con mayor riesgo cardiometabólico y peor condición funcional a medio plazo.";
+    }
+    if (current < 8000) {
+      return "Tu volumen de pasos es moderado-bajo. Aumentar actividad diaria puede mejorar sensibilidad a la insulina, gasto energético y salud cardiovascular.";
+    }
+    if (current < 10000) {
+      return "Tu volumen de pasos es adecuado y con beneficio de salud. Mantener consistencia semanal es más importante que picos aislados.";
+    }
+    return "Tu volumen de pasos es alto y favorable para salud cardiometabólica y control de peso.";
+  }
+
   return "";
+}
+
+function coachMessage(metricKey, current, delta = 0) {
+  if (!Number.isFinite(current) || current <= 0) return "";
+
+  if (metricKey === "weight" || metricKey === "bmi" || metricKey === "waist" || metricKey === "whtr") {
+    return "Coach: mantén constancia semanal. Prioriza fuerza, pasos diarios y un ajuste nutricional sostenible; evita cambios extremos.";
+  }
+  if (metricKey === "restHr") {
+    if (current > 70 || delta > 0) {
+      return "Coach: hoy conviene bajar una marcha. Haz sesión técnica o zona 2 suave, hidrátate bien y protege el sueño de esta noche.";
+    }
+    return "Coach: buen estado para entrenar normal. Mantén calentamiento y progresión controlada.";
+  }
+  if (metricKey === "sleepHours" || metricKey === "sleepScore") {
+    return "Coach: objetivo inmediato, dormir mejor esta semana. Fija hora de corte de pantallas, cena ligera y horario de sueño más estable.";
+  }
+  if (metricKey === "readiness" || metricKey === "bodyBattery" || metricKey === "hrv" || metricKey === "stress") {
+    if (delta < 0 || metricKey === "stress") {
+      return "Coach: ajusta carga al estado actual. Menos intensidad hoy, más recuperación activa, respiración y movilidad.";
+    }
+    return "Coach: puedes sostener una sesión de calidad, pero sin salirte del plan base.";
+  }
+  if (metricKey === "steps") {
+    return "Coach: sube progresivamente tu NEAT (pasos). Sumar bloques cortos caminando durante el día suele ser la vía más sostenible.";
+  }
+  return "Coach: usa esta métrica para decidir intensidad diaria y mantener consistencia sin sobrecarga.";
 }
 
 export default function StatsMetricDrawer({
@@ -411,7 +533,8 @@ export default function StatsMetricDrawer({
   const interpretation = evaluateMetric(metricKey, primaryCurrent, recentAvg);
   const trendText = summarizeTrend(primaryDelta, meta.unit);
   const recommended = recommendedText(metricKey, recentAvg);
-  const riskText = riskMessage(metricKey, primaryCurrent, latestRow);
+  const medicalText = medicalMessage(metricKey, primaryCurrent, latestRow, primaryDelta);
+  const coachText = coachMessage(metricKey, primaryCurrent, primaryDelta);
 
   return (
     <>
@@ -497,9 +620,14 @@ export default function StatsMetricDrawer({
             <strong>Estado actual vs recomendado:</strong> Actual{" "}
             {formatValue(primaryCurrent, meta.unit)}. {recommended}
           </p>
-          {riskText && (
+          {medicalText && (
             <p>
-              <strong>Impacto actual:</strong> {riskText}
+              <strong>Impacto actual (médico):</strong> {medicalText}
+            </p>
+          )}
+          {coachText && (
+            <p>
+              <strong>Impacto actual (coach):</strong> {coachText}
             </p>
           )}
           <p>

@@ -50,6 +50,7 @@ export default function Sidebar({
   lang,
   onChangeLang,
   metricsLog,
+  history,
   onExport,
   onImport,
   onRestoreBackup,
@@ -163,6 +164,49 @@ export default function Sidebar({
     if (type === "rest") return "Descanso";
     if (type === "train") return "Entreno";
     return "Extra";
+  };
+  const toDateKey = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`;
+  const normalizeName = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  const isPlanDayComplete = (day, index) => {
+    const planned = Array.isArray(day?.exercises) ? day.exercises : [];
+    if (!planned.length) return false;
+    if (getPlanDayType(index) === "rest") return false;
+
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    const key = toDateKey(date);
+    const items = Array.isArray(history?.[key]?.items) ? history[key].items : [];
+    if (!items.length) return false;
+
+    const plannedCount = new Map();
+    planned.forEach((ex) => {
+      const name = normalizeName(ex?.name || ex?.name_es || ex?.name_en || "");
+      if (!name) return;
+      plannedCount.set(name, (plannedCount.get(name) || 0) + 1);
+    });
+    if (!plannedCount.size) return false;
+
+    const doneCount = new Map();
+    items.forEach((it) => {
+      if (it?.type === "replace") return;
+      const name = normalizeName(it?.name || it?.name_es || it?.name_en || "");
+      if (!name) return;
+      doneCount.set(name, (doneCount.get(name) || 0) + 1);
+    });
+
+    let done = 0;
+    plannedCount.forEach((count, name) => {
+      done += Math.min(count, doneCount.get(name) || 0);
+    });
+    return done >= planned.length;
   };
 
   return (
@@ -338,13 +382,15 @@ export default function Sidebar({
           </div>
           {planActionStatus && <p className="note">{planActionStatus}</p>}
           <ul className="sidebar-plan">
-            {plan?.days?.map((d, index) => (
+            {plan?.days?.map((d, index) => {
+              const dayDone = isPlanDayComplete(d, index);
+              return (
               <li key={d.title}>
                 <button
                   type="button"
                   className={`sidebar-plan-day-btn ${
                     Number(selectedPlanDayIndex) === index ? "active" : ""
-                  }`}
+                  } ${dayDone ? "done" : ""}`}
                   onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
                 >
                   <strong>{d.title}</strong>
@@ -356,9 +402,10 @@ export default function Sidebar({
                     {getPlanDayTypeLabel(index)}
                   </span>
                   <span>{d.exercises.length} ejercicios</span>
+                  {dayDone && <span className="sidebar-day-done">Completado ✓</span>}
                 </button>
               </li>
-            )) || <li>Sin plan</li>}
+            )}) || <li>Sin plan</li>}
           </ul>
         </div>
       )}

@@ -107,6 +107,17 @@ const GARMIN_IMPORT_KEYS = [
   "hrv",
   "bodyBattery",
   "stress",
+  "sleepStress",
+  "spo2",
+  "respiration",
+  "loadRatio",
+  "acuteLoad",
+  "chronicLoad",
+  "activeKcal",
+  "totalKcal",
+  "distanceKm",
+  "activeMinutes",
+  "vo2max",
 ];
 
 function toValidMetricNumber(value, decimals = null) {
@@ -128,6 +139,25 @@ function mergeMetricEntry(base, patch) {
 
 function parseGarminJsonEntries(payload, fileName) {
   const name = String(fileName || "").toLowerCase();
+  const toDateKeyLoose = (value) => {
+    if (isValidDateKey(value)) return value;
+    const raw = String(value ?? "").trim();
+    if (/^\d{8}$/.test(raw)) {
+      const key = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+      if (isValidDateKey(key)) return key;
+    }
+    const n = Number(value);
+    if (Number.isFinite(n)) {
+      const ts = Math.abs(n) < 1e11 ? n * 1000 : n;
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const key = `${y}-${m}-${day}`;
+      return y >= 2000 && y <= 2100 && isValidDateKey(key) ? key : "";
+    }
+    return "";
+  };
 
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const raw = payload.metricsLog;
@@ -162,6 +192,9 @@ function parseGarminJsonEntries(payload, fileName) {
           date,
           sleepHours: toValidMetricNumber((deep + light + rem) / 3600, 1),
           sleepScore: toValidMetricNumber(row?.sleepScores?.overallScore, 0),
+          sleepStress: toValidMetricNumber(row?.avgSleepStress, 0),
+          spo2: toValidMetricNumber(row?.spo2SleepSummary?.averageSPO2, 1),
+          respiration: toValidMetricNumber(row?.averageRespiration, 1),
         };
       })
       .filter(Boolean);
@@ -213,6 +246,15 @@ function parseGarminJsonEntries(payload, fileName) {
           sleepHours,
           bodyBattery: battery,
           stress,
+          spo2: toValidMetricNumber(row?.averageSpo2Value, 1),
+          respiration: toValidMetricNumber(row?.respiration?.avgWakingRespirationValue, 1),
+          activeKcal: toValidMetricNumber(row?.activeKilocalories, 0),
+          totalKcal: toValidMetricNumber(row?.totalKilocalories, 0),
+          distanceKm: toValidMetricNumber(Number(row?.totalDistanceMeters || 0) / 1000, 2),
+          activeMinutes: toValidMetricNumber(
+            (Number(row?.highlyActiveSeconds || 0) + Number(row?.activeSeconds || 0)) / 60,
+            0
+          ),
         };
       })
       .filter(Boolean);
@@ -231,6 +273,8 @@ function parseGarminJsonEntries(payload, fileName) {
         return {
           date,
           hrv: toValidMetricNumber(metricByType.HRV, 0),
+          spo2: toValidMetricNumber(metricByType.SPO2, 1),
+          respiration: toValidMetricNumber(metricByType.RESPIRATION, 1),
         };
       })
       .filter(Boolean);
@@ -256,6 +300,66 @@ function parseGarminJsonEntries(payload, fileName) {
       date,
       readiness: toValidMetricNumber(row?.score, 0),
       sleepScore: toValidMetricNumber(row?.sleepScore, 0),
+      acuteLoad: toValidMetricNumber(row?.acuteLoad, 0),
+    }));
+  }
+
+  if (name.includes("metricsacutetrainingload")) {
+    return payload
+      .map((row) => {
+        const date = toDateKeyLoose(row?.calendarDate);
+        if (!isValidDateKey(date)) return null;
+        return {
+          date,
+          loadRatio: toValidMetricNumber(row?.dailyAcuteChronicWorkloadRatio, 2),
+          acuteLoad: toValidMetricNumber(row?.dailyTrainingLoadAcute, 0),
+          chronicLoad: toValidMetricNumber(row?.dailyTrainingLoadChronic, 0),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (name.includes("fitnessagedata")) {
+    return payload
+      .map((row) => {
+        const raw = String(row?.asOfDateGmt || "");
+        const date = toDateKeyLoose(raw.slice(0, 10));
+        if (!isValidDateKey(date)) return null;
+        return {
+          date,
+          vo2max: toValidMetricNumber(row?.biometricVo2Max, 1),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (name.includes("summarizedactivities")) {
+    const rows =
+      Array.isArray(payload) && payload[0] && Array.isArray(payload[0]?.summarizedActivitiesExport)
+        ? payload[0].summarizedActivitiesExport
+        : [];
+    if (!rows.length) return [];
+    const byDate = new Map();
+    rows.forEach((row) => {
+      const raw = String(row?.startTimeLocal || row?.startTimeGmt || "");
+      const date = toDateKeyLoose(raw.slice(0, 10));
+      if (!isValidDateKey(date)) return;
+      const prev = byDate.get(date) || {
+        date,
+        activeMinutes: 0,
+        activeKcal: 0,
+        distanceKm: 0,
+      };
+      prev.activeMinutes += Number(row?.movingDuration || row?.duration || 0) / 60;
+      prev.activeKcal += Number(row?.calories || 0);
+      prev.distanceKm += Number(row?.distance || 0) / 1000;
+      byDate.set(date, prev);
+    });
+    return [...byDate.values()].map((row) => ({
+      date: row.date,
+      activeMinutes: toValidMetricNumber(row.activeMinutes, 0),
+      activeKcal: toValidMetricNumber(row.activeKcal, 0),
+      distanceKm: toValidMetricNumber(row.distanceKm, 2),
     }));
   }
 
@@ -666,21 +770,23 @@ export default function App() {
     () => (metricsLog && metricsLog.length ? metricsLog[metricsLog.length - 1] : null),
     [metricsLog]
   );
-  const getLatestMetricValue = (key, offset = 0) => {
+  const getLatestMetricValue = (key, offset = 0, allowZero = false) => {
     if (!key || !Array.isArray(metricsLog) || !metricsLog.length) return undefined;
     let seen = 0;
     for (let i = metricsLog.length - 1; i >= 0; i -= 1) {
       const raw = metricsLog[i]?.[key];
       const value = Number(raw);
-      if (!Number.isFinite(value) || value <= 0) continue;
+      if (!Number.isFinite(value)) continue;
+      if (!allowZero && value <= 0) continue;
+      if (allowZero && value < 0) continue;
       if (seen === offset) return value;
       seen += 1;
     }
     return undefined;
   };
   const trendSymbol = (key) => {
-    const a = Number(getLatestMetricValue(key, 0) || 0);
-    const b = Number(getLatestMetricValue(key, 1) || 0);
+    const a = Number(getLatestMetricValue(key, 0, key === "loadRatio") || 0);
+    const b = Number(getLatestMetricValue(key, 1, key === "loadRatio") || 0);
     if (!a || !b) return "→";
     if (a > b) return "↑";
     if (a < b) return "↓";
@@ -3249,6 +3355,7 @@ export default function App() {
         lang={lang}
         onChangeLang={onChangeLang}
         metricsLog={metricsLog}
+        history={history}
         onExport={onExport}
         onImport={onImport}
         onRestoreBackup={onRestoreBackup}
@@ -3524,7 +3631,8 @@ export default function App() {
                     <p className="note">+{garminFiles.length - 10} archivo(s) más…</p>
                   )}
                   <p className="note">
-                    Campos soportados: pasos, FC reposo, sueño (h), sleep score, readiness y HRV.
+                    Campos soportados: pasos, FC reposo, sueño, sleep score, readiness, HRV,
+                    body battery, estrés, SpO2, respiración, carga y actividad diaria.
                   </p>
                 </div>,
                 true
@@ -3548,6 +3656,14 @@ export default function App() {
                         getLatestMetricValue("sleepScore") || "—",
                         "sleepScore",
                         "readiness"
+                      )}
+                      {renderStatsCard(
+                        "Estrés sueño",
+                        getLatestMetricValue("sleepStress", 0, true) !== undefined
+                          ? getLatestMetricValue("sleepStress", 0, true)
+                          : "—",
+                        "sleepStress",
+                        "sleepScore"
                       )}
                       {renderStatsCard(
                         "HRV nocturna",
@@ -3575,6 +3691,20 @@ export default function App() {
                         "stress",
                         "sleepHours"
                       )}
+                      {renderStatsCard(
+                        "SpO2 promedio",
+                        getLatestMetricValue("spo2") ? `${getLatestMetricValue("spo2")}%` : "—",
+                        "spo2",
+                        "restHr"
+                      )}
+                      {renderStatsCard(
+                        "Respiración",
+                        getLatestMetricValue("respiration")
+                          ? `${getLatestMetricValue("respiration")} rpm`
+                          : "—",
+                        "respiration",
+                        "sleepHours"
+                      )}
                     </div>
                   </section>
                   <section className="stats-group">
@@ -3588,13 +3718,73 @@ export default function App() {
                         "restHr",
                         "sleepHours"
                       )}
-                      {renderStatsCard("VO2 max", "—", "vo2max", "restHr")}
-                      {renderStatsCard("Carga 7d / 28d", "—", "loadRatio", "steps")}
+                      {renderStatsCard(
+                        "VO2 max",
+                        getLatestMetricValue("vo2max") || "—",
+                        "vo2max",
+                        "restHr"
+                      )}
+                      {renderStatsCard(
+                        "Carga 7d / 28d",
+                        getLatestMetricValue("loadRatio", 0, true) !== undefined
+                          ? getLatestMetricValue("loadRatio", 0, true)
+                          : "—",
+                        "loadRatio",
+                        "steps"
+                      )}
+                      {renderStatsCard(
+                        "Carga aguda",
+                        getLatestMetricValue("acuteLoad", 0, true) !== undefined
+                          ? getLatestMetricValue("acuteLoad", 0, true)
+                          : "—",
+                        "acuteLoad",
+                        "loadRatio"
+                      )}
+                      {renderStatsCard(
+                        "Carga crónica",
+                        getLatestMetricValue("chronicLoad", 0, true) !== undefined
+                          ? getLatestMetricValue("chronicLoad", 0, true)
+                          : "—",
+                        "chronicLoad",
+                        "loadRatio"
+                      )}
                       {renderStatsCard(
                         "Pasos",
                         getLatestMetricValue("steps") || "—",
                         "steps",
                         "sleepHours"
+                      )}
+                      {renderStatsCard(
+                        "Kcal activas",
+                        getLatestMetricValue("activeKcal", 0, true) !== undefined
+                          ? `${getLatestMetricValue("activeKcal", 0, true)} kcal`
+                          : "—",
+                        "activeKcal",
+                        "steps"
+                      )}
+                      {renderStatsCard(
+                        "Kcal totales",
+                        getLatestMetricValue("totalKcal", 0, true) !== undefined
+                          ? `${getLatestMetricValue("totalKcal", 0, true)} kcal`
+                          : "—",
+                        "totalKcal",
+                        "activeKcal"
+                      )}
+                      {renderStatsCard(
+                        "Distancia",
+                        getLatestMetricValue("distanceKm", 0, true) !== undefined
+                          ? `${getLatestMetricValue("distanceKm", 0, true)} km`
+                          : "—",
+                        "distanceKm",
+                        "steps"
+                      )}
+                      {renderStatsCard(
+                        "Min activos",
+                        getLatestMetricValue("activeMinutes", 0, true) !== undefined
+                          ? getLatestMetricValue("activeMinutes", 0, true)
+                          : "—",
+                        "activeMinutes",
+                        "steps"
                       )}
                       {renderStatsCard("Días entrenados (mes)", trainedDaysThisMonth, "")}
                       {renderStatsCard("Racha actual", trainingStreak, "")}
@@ -3898,6 +4088,7 @@ export default function App() {
               lang={lang}
               onChangeLang={onChangeLang}
               metricsLog={metricsLog}
+              history={history}
               onExport={onExport}
               onImport={onImport}
               onRestoreBackup={onRestoreBackup}

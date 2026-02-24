@@ -162,6 +162,21 @@
   - procesa importación directa desde JSON en UI (`fit-export.json` y archivos Garmin JSON),
   - mapea/mezcla por fecha en `metricsLog` campos de `steps`, `restHr`, `sleepHours`, `sleepScore`, `readiness`, `hrv`,
   - mantiene merge no destructivo con métricas existentes del perfil activo.
+- Import Garmin sin duplicidad:
+  - el import hace `upsert` por `date` (usa `Map` por fecha), por lo que reimportar no duplica filas;
+  - solo actualiza campos con valor y preserva los ya existentes si el archivo entrante trae vacío.
+- Parser Garmin desde `UDSFile` ampliado:
+  - además de `steps` y `restHr`, ahora intenta extraer `sleepHours` (desde `SLEEPSTART/SLEEPEND`), `bodyBattery` y `stress`.
+- Parser/export Garmin ampliado para cobertura total:
+  - también extrae `sleepStress`, `spo2`, `respiration`, `activeKcal`, `totalKcal`, `distanceKm`, `activeMinutes`,
+  - incluye fuentes `MetricsAcuteTrainingLoad`, `TrainingReadinessDTO`, `fitnessAgeData` y `summarizedActivities`,
+  - normaliza fechas (segundos vs milisegundos) para evitar outliers tipo `1970-*`.
+- Fix en tarjetas de `Stats`:
+  - ya no dependen del último día completo; cada tarjeta usa el último valor disponible por métrica (evita mostrar `—` cuando hay datos en fechas previas),
+  - se activó render real para `sleepScore`, `hrv`, `bodyBattery`, `readiness` y `stress`.
+- `StatsMetricDrawer` mejorado para interpretación:
+  - añade bloque bajo el gráfico con `Qué mide`, `Lectura actual`, `Estado actual vs recomendado` e `Impacto actual`,
+  - el texto de impacto usa evaluación contextual (ej. peso vs estatura/IMC y posibles riesgos asociados).
 - Dev server:
   - se mantiene decisión previa de integración: `port 5175` y `strictPort: true` en `vite.config.js`.
 
@@ -191,6 +206,7 @@
 - Se consolidó el registro de entrenamientos pasados en una UX consistente con el registro diario (campos por serie/tiempo y acceso al drawer de ayuda).
 - Se priorizó la navegación operativa del sidebar (uso diario primero; cuenta/datos offline/respaldo como colapsables).
 - Se habilitó importación Garmin real desde la vista `Stats` para evitar depender de `Cuenta/Backup` en el flujo de métricas.
+- Se mejoró la legibilidad clínica en `Stats` con interpretación automática y mensajes de riesgo orientativos por métrica.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

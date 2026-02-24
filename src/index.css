@@ -449,6 +449,27 @@ body.hc .help-icon {
   color: #0b5f58;
 }
 
+.sidebar-plan-day-btn.done {
+  background: linear-gradient(0deg, #f5fff8 0%, #ffffff 75%);
+}
+
+.sidebar-plan-day-btn.done strong {
+  color: #0b5f58;
+}
+
+.sidebar-day-done {
+  display: inline-flex;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0b5f58;
+  background: #dff1ee;
+  border: 1px solid #8acac1;
+}
+
 .localdb {
   border: 2px solid #d9d1c8;
   border-radius: 12px;

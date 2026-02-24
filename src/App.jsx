@@ -93,6 +93,139 @@ function computeDerivedMetrics(entry, profile) {
   };
 }
 
+const GARMIN_IMPORT_KEYS = [
+  "weight",
+  "waist",
+  "hip",
+  "neck",
+  "bodyFat",
+  "restHr",
+  "sleepHours",
+  "steps",
+  "sleepScore",
+  "readiness",
+  "hrv",
+];
+
+function toValidMetricNumber(value, decimals = null) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  if (decimals === null) return n;
+  return Number(n.toFixed(decimals));
+}
+
+function mergeMetricEntry(base, patch) {
+  const out = { ...(base || {}) };
+  GARMIN_IMPORT_KEYS.forEach((key) => {
+    const value = patch?.[key];
+    if (value === undefined || value === null || value === "") return;
+    out[key] = value;
+  });
+  return out;
+}
+
+function parseGarminJsonEntries(payload, fileName) {
+  const name = String(fileName || "").toLowerCase();
+
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const raw = payload.metricsLog;
+    if (raw !== undefined) {
+      const list = Array.isArray(raw) ? raw : safeParseJson(raw, []);
+      if (Array.isArray(list)) {
+        return list
+          .filter((row) => isValidDateKey(row?.date))
+          .map((row) => {
+            const entry = { date: row.date };
+            GARMIN_IMPORT_KEYS.forEach((key) => {
+              const value = row?.[key];
+              if (value !== undefined && value !== null && value !== "") entry[key] = value;
+            });
+            return entry;
+          });
+      }
+    }
+  }
+
+  if (!Array.isArray(payload)) return [];
+
+  if (name.includes("sleepdata")) {
+    return payload
+      .map((row) => {
+        const date = row?.calendarDate;
+        if (!isValidDateKey(date)) return null;
+        const deep = toValidMetricNumber(row?.deepSleepSeconds, 0) || 0;
+        const light = toValidMetricNumber(row?.lightSleepSeconds, 0) || 0;
+        const rem = toValidMetricNumber(row?.remSleepSeconds, 0) || 0;
+        return {
+          date,
+          sleepHours: toValidMetricNumber((deep + light + rem) / 3600, 1),
+          sleepScore: toValidMetricNumber(row?.sleepScores?.overallScore, 0),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (name.includes("udsfile_")) {
+    return payload
+      .map((row) => {
+        const date = row?.calendarDate;
+        if (!isValidDateKey(date)) return null;
+        return {
+          date,
+          steps: toValidMetricNumber(row?.totalSteps, 0),
+          restHr: toValidMetricNumber(
+            row?.currentDayRestingHeartRate ?? row?.restingHeartRate,
+            0
+          ),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (name.includes("healthstatusdata")) {
+    return payload
+      .map((row) => {
+        const date = row?.calendarDate;
+        if (!isValidDateKey(date) || !Array.isArray(row?.metrics)) return null;
+        const metricByType = Object.fromEntries(
+          row.metrics
+            .filter((m) => m?.type)
+            .map((m) => [String(m.type).toUpperCase(), m.value])
+        );
+        return {
+          date,
+          hrv: toValidMetricNumber(metricByType.HRV, 0),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (name.includes("trainingreadinessdto")) {
+    const byDate = new Map();
+    payload.forEach((row) => {
+      const date = row?.calendarDate;
+      if (!isValidDateKey(date)) return;
+      const prev = byDate.get(date);
+      const currTs = Date.parse(row?.timestampLocal || row?.timestamp || "");
+      const prevTs = prev ? Date.parse(prev?.timestampLocal || prev?.timestamp || "") : -Infinity;
+      const rowHasSleep = !!row?.validSleep;
+      const prevHasSleep = !!prev?.validSleep;
+      const shouldTake =
+        !prev ||
+        (rowHasSleep && !prevHasSleep) ||
+        (rowHasSleep === prevHasSleep && currTs >= prevTs);
+      if (shouldTake) byDate.set(date, row);
+    });
+    return [...byDate.entries()].map(([date, row]) => ({
+      date,
+      readiness: toValidMetricNumber(row?.score, 0),
+      sleepScore: toValidMetricNumber(row?.sleepScore, 0),
+    }));
+  }
+
+  return [];
+}
+
 const initialForm = {
   nombre: "",
   edad: "",
@@ -449,6 +582,7 @@ export default function App() {
   const [selectedPlanDayIndex, setSelectedPlanDayIndex] = useState(0);
   const [garminFiles, setGarminFiles] = useState([]);
   const [garminImportNote, setGarminImportNote] = useState("");
+  const [garminImporting, setGarminImporting] = useState(false);
   const [statsDrawer, setStatsDrawer] = useState({
     open: false,
     metricKey: "weight",
@@ -1926,12 +2060,75 @@ export default function App() {
       setGarminImportNote("");
       return;
     }
+    const jsonCount = files.filter((f) => /\.json$/i.test(f.name)).length;
     const zipCount = files.filter((f) => /\.zip$/i.test(f.name)).length;
     const csvCount = files.filter((f) => /\.csv$/i.test(f.name)).length;
     const fitCount = files.filter((f) => /\.(fit|tcx|gpx)$/i.test(f.name)).length;
     setGarminImportNote(
-      `Listo para procesar: ${files.length} archivo(s) · ZIP: ${zipCount} · CSV: ${csvCount} · FIT/TCX/GPX: ${fitCount}`
+      `Listo para procesar: ${files.length} archivo(s) · JSON: ${jsonCount} · ZIP: ${zipCount} · CSV: ${csvCount} · FIT/TCX/GPX: ${fitCount}`
     );
+  };
+
+  const onImportGarminFiles = async () => {
+    if (!garminFiles.length) {
+      setGarminImportNote("Selecciona archivos primero.");
+      return;
+    }
+
+    setGarminImporting(true);
+    try {
+      const perDate = new Map();
+      let usedFiles = 0;
+      let jsonFiles = 0;
+
+      for (const file of garminFiles) {
+        if (!/\.json$/i.test(file.name)) continue;
+        jsonFiles += 1;
+        let parsed = null;
+        try {
+          parsed = JSON.parse(await file.text());
+        } catch {
+          continue;
+        }
+        const entries = parseGarminJsonEntries(parsed, file.name);
+        if (!entries.length) continue;
+        usedFiles += 1;
+        entries.forEach((entry) => {
+          if (!isValidDateKey(entry?.date)) return;
+          const prev = perDate.get(entry.date) || { date: entry.date };
+          perDate.set(entry.date, mergeMetricEntry(prev, entry));
+        });
+      }
+
+      const incoming = [...perDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+      if (!incoming.length) {
+        setGarminImportNote(
+          `No se detectaron métricas compatibles. JSON leídos: ${jsonFiles}. Usa archivos Garmin JSON o fit-export.json.`
+        );
+        return;
+      }
+
+      setMetricsLog((prev) => {
+        const byDate = new Map(
+          (prev || [])
+            .filter((row) => isValidDateKey(row?.date))
+            .map((row) => [row.date, { ...row }])
+        );
+        incoming.forEach((entry) => {
+          const existing = byDate.get(entry.date) || { date: entry.date };
+          const merged = mergeMetricEntry(existing, entry);
+          const derived = computeDerivedMetrics(merged, form);
+          byDate.set(entry.date, { ...merged, ...derived });
+        });
+        return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+      });
+      touchLocalChange();
+      setGarminImportNote(
+        `Importado Garmin ✓ ${incoming.length} fecha(s) desde ${usedFiles} archivo(s) JSON compatibles.`
+      );
+    } finally {
+      setGarminImporting(false);
+    }
   };
 
   const onChangeDayMode = async (dayIndex, mode) => {
@@ -3227,7 +3424,7 @@ export default function App() {
                 "Importar Garmin",
                 <div className="metrics-log">
                   <p className="note">
-                    Carga aquí la exportación de Garmin Connect (ZIP completo o archivos por actividad).
+                    Carga aquí export Garmin en JSON (incluye `fit-export.json` generado) y aplícalo directo a métricas.
                   </p>
                   <div className="sidebar-actions">
                     <button
@@ -3237,6 +3434,16 @@ export default function App() {
                     >
                       Seleccionar archivos
                     </button>
+                    {garminFiles.length > 0 && (
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={onImportGarminFiles}
+                        disabled={garminImporting}
+                      >
+                        {garminImporting ? "Importando..." : "Procesar e importar"}
+                      </button>
+                    )}
                     {garminFiles.length > 0 && (
                       <button
                         type="button"
@@ -3252,7 +3459,7 @@ export default function App() {
                     <input
                       id="garmin-import-input"
                       type="file"
-                      accept=".zip,.csv,.fit,.tcx,.gpx"
+                      accept=".json,.zip,.csv,.fit,.tcx,.gpx"
                       multiple
                       onChange={onSelectGarminFiles}
                       style={{ display: "none" }}
@@ -3273,8 +3480,7 @@ export default function App() {
                     <p className="note">+{garminFiles.length - 10} archivo(s) más…</p>
                   )}
                   <p className="note">
-                    Próximo paso: parsear estos archivos y mapearlos a estadísticas de sueño, HRV,
-                    FC reposo, carga y recuperación.
+                    Campos soportados: pasos, FC reposo, sueño (h), sleep score, readiness y HRV.
                   </p>
                 </div>,
                 true

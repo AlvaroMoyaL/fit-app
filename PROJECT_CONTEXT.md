@@ -158,6 +158,10 @@
 - Filtros de equipo normalizados (sin duplicados visuales):
   - deduplicación por clave canónica (`barbell`, `dumbbell`, etc.) para evitar repeticiones tipo `barra`/`banda`.
   - recuperación de opción `Bola medicinal` en checklist y normalización de `medicine ball` en motor.
+- `Stats > Importar Garmin` ahora es funcional (no solo selector):
+  - procesa importación directa desde JSON en UI (`fit-export.json` y archivos Garmin JSON),
+  - mapea/mezcla por fecha en `metricsLog` campos de `steps`, `restHr`, `sleepHours`, `sleepScore`, `readiness`, `hrv`,
+  - mantiene merge no destructivo con métricas existentes del perfil activo.
 - Dev server:
   - se mantiene decisión previa de integración: `port 5175` y `strictPort: true` en `vite.config.js`.
 
@@ -186,6 +190,7 @@
 - Se corrigió el caso reportado de `l019` para mejorar coherencia del gif en local fallback.
 - Se consolidó el registro de entrenamientos pasados en una UX consistente con el registro diario (campos por serie/tiempo y acceso al drawer de ayuda).
 - Se priorizó la navegación operativa del sidebar (uso diario primero; cuenta/datos offline/respaldo como colapsables).
+- Se habilitó importación Garmin real desde la vista `Stats` para evitar depender de `Cuenta/Backup` en el flujo de métricas.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

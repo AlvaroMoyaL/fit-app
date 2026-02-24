@@ -666,13 +666,21 @@ export default function App() {
     () => (metricsLog && metricsLog.length ? metricsLog[metricsLog.length - 1] : null),
     [metricsLog]
   );
-  const prevMetric = useMemo(
-    () => (metricsLog && metricsLog.length > 1 ? metricsLog[metricsLog.length - 2] : null),
-    [metricsLog]
-  );
+  const getLatestMetricValue = (key, offset = 0) => {
+    if (!key || !Array.isArray(metricsLog) || !metricsLog.length) return undefined;
+    let seen = 0;
+    for (let i = metricsLog.length - 1; i >= 0; i -= 1) {
+      const raw = metricsLog[i]?.[key];
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value <= 0) continue;
+      if (seen === offset) return value;
+      seen += 1;
+    }
+    return undefined;
+  };
   const trendSymbol = (key) => {
-    const a = Number(lastMetric?.[key] || 0);
-    const b = Number(prevMetric?.[key] || 0);
+    const a = Number(getLatestMetricValue(key, 0) || 0);
+    const b = Number(getLatestMetricValue(key, 1) || 0);
     if (!a || !b) return "→";
     if (a > b) return "↑";
     if (a < b) return "↓";
@@ -3529,15 +3537,44 @@ export default function App() {
                     <div className="metrics-grid">
                       {renderStatsCard(
                         "Sueño (h)",
-                        lastMetric?.sleepHours ? `${lastMetric.sleepHours} h` : "—",
+                        getLatestMetricValue("sleepHours")
+                          ? `${getLatestMetricValue("sleepHours")} h`
+                          : "—",
                         "sleepHours",
                         "restHr"
                       )}
-                      {renderStatsCard("Sleep score", "—", "sleepScore", "readiness")}
-                      {renderStatsCard("HRV nocturna", "—", "hrv", "restHr")}
-                      {renderStatsCard("Body Battery AM", "—", "bodyBattery", "sleepHours")}
-                      {renderStatsCard("Readiness", "—", "readiness", "sleepHours")}
-                      {renderStatsCard("Estrés diario", "—", "stress", "sleepHours")}
+                      {renderStatsCard(
+                        "Sleep score",
+                        getLatestMetricValue("sleepScore") || "—",
+                        "sleepScore",
+                        "readiness"
+                      )}
+                      {renderStatsCard(
+                        "HRV nocturna",
+                        getLatestMetricValue("hrv")
+                          ? `${getLatestMetricValue("hrv")} ms`
+                          : "—",
+                        "hrv",
+                        "restHr"
+                      )}
+                      {renderStatsCard(
+                        "Body Battery AM",
+                        getLatestMetricValue("bodyBattery") || "—",
+                        "bodyBattery",
+                        "sleepHours"
+                      )}
+                      {renderStatsCard(
+                        "Readiness",
+                        getLatestMetricValue("readiness") || "—",
+                        "readiness",
+                        "sleepHours"
+                      )}
+                      {renderStatsCard(
+                        "Estrés diario",
+                        getLatestMetricValue("stress") || "—",
+                        "stress",
+                        "sleepHours"
+                      )}
                     </div>
                   </section>
                   <section className="stats-group">
@@ -3545,13 +3582,20 @@ export default function App() {
                     <div className="metrics-grid">
                       {renderStatsCard(
                         "FC reposo",
-                        `${lastMetric?.restHr || "—"} bpm`,
+                        getLatestMetricValue("restHr")
+                          ? `${getLatestMetricValue("restHr")} bpm`
+                          : "—",
                         "restHr",
                         "sleepHours"
                       )}
                       {renderStatsCard("VO2 max", "—", "vo2max", "restHr")}
                       {renderStatsCard("Carga 7d / 28d", "—", "loadRatio", "steps")}
-                      {renderStatsCard("Pasos", lastMetric?.steps || "—", "steps", "sleepHours")}
+                      {renderStatsCard(
+                        "Pasos",
+                        getLatestMetricValue("steps") || "—",
+                        "steps",
+                        "sleepHours"
+                      )}
                       {renderStatsCard("Días entrenados (mes)", trainedDaysThisMonth, "")}
                       {renderStatsCard("Racha actual", trainingStreak, "")}
                     </div>

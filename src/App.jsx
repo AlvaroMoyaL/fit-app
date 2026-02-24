@@ -105,6 +105,8 @@ const GARMIN_IMPORT_KEYS = [
   "sleepScore",
   "readiness",
   "hrv",
+  "bodyBattery",
+  "stress",
 ];
 
 function toValidMetricNumber(value, decimals = null) {
@@ -170,6 +172,37 @@ function parseGarminJsonEntries(payload, fileName) {
       .map((row) => {
         const date = row?.calendarDate;
         if (!isValidDateKey(date)) return null;
+        const bbStats = Array.isArray(row?.bodyBattery?.bodyBatteryStatList)
+          ? row.bodyBattery.bodyBatteryStatList
+          : [];
+        const byType = Object.fromEntries(
+          bbStats
+            .filter((s) => s?.bodyBatteryStatType)
+            .map((s) => [String(s.bodyBatteryStatType).toUpperCase(), s])
+        );
+        const battery =
+          toValidMetricNumber(byType.DURINGSLEEP?.statsValue, 0) ??
+          toValidMetricNumber(byType.ENDOFDAY?.statsValue, 0) ??
+          toValidMetricNumber(byType.MOSTRECENT?.statsValue, 0);
+
+        let sleepHours;
+        const sleepStart = byType.SLEEPSTART?.statTimestamp;
+        const sleepEnd = byType.SLEEPEND?.statTimestamp;
+        if (sleepStart && sleepEnd) {
+          const h = (Date.parse(sleepEnd) - Date.parse(sleepStart)) / 36e5;
+          sleepHours = toValidMetricNumber(h, 1);
+          if (!Number.isFinite(sleepHours) || sleepHours <= 0 || sleepHours > 18) {
+            sleepHours = undefined;
+          }
+        }
+
+        const stressTotal = Array.isArray(row?.allDayStress?.aggregatorList)
+          ? row.allDayStress.aggregatorList.find(
+              (a) => String(a?.type || "").toUpperCase() === "TOTAL"
+            )
+          : null;
+        const stress = toValidMetricNumber(stressTotal?.averageStressLevel, 0);
+
         return {
           date,
           steps: toValidMetricNumber(row?.totalSteps, 0),
@@ -177,6 +210,9 @@ function parseGarminJsonEntries(payload, fileName) {
             row?.currentDayRestingHeartRate ?? row?.restingHeartRate,
             0
           ),
+          sleepHours,
+          bodyBattery: battery,
+          stress,
         };
       })
       .filter(Boolean);

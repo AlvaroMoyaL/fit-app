@@ -45,6 +45,9 @@ export default function WeightProjection({ currentWeight, dailyBalance }) {
     <Card variant="outlined">
       <CardContent sx={{ display: "grid", gap: 1.5 }}>
         <Typography variant="h6">Proyección de peso</Typography>
+        <Typography variant="body1">
+          Peso actual: <strong>{formatWeight(weight)} kg</strong>
+        </Typography>
         {rows.map((row) => (
           <Typography key={row.label} variant="body2" sx={{ color: projectionColor(row.change) }}>
             {row.label} | Cambio: {projectionIcon(row.change)} {projectionSign(row.change)} kg | Peso estimado:{" "}

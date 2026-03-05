@@ -199,7 +199,7 @@
   - registro de comidas por perfil con persistencia `localStorage` (`nutrition_log_{profileId}`),
   - resumen diario de calorías/macros y conteo de comidas,
   - cálculo metabólico (`BMR`, `TDEE`) y balance calórico diario,
-  - proyección de peso a `7/30/90` días según balance energético (`7700 kcal ≈ 1 kg`),
+  - proyección de peso a `7/30/90` días según balance energético (`7700 kcal ≈ 1 kg`), mostrando además el peso actual en la card,
   - evaluación automática del día (`excellent`/`acceptable`/`improve`) con recomendaciones heurísticas,
   - catálogo local ampliado de alimentos (`src/data/foods.js`, 150 items con categorías),
   - soporte de alimentos personalizados por perfil (`custom_foods_{profileId}`),

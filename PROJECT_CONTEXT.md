@@ -68,6 +68,7 @@
 ## Current Technical Notes
 - Build passes (`npm run build`).
 - Production URL (Vercel): `https://fit-app-beta-sand.vercel.app`.
+- UX de carga inicial mejorada para móvil: `index.html` incluye `boot-splash` inmediato (spinner + mensaje) que se remueve tras primer render en `src/main.jsx`, evitando pantalla blanca mientras carga JS.
 - Lint has no errors; 4 hook dependency warnings in `src/App.jsx`.
 - `.env` is intentionally untracked; configure real secrets locally and/or in hosting environment variables.
 - Sync now includes a basic conflict guard to avoid overwriting cloud data with lower local progress.

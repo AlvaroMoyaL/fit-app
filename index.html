@@ -10,8 +10,53 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fit App</title>
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #ffffff, #e9e3da);
+        z-index: 9999;
+      }
+
+      .boot-inner {
+        display: grid;
+        gap: 10px;
+        justify-items: center;
+        color: #0b5f58;
+        font-family: "DM Sans", system-ui, sans-serif;
+      }
+
+      .boot-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #b8d8d3;
+        border-top-color: #0b5f58;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+
+      .boot-text {
+        font-size: 14px;
+        letter-spacing: 0.2px;
+        font-weight: 600;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-inner">
+        <div class="boot-spinner"></div>
+        <div class="boot-text">Cargando Fit App...</div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

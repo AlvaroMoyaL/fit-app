@@ -67,6 +67,7 @@
 
 ## Current Technical Notes
 - Build passes (`npm run build`).
+- Production URL (Vercel): `https://fit-app-beta-sand.vercel.app`.
 - Lint has no errors; 4 hook dependency warnings in `src/App.jsx`.
 - `.env` is intentionally untracked; configure real secrets locally and/or in hosting environment variables.
 - Sync now includes a basic conflict guard to avoid overwriting cloud data with lower local progress.
@@ -201,7 +202,14 @@
   - proyección de peso a `7/30/90` días según balance energético (`7700 kcal ≈ 1 kg`),
   - evaluación automática del día (`excellent`/`acceptable`/`improve`) con recomendaciones heurísticas,
   - catálogo local ampliado de alimentos (`src/data/foods.js`, 150 items con categorías),
-  - soporte de alimentos personalizados por perfil (`custom_foods_{profileId}`).
+  - soporte de alimentos personalizados por perfil (`custom_foods_{profileId}`),
+  - soporte de recetas base (`src/data/recipes.js`) y utilidades de recetas (`src/utils/recipes.js`),
+  - soporte de recetas personalizadas por perfil (`custom_recipes_{profileId}`),
+  - selector visual de recetas con kcal estimadas (`RecipeSelector`),
+  - parser de texto rápido (`src/utils/foodParser.js`) para reconocer alimentos/recetas (incluye cantidad por línea, ej. `2 huevos`),
+  - ingreso rápido multilinea (`QuickFoodInput`) para pegar múltiples líneas y registrar todo en un clic,
+  - edición y eliminación de comidas del día desde la lista de registro,
+  - tarjeta de balance energético en tiempo real (`EnergyBalanceCard`) con interpretación y proyección semanal.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

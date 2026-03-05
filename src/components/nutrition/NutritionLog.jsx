@@ -14,10 +14,14 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { addMeal } from "../../utils/nutritionStorage";
+import { addMeal, deleteMeal, saveMeals } from "../../utils/nutritionStorage";
 import { getMealsForDate } from "../../utils/nutritionUtils";
-import { foods } from "../../data/foods";
+import { foodCatalog } from "../../data/foodCatalog";
+import { recipes } from "../../data/recipes";
 import { getCustomFoods, saveCustomFood } from "../../utils/customFoodsStorage";
+import { getCustomRecipes, saveCustomRecipe } from "../../utils/customRecipesStorage";
+import RecipeSelector from "./RecipeSelector";
+import QuickFoodInput from "./QuickFoodInput";
 
 const DEFAULT_FORM = {
   mealType: "desayuno",
@@ -31,6 +35,10 @@ const DEFAULT_CUSTOM_FOOD_FORM = {
   protein: "",
   carbs: "",
   fat: "",
+};
+const DEFAULT_RECIPE_FORM = {
+  name: "",
+  ingredients: [{ food: null, grams: "100" }],
 };
 const FOOD_CATEGORIES = [
   "carbs",
@@ -62,18 +70,26 @@ function mealTypeLabel(type) {
 export default function NutritionLog({ profileId, meals, onMealsChange }) {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [customFoods, setCustomFoods] = useState([]);
+  const [customRecipes, setCustomRecipes] = useState([]);
   const [showCustomFoodForm, setShowCustomFoodForm] = useState(false);
   const [customFoodForm, setCustomFoodForm] = useState(DEFAULT_CUSTOM_FOOD_FORM);
+  const [showCustomRecipeForm, setShowCustomRecipeForm] = useState(false);
+  const [customRecipeForm, setCustomRecipeForm] = useState(DEFAULT_RECIPE_FORM);
+  const [editingMealId, setEditingMealId] = useState("");
+  const [editingQuantity, setEditingQuantity] = useState("");
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
-  const foodOptions = useMemo(() => [...foods, ...customFoods], [customFoods]);
+  const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
+  const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
 
   useEffect(() => {
     if (!profileId) {
       setCustomFoods([]);
+      setCustomRecipes([]);
       return;
     }
     setCustomFoods(getCustomFoods(profileId));
+    setCustomRecipes(getCustomRecipes(profileId));
   }, [profileId]);
 
   const onChangeMealType = (event) => {
@@ -153,9 +169,248 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     setShowCustomFoodForm(false);
   };
 
+  const onChangeCustomRecipeName = (event) => {
+    const value = event.target.value;
+    setCustomRecipeForm((prev) => ({ ...prev, name: value }));
+  };
+
+  const onAddRecipeIngredient = () => {
+    setCustomRecipeForm((prev) => ({
+      ...prev,
+      ingredients: [...prev.ingredients, { food: null, grams: "100" }],
+    }));
+  };
+
+  const onRemoveRecipeIngredient = (index) => {
+    setCustomRecipeForm((prev) => ({
+      ...prev,
+      ingredients: prev.ingredients.filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const onChangeRecipeIngredientFood = (index, food) => {
+    setCustomRecipeForm((prev) => ({
+      ...prev,
+      ingredients: prev.ingredients.map((item, idx) =>
+        idx === index ? { ...item, food } : item
+      ),
+    }));
+  };
+
+  const onChangeRecipeIngredientGrams = (index, grams) => {
+    setCustomRecipeForm((prev) => ({
+      ...prev,
+      ingredients: prev.ingredients.map((item, idx) =>
+        idx === index ? { ...item, grams } : item
+      ),
+    }));
+  };
+
+  const normalizeId = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+  const getFoodId = (food) => normalizeId(food?.id || food?.name);
+
+  const foodIndex = useMemo(() => {
+    const index = new Map();
+    foodOptions.forEach((food) => {
+      if (!food) return;
+      const idKey = normalizeId(food.id);
+      const nameKey = normalizeId(food.name);
+      if (idKey) index.set(idKey, food);
+      if (nameKey) index.set(nameKey, food);
+    });
+    return index;
+  }, [foodOptions]);
+
+  const addFoodsToLog = (items) => {
+    if (!profileId) return;
+    const safeItems = Array.isArray(items) ? items : [];
+    if (!safeItems.length) return;
+
+    const createdMeals = [];
+    const baseId = Date.now();
+
+    safeItems.forEach((item, index) => {
+      const food = foodIndex.get(normalizeId(item?.foodId));
+      const grams = Number(item?.grams || 0);
+      if (!food || grams <= 0) return;
+
+      const ratio = grams / 100;
+      const meal = {
+        id: `${baseId}-${index}`,
+        date: getTodayDateKey(),
+        mealType: formData.mealType,
+        name: food.name,
+        quantity: Number(ratio.toFixed(2)),
+        grams: Number(grams.toFixed(2)),
+        calories: scaleNutrient(food.calories, ratio),
+        protein: scaleNutrient(food.protein, ratio),
+        carbs: scaleNutrient(food.carbs, ratio),
+        fat: scaleNutrient(food.fat, ratio),
+      };
+      addMeal(profileId, meal);
+      createdMeals.push(meal);
+    });
+
+    if (!createdMeals.length) return;
+    if (typeof onMealsChange === "function") {
+      onMealsChange([...(Array.isArray(meals) ? meals : []), ...createdMeals]);
+    }
+  };
+
+  const onQuickAddFoods = (items) => {
+    if (!Array.isArray(items) || !items.length) return;
+    addFoodsToLog(items);
+  };
+
+  const startEditMeal = (meal) => {
+    setEditingMealId(String(meal?.id || ""));
+    setEditingQuantity(String(meal?.quantity ?? 1));
+  };
+
+  const cancelEditMeal = () => {
+    setEditingMealId("");
+    setEditingQuantity("");
+  };
+
+  const onSaveMealEdit = (meal) => {
+    if (!profileId || !meal?.id) return;
+    const nextQuantity = Number(editingQuantity || 0);
+    if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) return;
+
+    const prevQuantity = Number(meal.quantity || 1);
+    const factor = prevQuantity > 0 ? nextQuantity / prevQuantity : 1;
+    const round2 = (value) => Number((Number(value || 0) * factor).toFixed(2));
+
+    const nextMeals = (Array.isArray(meals) ? meals : []).map((item) => {
+      if (String(item?.id) !== String(meal.id)) return item;
+      const nextGrams = item?.grams ? Number((Number(item.grams) * factor).toFixed(2)) : item?.grams;
+      return {
+        ...item,
+        quantity: Number(nextQuantity.toFixed(2)),
+        grams: nextGrams,
+        calories: round2(item.calories),
+        protein: round2(item.protein),
+        carbs: round2(item.carbs),
+        fat: round2(item.fat),
+      };
+    });
+
+    saveMeals(profileId, nextMeals);
+    if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    cancelEditMeal();
+  };
+
+  const onDeleteMeal = (mealId) => {
+    if (!profileId || !mealId) return;
+    const nextMeals = deleteMeal(profileId, mealId);
+    if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (String(editingMealId) === String(mealId)) cancelEditMeal();
+  };
+
+  const onSaveCustomRecipe = () => {
+    if (!profileId) return;
+    const name = customRecipeForm.name.trim();
+    if (!name) return;
+
+    const ingredients = customRecipeForm.ingredients
+      .map((item) => {
+        const grams = Number(item?.grams || 0);
+        if (!item?.food || grams <= 0) return null;
+        return { foodId: getFoodId(item.food), grams };
+      })
+      .filter(Boolean);
+
+    if (!ingredients.length) return;
+
+    const recipe = {
+      id: `custom_${normalizeId(name)}`,
+      name,
+      ingredients,
+    };
+
+    const nextRecipes = saveCustomRecipe(profileId, recipe);
+    setCustomRecipes(nextRecipes);
+    setCustomRecipeForm(DEFAULT_RECIPE_FORM);
+    setShowCustomRecipeForm(false);
+  };
+
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
       <Typography variant="h6">Registro de comidas</Typography>
+      <RecipeSelector onAddFoods={addFoodsToLog} recipes={recipeOptions} catalog={foodOptions} />
+      <QuickFoodInput
+        onAddFoods={onQuickAddFoods}
+        recipes={recipeOptions}
+        foodCatalog={foodOptions}
+      />
+      <Box>
+        <Button
+          type="button"
+          variant="text"
+          onClick={() => setShowCustomRecipeForm((prev) => !prev)}
+          disabled={!profileId}
+        >
+          + Crear receta
+        </Button>
+      </Box>
+
+      {showCustomRecipeForm && (
+        <Box sx={{ display: "grid", gap: 1.5, p: 1.5, border: "1px solid", borderColor: "divider" }}>
+          <Typography variant="subtitle1">Nueva receta personalizada</Typography>
+          <TextField
+            label="Nombre de la receta"
+            value={customRecipeForm.name}
+            onChange={onChangeCustomRecipeName}
+            fullWidth
+          />
+          {customRecipeForm.ingredients.map((item, index) => (
+            <Stack key={`recipe-ingredient-${index}`} direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <Autocomplete
+                options={foodOptions}
+                value={item.food}
+                onChange={(_, value) => onChangeRecipeIngredientFood(index, value)}
+                getOptionLabel={(option) => option?.name || ""}
+                isOptionEqualToValue={(option, value) =>
+                  option?.name === value?.name && option?.category === value?.category
+                }
+                renderInput={(params) => <TextField {...params} label="Ingrediente" fullWidth />}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                type="number"
+                label="Gramos"
+                value={item.grams}
+                onChange={(event) => onChangeRecipeIngredientGrams(index, event.target.value)}
+                inputProps={{ min: 1, step: 1 }}
+                sx={{ width: { xs: "100%", sm: 140 } }}
+              />
+              <Button
+                type="button"
+                variant="outlined"
+                color="error"
+                onClick={() => onRemoveRecipeIngredient(index)}
+                disabled={customRecipeForm.ingredients.length <= 1}
+              >
+                Quitar
+              </Button>
+            </Stack>
+          ))}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Button type="button" variant="outlined" onClick={onAddRecipeIngredient}>
+              Agregar ingrediente
+            </Button>
+            <Button type="button" variant="contained" onClick={onSaveCustomRecipe}>
+              Guardar receta
+            </Button>
+          </Stack>
+        </Box>
+      )}
       <Box component="form" onSubmit={onSubmit} sx={{ display: "grid", gap: 2 }}>
         <FormControl fullWidth>
           <InputLabel id="meal-type-label">Tipo de comida</InputLabel>
@@ -299,10 +554,45 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
           <List dense>
             {mealsToday.map((meal) => (
               <ListItem key={meal.id} disableGutters>
-                <ListItemText
-                  primary={`${mealTypeLabel(meal.mealType)} — ${meal.name}`}
-                  secondary={`Cantidad: ${meal.quantity ?? 1}`}
-                />
+                <Box sx={{ width: "100%", display: "grid", gap: 1 }}>
+                  <ListItemText
+                    primary={`${mealTypeLabel(meal.mealType)} — ${meal.name}`}
+                    secondary={`Cantidad: ${meal.quantity ?? 1}`}
+                  />
+                  {String(editingMealId) === String(meal.id) ? (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <TextField
+                        type="number"
+                        label="Cantidad"
+                        size="small"
+                        value={editingQuantity}
+                        onChange={(event) => setEditingQuantity(event.target.value)}
+                        inputProps={{ min: 0.1, step: 0.1 }}
+                      />
+                      <Button type="button" size="small" variant="contained" onClick={() => onSaveMealEdit(meal)}>
+                        Guardar
+                      </Button>
+                      <Button type="button" size="small" variant="text" onClick={cancelEditMeal}>
+                        Cancelar
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <Button type="button" size="small" variant="text" onClick={() => startEditMeal(meal)}>
+                        Editar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="small"
+                        color="error"
+                        variant="text"
+                        onClick={() => onDeleteMeal(meal.id)}
+                      >
+                        Eliminar
+                      </Button>
+                    </Stack>
+                  )}
+                </Box>
               </ListItem>
             ))}
           </List>

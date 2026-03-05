@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Box, Divider, Typography } from "@mui/material";
 import NutritionSummary from "./NutritionSummary";
+import EnergyBalanceCard from "./EnergyBalanceCard";
 import NutritionLog from "./NutritionLog";
 import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WeightProjection from "./WeightProjection";
@@ -43,6 +44,7 @@ export default function NutritionPage({ profileId, profile }) {
       <Typography variant="h4">Nutrición</Typography>
       <Divider />
       <NutritionSummary profile={profile} meals={meals} />
+      <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
       <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
       <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
       <NutritionLog profileId={profileId} meals={meals} onMealsChange={setMeals} />

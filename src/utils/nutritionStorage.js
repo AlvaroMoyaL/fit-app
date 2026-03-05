@@ -28,3 +28,19 @@ export function addMeal(profileId, meal) {
   const nextMeals = [...currentMeals, meal];
   saveMeals(profileId, nextMeals);
 }
+
+export function updateMeal(profileId, mealId, updates) {
+  const currentMeals = getMeals(profileId);
+  const nextMeals = currentMeals.map((meal) =>
+    meal?.id === mealId ? { ...meal, ...(updates || {}) } : meal
+  );
+  saveMeals(profileId, nextMeals);
+  return nextMeals;
+}
+
+export function deleteMeal(profileId, mealId) {
+  const currentMeals = getMeals(profileId);
+  const nextMeals = currentMeals.filter((meal) => meal?.id !== mealId);
+  saveMeals(profileId, nextMeals);
+  return nextMeals;
+}

@@ -194,6 +194,14 @@
   - botón `Ir al día más débil` conecta directamente con `Plan` y selecciona ese día.
 - Dev server:
   - se mantiene decisión previa de integración: `port 5175` y `strictPort: true` en `vite.config.js`.
+- Módulo de nutrición (Sprint 2 y 2.5) implementado en `src/components/nutrition/*`:
+  - registro de comidas por perfil con persistencia `localStorage` (`nutrition_log_{profileId}`),
+  - resumen diario de calorías/macros y conteo de comidas,
+  - cálculo metabólico (`BMR`, `TDEE`) y balance calórico diario,
+  - proyección de peso a `7/30/90` días según balance energético (`7700 kcal ≈ 1 kg`),
+  - evaluación automática del día (`excellent`/`acceptable`/`improve`) con recomendaciones heurísticas,
+  - catálogo local ampliado de alimentos (`src/data/foods.js`, 150 items con categorías),
+  - soporte de alimentos personalizados por perfil (`custom_foods_{profileId}`).
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

@@ -22,6 +22,7 @@ import WeeklyCharts from "./components/WeeklyCharts";
 import MetricsLogForm from "./components/MetricsLogForm";
 import MetricsCharts from "./components/MetricsCharts";
 import StatsMetricDrawer from "./components/StatsMetricDrawer";
+import NutritionPage from "./components/nutrition/NutritionPage";
 import { getLevelProgress } from "./utils/levelProgress";
 import {
   countExercises,
@@ -3874,6 +3875,10 @@ export default function App() {
               )}
             </>
           )}
+
+          {sidebarTab === "nutrition" && (
+            <NutritionPage profileId={activeProfileId} profile={form} />
+          )}
         </div>
 
         <MetricsInfoModal
@@ -4023,6 +4028,16 @@ export default function App() {
           }}
         >
           Stats
+        </button>
+        <button
+          type="button"
+          className={sidebarTab === "nutrition" ? "active" : ""}
+          onClick={() => {
+            setSidebarTab("nutrition");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          Nutrición
         </button>
       </nav>
 

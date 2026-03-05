@@ -241,6 +241,13 @@ export default function Sidebar({
           >
             Stats
           </button>
+          <button
+            type="button"
+            className={`tab ${activeTab === "nutrition" ? "active" : ""}`}
+            onClick={() => onChangeTab("nutrition")}
+          >
+            Nutrición
+          </button>
         </div>
       </div>
 

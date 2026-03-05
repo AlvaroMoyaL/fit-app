@@ -9,10 +9,24 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-requestAnimationFrame(() => {
+const removeSplash = () => {
   const splash = document.getElementById("boot-splash");
-  if (splash) splash.remove();
-});
+  if (!splash) return;
+  splash.style.opacity = "0";
+  setTimeout(() => splash.remove(), 240);
+};
+
+const hideSplashWhenReady = () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(removeSplash);
+  });
+};
+
+if (document.readyState === "complete") {
+  hideSplashWhenReady();
+} else {
+  window.addEventListener("load", hideSplashWhenReady, { once: true });
+}
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {

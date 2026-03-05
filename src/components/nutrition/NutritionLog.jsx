@@ -5,12 +5,14 @@ import {
   Button,
   FormControl,
   InputLabel,
-  List,
-  ListItem,
-  ListItemText,
   MenuItem,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -50,6 +52,7 @@ const FOOD_CATEGORIES = [
   "processed",
   "traditional",
 ];
+const MEAL_TYPE_ORDER = ["desayuno", "almuerzo", "cena", "snack"];
 
 function getTodayDateKey() {
   const now = new Date();
@@ -67,6 +70,15 @@ function mealTypeLabel(type) {
   return type;
 }
 
+function getMealContributionValues(meal) {
+  return {
+    calories: Math.round(Number(meal?.calories || 0)),
+    protein: Number(Number(meal?.protein || 0).toFixed(1)),
+    carbs: Number(Number(meal?.carbs || 0).toFixed(1)),
+    fat: Number(Number(meal?.fat || 0).toFixed(1)),
+  };
+}
+
 export default function NutritionLog({ profileId, meals, onMealsChange }) {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [customFoods, setCustomFoods] = useState([]);
@@ -79,6 +91,19 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
   const [editingQuantity, setEditingQuantity] = useState("");
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
+  const mealsTodayByType = useMemo(() => {
+    const grouped = new Map();
+    mealsToday.forEach((meal) => {
+      const key = meal?.mealType || "snack";
+      const current = grouped.get(key) || [];
+      grouped.set(key, [...current, meal]);
+    });
+    return MEAL_TYPE_ORDER.map((type) => ({
+      type,
+      label: mealTypeLabel(type),
+      items: grouped.get(type) || [],
+    })).filter((block) => block.items.length > 0);
+  }, [mealsToday]);
   const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
   const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
 
@@ -551,51 +576,116 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
             Sin comidas registradas hoy.
           </Typography>
         ) : (
-          <List dense>
-            {mealsToday.map((meal) => (
-              <ListItem key={meal.id} disableGutters>
-                <Box sx={{ width: "100%", display: "grid", gap: 1 }}>
-                  <ListItemText
-                    primary={`${mealTypeLabel(meal.mealType)} — ${meal.name}`}
-                    secondary={`Cantidad: ${meal.quantity ?? 1}`}
-                  />
-                  {String(editingMealId) === String(meal.id) ? (
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                      <TextField
-                        type="number"
-                        label="Cantidad"
-                        size="small"
-                        value={editingQuantity}
-                        onChange={(event) => setEditingQuantity(event.target.value)}
-                        inputProps={{ min: 0.1, step: 0.1 }}
-                      />
-                      <Button type="button" size="small" variant="contained" onClick={() => onSaveMealEdit(meal)}>
-                        Guardar
-                      </Button>
-                      <Button type="button" size="small" variant="text" onClick={cancelEditMeal}>
-                        Cancelar
-                      </Button>
-                    </Stack>
-                  ) : (
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                      <Button type="button" size="small" variant="text" onClick={() => startEditMeal(meal)}>
-                        Editar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="small"
-                        color="error"
-                        variant="text"
-                        onClick={() => onDeleteMeal(meal.id)}
-                      >
-                        Eliminar
-                      </Button>
-                    </Stack>
-                  )}
+          <Box sx={{ display: "grid", gap: 1.2 }}>
+            {mealsTodayByType.map((block) => (
+              <Box
+                key={block.type}
+                sx={{
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1.5,
+                  p: 1,
+                  backgroundColor: "background.paper",
+                }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.6 }}>
+                  {block.label}
+                </Typography>
+                <Box sx={{ overflowX: "auto" }}>
+                  <Table size="small" sx={{ minWidth: 760 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Alimento</TableCell>
+                        <TableCell align="right">Calorías</TableCell>
+                        <TableCell align="right">Proteínas</TableCell>
+                        <TableCell align="right">Carbohidratos</TableCell>
+                        <TableCell align="right">Grasas</TableCell>
+                        <TableCell align="right">Acciones</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                  {block.items.map((meal) => (
+                    <TableRow key={meal.id}>
+                      {(() => {
+                        const contribution = getMealContributionValues(meal);
+                        return (
+                          <>
+                            <TableCell>
+                              <Typography variant="body1" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                                {meal.name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            >
+                              {contribution.calories} kcal
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            >
+                              {contribution.protein} g
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            >
+                              {contribution.carbs} g
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            >
+                              {contribution.fat} g
+                            </TableCell>
+                            <TableCell align="right">
+                              {String(editingMealId) === String(meal.id) ? (
+                                <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
+                                  <TextField
+                                    type="number"
+                                    label="Cant."
+                                    size="small"
+                                    value={editingQuantity}
+                                    onChange={(event) => setEditingQuantity(event.target.value)}
+                                    inputProps={{ min: 0.1, step: 0.1 }}
+                                    sx={{ width: 95 }}
+                                  />
+                                  <Button type="button" size="small" variant="contained" onClick={() => onSaveMealEdit(meal)}>
+                                    Guardar
+                                  </Button>
+                                  <Button type="button" size="small" variant="text" onClick={cancelEditMeal}>
+                                    Cancelar
+                                  </Button>
+                                </Stack>
+                              ) : (
+                                <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
+                                  <Button type="button" size="small" variant="text" onClick={() => startEditMeal(meal)}>
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="small"
+                                    color="error"
+                                    variant="text"
+                                    onClick={() => onDeleteMeal(meal.id)}
+                                  >
+                                    Eliminar
+                                  </Button>
+                                </Stack>
+                              )}
+                            </TableCell>
+                          </>
+                        );
+                      })()}
+                    </TableRow>
+                  ))}
+                    </TableBody>
+                  </Table>
                 </Box>
-              </ListItem>
+              </Box>
             ))}
-          </List>
+          </Box>
         )}
       </Box>
     </Box>

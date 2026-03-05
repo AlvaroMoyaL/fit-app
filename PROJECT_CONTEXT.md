@@ -210,6 +210,7 @@
   - parser de texto rápido (`src/utils/foodParser.js`) para reconocer alimentos/recetas (incluye cantidad por línea, ej. `2 huevos`),
   - ingreso rápido multilinea (`QuickFoodInput`) para pegar múltiples líneas y registrar todo en un clic,
   - edición y eliminación de comidas del día desde la lista de registro,
+  - sección `Comidas de hoy` mejorada a tabla por bloque (`Desayuno/Almuerzo/Cena/Snack`) con columnas alineadas (`Calorías`, `Proteínas`, `Carbohidratos`, `Grasas`) y acciones a la derecha,
   - tarjeta de balance energético en tiempo real (`EnergyBalanceCard`) con interpretación, proyección semanal y gráfico visual de barras (consumo vs gasto y balance).
 
 ## Conventions for Future Changes

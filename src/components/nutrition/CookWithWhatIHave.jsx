@@ -10,14 +10,19 @@ import {
   List,
   ListItem,
   ListItemText,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 
 export default function CookWithWhatIHave() {
   const [ingredientsText, setIngredientsText] = useState("");
+  const [mealType, setMealType] = useState("lunch");
   const [result, setResult] = useState(null);
 
   const handleSuggestMeals = () => {
-    const meals = generateMealsFromIngredients(ingredientsText);
+    const meals = generateMealsFromIngredients(ingredientsText, mealType);
     setResult(meals);
   };
 
@@ -37,6 +42,21 @@ export default function CookWithWhatIHave() {
           value={ingredientsText}
           onChange={(event) => setIngredientsText(event.target.value)}
         />
+
+        <FormControl fullWidth>
+          <InputLabel id="cook-meal-type-label">Tipo de comida</InputLabel>
+          <Select
+            labelId="cook-meal-type-label"
+            label="Tipo de comida"
+            value={mealType}
+            onChange={(event) => setMealType(event.target.value)}
+          >
+            <MenuItem value="breakfast">Desayuno</MenuItem>
+            <MenuItem value="lunch">Almuerzo</MenuItem>
+            <MenuItem value="dinner">Cena</MenuItem>
+            <MenuItem value="snack">Snack</MenuItem>
+          </Select>
+        </FormControl>
 
         <Button variant="contained" onClick={handleSuggestMeals} disabled={!ingredientsText.trim()}>
           Sugerir comidas

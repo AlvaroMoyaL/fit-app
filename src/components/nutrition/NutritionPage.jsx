@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, Button, Divider, Typography } from "@mui/material";
+import { Box, Button, Divider, Tab, Tabs, Typography } from "@mui/material";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
 import MealSuggestions from "./MealSuggestions";
@@ -45,6 +45,7 @@ export default function NutritionPage({
   const [meals, setMeals] = useState([]);
   const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
   const [adaptiveDrawerSection, setAdaptiveDrawerSection] = useState("progreso");
+  const [dailyStatusTab, setDailyStatusTab] = useState(0);
   const todayKey = useMemo(() => getTodayDateKey(), []);
 
   useEffect(() => {
@@ -138,39 +139,72 @@ export default function NutritionPage({
 
       {activeSection === "estado" && (
         <Box sx={{ display: "grid", gap: 2 }}>
-          <NutritionSummary
-            profile={profile}
-            meals={meals}
-            tdeeOverride={tdee}
-            activityMetrics={metricsForTdee}
-          />
-          <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
-          <MealSuggestions
-            dailyCaloriesTarget={tdee}
-            dailyCaloriesConsumed={totalsToday.calories}
-            recipes={recipes}
-            foodCatalog={foodCatalog}
-            mealType={suggestedMealType}
-          />
-          <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
-          <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
-          <NutritionAlerts
-            calorieHistory={calorieHistory}
-            weightHistory={weightHistory}
-            currentTargetCalories={currentTargetCalories}
-            onOpenDetail={openAdaptiveDrawer}
-          />
-          <AdaptiveCalorieAdjustment
-            calorieHistory={calorieHistory}
-            weightHistory={weightHistory}
-            currentTargetCalories={currentTargetCalories}
-            onOpenDetail={openAdaptiveDrawer}
-          />
-          <Box>
-            <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
-              Ver análisis adaptativo
-            </Button>
-          </Box>
+          <Tabs
+            value={dailyStatusTab}
+            onChange={(_, value) => setDailyStatusTab(value)}
+            variant="scrollable"
+            allowScrollButtonsMobile
+          >
+            <Tab label="Resumen" />
+            <Tab label="Balance y proyección" />
+            <Tab label="Adaptativo" />
+          </Tabs>
+
+          {dailyStatusTab === 0 && (
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <NutritionSummary
+                profile={profile}
+                meals={meals}
+                tdeeOverride={tdee}
+                activityMetrics={metricsForTdee}
+              />
+              <MealSuggestions
+                dailyCaloriesTarget={tdee}
+                dailyCaloriesConsumed={totalsToday.calories}
+                recipes={recipes}
+                foodCatalog={foodCatalog}
+                mealType={suggestedMealType}
+              />
+              <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
+            </Box>
+          )}
+
+          {dailyStatusTab === 1 && (
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
+              <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
+            </Box>
+          )}
+
+          {dailyStatusTab === 2 && (
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <NutritionAlerts
+                calorieHistory={calorieHistory}
+                weightHistory={weightHistory}
+                currentTargetCalories={currentTargetCalories}
+                onOpenDetail={openAdaptiveDrawer}
+              />
+              <AdaptiveCalorieAdjustment
+                calorieHistory={calorieHistory}
+                weightHistory={weightHistory}
+                currentTargetCalories={currentTargetCalories}
+                onOpenDetail={openAdaptiveDrawer}
+              />
+              <Box>
+                <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
+                  Ver análisis adaptativo
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {dailyStatusTab !== 2 && (
+            <Box>
+              <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
+                Ver análisis adaptativo
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
 

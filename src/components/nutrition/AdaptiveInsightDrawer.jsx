@@ -31,6 +31,8 @@ export default function AdaptiveInsightDrawer({
   const progress = analizarProgresoPeso({ calorieHistory, weightHistory });
   const stall = detectarEstancamientoPeso({ calorieHistory, weightHistory });
   const adjustment = calcularAjusteCalorico({ calorieHistory, weightHistory });
+  const weightPoints = Array.isArray(weightHistory) ? weightHistory.length : 0;
+  const caloriePoints = Array.isArray(calorieHistory) ? calorieHistory.length : 0;
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
@@ -42,24 +44,20 @@ export default function AdaptiveInsightDrawer({
           </Button>
         </Stack>
 
-        {!progress.analysisAvailable ? (
-          <Typography variant="body2" color="text.secondary">
-            Aún no hay suficientes datos para análisis adaptativo.
-          </Typography>
-        ) : (
-          <>
-            <Box
-              id="adaptive-progreso"
-              sx={{
-                display: "grid",
-                gap: 0.6,
-                p: 1,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: focusSection === "progreso" ? "primary.main" : "divider",
-              }}
-            >
-              <Typography variant="subtitle2">Progreso</Typography>
+        <Box
+          id="adaptive-progreso"
+          sx={{
+            display: "grid",
+            gap: 0.6,
+            p: 1,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: focusSection === "progreso" ? "primary.main" : "divider",
+          }}
+        >
+          <Typography variant="subtitle2">Progreso</Typography>
+          {progress.analysisAvailable ? (
+            <>
               <Typography variant="body2">
                 Eficiencia déficit: {fmt(progress.efficiencyRatio, 2)}
               </Typography>
@@ -70,22 +68,42 @@ export default function AdaptiveInsightDrawer({
                 Cambio real: {fmt(progress.realWeightChange, 2)} kg
               </Typography>
               <Typography variant="body2">{progress.interpretation}</Typography>
-            </Box>
+            </>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Aún no hay suficientes datos para análisis adaptativo.
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Registros disponibles: peso {weightPoints} / calorías {caloriePoints}
+              </Typography>
+            </>
+          )}
+        </Box>
 
-            <Divider />
+        <Divider />
 
-            <Box
-              id="adaptive-estancamiento"
-              sx={{
-                display: "grid",
-                gap: 0.6,
-                p: 1,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: focusSection === "estancamiento" ? "primary.main" : "divider",
-              }}
-            >
-              <Typography variant="subtitle2">Estancamiento</Typography>
+        <Box
+          id="adaptive-estancamiento"
+          sx={{
+            display: "grid",
+            gap: 0.6,
+            p: 1,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: focusSection === "estancamiento" ? "primary.main" : "divider",
+          }}
+        >
+          <Typography variant="subtitle2">Estancamiento</Typography>
+          {stall.reason === "not_enough_data" ? (
+            <>
+              <Chip size="small" color="default" label="Datos insuficientes" />
+              <Typography variant="body2" color="text.secondary">
+                Necesitas más días de peso para evaluar estancamiento.
+              </Typography>
+            </>
+          ) : (
+            <>
               <Stack direction="row" spacing={1}>
                 <Chip
                   size="small"
@@ -100,22 +118,30 @@ export default function AdaptiveInsightDrawer({
               <Typography variant="body2">
                 Déficit promedio: {fmt(stall.averageDeficit || 0, 0)} kcal/día
               </Typography>
-            </Box>
+            </>
+          )}
+        </Box>
 
-            <Divider />
+        <Divider />
 
-            <Box
-              id="adaptive-ajuste"
-              sx={{
-                display: "grid",
-                gap: 0.6,
-                p: 1,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: focusSection === "ajuste" ? "primary.main" : "divider",
-              }}
-            >
-              <Typography variant="subtitle2">Ajuste recomendado</Typography>
+        <Box
+          id="adaptive-ajuste"
+          sx={{
+            display: "grid",
+            gap: 0.6,
+            p: 1,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: focusSection === "ajuste" ? "primary.main" : "divider",
+          }}
+        >
+          <Typography variant="subtitle2">Ajuste recomendado</Typography>
+          {adjustment.reason === "not_enough_data" ? (
+            <Typography variant="body2" color="text.secondary">
+              Sin recomendación aún: faltan datos suficientes para calcular ajuste.
+            </Typography>
+          ) : (
+            <>
               <Typography variant="body2">
                 Objetivo actual: {Math.round(Number(currentTargetCalories || 0))} kcal/día
               </Typography>
@@ -125,9 +151,9 @@ export default function AdaptiveInsightDrawer({
               <Typography variant="body2">
                 Código: {adjustment.explanation || "mantener_calorias"}
               </Typography>
-            </Box>
-          </>
-        )}
+            </>
+          )}
+        </Box>
       </Box>
     </Drawer>
   );

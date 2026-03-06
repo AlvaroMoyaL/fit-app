@@ -51,6 +51,7 @@ export default function FoodDetailDrawer({ open, onClose, meal }) {
           <>
             <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
               {meal.name}
+              {meal?.brand ? ` · ${meal.brand}` : ""}
             </Typography>
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
               <Chip size="small" label={mealTypeLabel(meal.mealType)} />

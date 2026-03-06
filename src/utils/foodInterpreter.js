@@ -27,6 +27,14 @@ const foodSynonyms = {
   platano: "banana",
 };
 
+const compositeMeals = {
+  completo: ["bread", "sausage", "tomato", "avocado", "mayonnaise"],
+  "porotos con rienda": ["beans", "pasta"],
+  charquican: ["beef", "potato", "pumpkin"],
+  cazuela: ["chicken", "potato", "corn", "pumpkin"],
+  "pan con huevo": ["bread", "egg"],
+};
+
 function toCatalogId(food) {
   const rawId = food?.id || food?.name || "";
   return normalizeFoodText(rawId).replace(/\s+/g, "_");
@@ -92,6 +100,16 @@ export function tokenizeFoodText(text) {
 
 export function interpretFoodText(text) {
   const normalizedInput = normalizeFoodText(text);
+
+  // Detect common composite meals before token-level parsing.
+  for (const [mealName, ingredients] of Object.entries(compositeMeals)) {
+    const normalizedMealName = normalizeFoodText(mealName);
+    const regex = new RegExp(`(^|\\s)${escapeRegex(normalizedMealName)}($|\\s)`, "i");
+    if (regex.test(normalizedInput)) {
+      return Array.from(new Set(ingredients));
+    }
+  }
+
   const tokens = tokenizeFoodText(normalizedInput);
   if (tokens.length === 0) return [];
 
@@ -161,4 +179,4 @@ export function interpretFoodText(text) {
   return Array.from(found);
 }
 
-export { foodSynonyms, connectors };
+export { foodSynonyms, connectors, compositeMeals };

@@ -17,6 +17,13 @@ const FOOD_EQUIVALENCE = {
   beef: ["beef", "carne", "carne_vacuno", "carne_molida"],
   potato: ["potato", "papa", "papas", "pure_de_papa", "papas_fritas"],
   pasta: ["pasta", "fideos", "pasta_integral"],
+  cheese: ["cheese", "queso", "quesillo", "queso_gauda", "queso_mantecoso"],
+  sausage: ["sausage", "vienesa", "vienesas", "salchicha", "salchichas"],
+  beans: ["beans", "porotos", "poroto", "porotos_cocidos"],
+  tortilla: ["tortilla", "tortilla_de_trigo", "tortilla_de_maiz"],
+  pumpkin: ["pumpkin", "zapallo"],
+  corn: ["corn", "choclo"],
+  mayonnaise: ["mayonnaise", "mayonesa"],
   coffee: ["coffee", "cafe"],
 };
 
@@ -95,12 +102,27 @@ export function findPossibleRecipes(availableFoods) {
   return ranked;
 }
 
-export function generateMealsFromIngredients(text) {
+function normalizeMealType(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+export function generateMealsFromIngredients(text, mealType = "lunch") {
   const availableFoods = parseAvailableIngredients(text);
-  const analyzedRecipes = findPossibleRecipes(availableFoods);
+  const wantedMealType = normalizeMealType(mealType);
+  const recipesForType = (Array.isArray(recipes) ? recipes : []).filter((recipe) => {
+    const recipeType = normalizeMealType(recipe?.mealType);
+    if (!recipeType) return true;
+    return wantedMealType ? recipeType === wantedMealType : true;
+  });
+
+  const analyzedRecipes = findPossibleRecipes(availableFoods).filter((item) =>
+    recipesForType.some((recipe) => String(recipe?.id || "") === String(item?.recipeId || ""))
+  );
 
   const cookNow = analyzedRecipes.filter((item) => item.missingCount === 0);
-  const cookAlmost = analyzedRecipes.filter((item) => item.missingCount <= 2);
+  const cookAlmost = analyzedRecipes.filter((item) => item.missingCount <= 3);
 
   return {
     cookNow,

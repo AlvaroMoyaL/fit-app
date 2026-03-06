@@ -258,6 +258,14 @@
       - `WorkNutritionTools` (tabs: casino, planificador, kit),
     - integración en `NutritionPage`:
       - nueva sección `work` (`Nutrición en el trabajo`) desde sidebar,
+  - mejoras recientes de UX en nutrición:
+    - `NutritionLog` ahora organiza el flujo en tabs internas (`Ingreso de alimentos`, `Recetas rápidas`, `Crear alimentos`, `Crear recetas`, `Comidas de hoy`),
+    - `Comidas de hoy` se mantiene visible de forma persistente aunque se cambie de tab de registro,
+    - alimentos personalizados ahora soportan `brand` (marca) y edición desde la UI,
+    - `customFoodsStorage` guarda y lee catálogo compartido global para reutilizar alimentos personalizados entre perfiles del mismo dispositivo,
+    - registros de comida guardan también `brand` y se muestra en lista + `FoodDetailDrawer`,
+    - `Estado diario` en `NutritionPage` ahora usa tabs (`Resumen`, `Balance y proyección`, `Adaptativo`) para navegación más clara,
+    - `AdaptiveInsightDrawer` ya no queda vacío con pocos datos: siempre muestra secciones y mensajes de estado (`datos insuficientes`, conteo de registros, motivo de no recomendación).
   - Herramientas de `Nutrición en el trabajo` consolidadas en tabs (`NutritionTools`):
     - `Registrar comida` (SmartFoodInput),
     - `Qué puedo cocinar` (CookWithWhatIHave),

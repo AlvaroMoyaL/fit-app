@@ -14,6 +14,8 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
@@ -21,7 +23,7 @@ import { addMeal, deleteMeal, saveMeals } from "../../utils/nutritionStorage";
 import { getMealsForDate } from "../../utils/nutritionUtils";
 import { foodCatalog } from "../../data/foodCatalog";
 import { recipes } from "../../data/recipes";
-import { getCustomFoods, saveCustomFood } from "../../utils/customFoodsStorage";
+import { getCustomFoods, saveCustomFood, updateCustomFood } from "../../utils/customFoodsStorage";
 import { getCustomRecipes, saveCustomRecipe } from "../../utils/customRecipesStorage";
 import RecipeSelector from "./RecipeSelector";
 import QuickFoodInput from "./QuickFoodInput";
@@ -35,11 +37,20 @@ const DEFAULT_FORM = {
 };
 const DEFAULT_CUSTOM_FOOD_FORM = {
   name: "",
+  brand: "",
   category: "processed",
   calories: "",
   protein: "",
   carbs: "",
   fat: "",
+  servingSize: "",
+  servingsPerContainer: "",
+  sodium: "",
+  sugars: "",
+  fiber: "",
+  saturatedFat: "",
+  transFat: "",
+  cholesterol: "",
 };
 const DEFAULT_RECIPE_FORM = {
   name: "",
@@ -93,12 +104,27 @@ function getMealContributionValues(meal) {
   };
 }
 
+function normalizeFoodIdentityPart(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getFoodIdentity(food) {
+  return `${normalizeFoodIdentityPart(food?.name)}::${normalizeFoodIdentityPart(food?.brand)}`;
+}
+
 export default function NutritionLog({ profileId, meals, onMealsChange, onDataChange }) {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [customFoods, setCustomFoods] = useState([]);
   const [customRecipes, setCustomRecipes] = useState([]);
   const [showCustomFoodForm, setShowCustomFoodForm] = useState(false);
   const [customFoodForm, setCustomFoodForm] = useState(DEFAULT_CUSTOM_FOOD_FORM);
+  const [registerTab, setRegisterTab] = useState(0);
+  const [editingCustomFoodIdentity, setEditingCustomFoodIdentity] = useState("");
+  const [selectedCustomFoodToEdit, setSelectedCustomFoodToEdit] = useState(null);
   const [showCustomRecipeForm, setShowCustomRecipeForm] = useState(false);
   const [customRecipeForm, setCustomRecipeForm] = useState(DEFAULT_RECIPE_FORM);
   const [editingMealId, setEditingMealId] = useState("");
@@ -187,6 +213,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       mealType: formData.mealType,
       beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
       name: formData.food.name,
+      brand: formData.food.brand || "",
       quantity,
       unit,
       calories: scaleNutrient(formData.food.calories, ratio),
@@ -210,19 +237,62 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
 
     const customFood = {
       name,
+      brand: customFoodForm.brand.trim(),
       category: customFoodForm.category,
       calories: Number(customFoodForm.calories || 0),
       protein: Number(customFoodForm.protein || 0),
       carbs: Number(customFoodForm.carbs || 0),
       fat: Number(customFoodForm.fat || 0),
+      servingSize: customFoodForm.servingSize,
+      servingsPerContainer: Number(customFoodForm.servingsPerContainer || 0),
+      sodium: Number(customFoodForm.sodium || 0),
+      sugars: Number(customFoodForm.sugars || 0),
+      fiber: Number(customFoodForm.fiber || 0),
+      saturatedFat: Number(customFoodForm.saturatedFat || 0),
+      transFat: Number(customFoodForm.transFat || 0),
+      cholesterol: Number(customFoodForm.cholesterol || 0),
     };
 
-    const nextCustomFoods = saveCustomFood(profileId, customFood);
+    const nextCustomFoods = editingCustomFoodIdentity
+      ? updateCustomFood(profileId, editingCustomFoodIdentity, customFood)
+      : saveCustomFood(profileId, customFood);
     setCustomFoods(nextCustomFoods);
     setFormData((prev) => ({ ...prev, food: customFood }));
     setCustomFoodForm(DEFAULT_CUSTOM_FOOD_FORM);
+    setEditingCustomFoodIdentity("");
+    setSelectedCustomFoodToEdit(null);
     setShowCustomFoodForm(false);
     if (typeof onDataChange === "function") onDataChange();
+  };
+
+  const onStartEditingCustomFood = () => {
+    const selected = selectedCustomFoodToEdit;
+    if (!selected) return;
+    setCustomFoodForm({
+      name: String(selected?.name || ""),
+      brand: String(selected?.brand || ""),
+      category: String(selected?.category || "processed"),
+      calories: String(selected?.calories ?? ""),
+      protein: String(selected?.protein ?? ""),
+      carbs: String(selected?.carbs ?? ""),
+      fat: String(selected?.fat ?? ""),
+      servingSize: String(selected?.servingSize || ""),
+      servingsPerContainer: String(selected?.servingsPerContainer ?? ""),
+      sodium: String(selected?.sodium ?? ""),
+      sugars: String(selected?.sugars ?? ""),
+      fiber: String(selected?.fiber ?? ""),
+      saturatedFat: String(selected?.saturatedFat ?? ""),
+      transFat: String(selected?.transFat ?? ""),
+      cholesterol: String(selected?.cholesterol ?? ""),
+    });
+    setEditingCustomFoodIdentity(getFoodIdentity(selected));
+    setShowCustomFoodForm(true);
+  };
+
+  const onCancelEditingCustomFood = () => {
+    setEditingCustomFoodIdentity("");
+    setSelectedCustomFoodToEdit(null);
+    setCustomFoodForm(DEFAULT_CUSTOM_FOOD_FORM);
   };
 
   const onChangeCustomRecipeName = (event) => {
@@ -303,6 +373,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         mealType: formData.mealType,
         beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
         name: food.name,
+        brand: food.brand || "",
         quantity: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
         unit: formData.mealType === "bebida" ? "ml" : "x100g",
         grams: Number(grams.toFixed(2)),
@@ -406,13 +477,32 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
       <Typography variant="h6">Registro de comidas</Typography>
-      <RecipeSelector onAddFoods={addFoodsToLog} recipes={recipeOptions} catalog={foodOptions} />
-      <QuickFoodInput
-        onAddFoods={onQuickAddFoods}
-        recipes={recipeOptions}
-        foodCatalog={foodOptions}
-      />
-      <Box>
+      <Tabs
+        value={registerTab}
+        onChange={(_, value) => setRegisterTab(value)}
+        variant="scrollable"
+        allowScrollButtonsMobile
+      >
+        <Tab label="Ingreso de alimentos" />
+        <Tab label="Recetas rápidas" />
+        <Tab label="Crear alimentos" />
+        <Tab label="Crear recetas" />
+        <Tab label="Comidas de hoy" />
+      </Tabs>
+
+      {registerTab === 1 && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <RecipeSelector onAddFoods={addFoodsToLog} recipes={recipeOptions} catalog={foodOptions} />
+          <QuickFoodInput
+            onAddFoods={onQuickAddFoods}
+            recipes={recipeOptions}
+            foodCatalog={foodOptions}
+          />
+        </Box>
+      )}
+
+      {registerTab === 3 && (
+        <Box>
         <Button
           type="button"
           variant="text"
@@ -421,9 +511,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         >
           + Crear receta
         </Button>
-      </Box>
+        </Box>
+      )}
 
-      {showCustomRecipeForm && (
+      {registerTab === 3 && showCustomRecipeForm && (
         <Box sx={{ display: "grid", gap: 1.5, p: 1.5, border: "1px solid", borderColor: "divider" }}>
           <Typography variant="subtitle1">Nueva receta personalizada</Typography>
           <TextField
@@ -474,7 +565,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
           </Stack>
         </Box>
       )}
+      {(registerTab === 0 || registerTab === 2) && (
       <Box component="form" onSubmit={onSubmit} sx={{ display: "grid", gap: 2 }}>
+        {registerTab === 0 && (
+        <>
         <FormControl fullWidth>
           <InputLabel id="meal-type-label">Tipo de comida</InputLabel>
           <Select
@@ -513,35 +607,86 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
           options={foodOptions}
           value={formData.food}
           onChange={onChangeFood}
-          getOptionLabel={(option) => option?.name || ""}
+          getOptionLabel={(option) =>
+            option?.brand ? `${option?.name || ""} · ${option.brand}` : option?.name || ""
+          }
           isOptionEqualToValue={(option, value) =>
-            option?.name === value?.name && option?.category === value?.category
+            option?.name === value?.name &&
+            option?.brand === value?.brand &&
+            option?.category === value?.category
           }
           renderOption={(props, option) => (
-            <li {...props} key={`${option.name}-${option.category}`}>
-              {option.name} ({option.category})
+            <li {...props} key={`${option.name}-${option.brand || "no-brand"}-${option.category}`}>
+              {option.name}
+              {option?.brand ? ` · ${option.brand}` : ""}
+              {` (${option.category})`}
             </li>
           )}
           renderInput={(params) => <TextField {...params} label="Alimento" fullWidth />}
         />
+        </>
+        )}
 
+        {registerTab === 2 && (
+        <>
+        <Typography variant="subtitle1">Crear o editar alimentos personalizados</Typography>
         <Box>
           <Button
             type="button"
             variant="text"
-            onClick={() => setShowCustomFoodForm((prev) => !prev)}
+            onClick={() => {
+              setShowCustomFoodForm((prev) => !prev);
+              if (showCustomFoodForm) onCancelEditingCustomFood();
+            }}
             disabled={!profileId}
           >
             + Crear alimento
           </Button>
         </Box>
 
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+          <Autocomplete
+            options={customFoods}
+            value={selectedCustomFoodToEdit}
+            onChange={(_, value) => setSelectedCustomFoodToEdit(value)}
+            getOptionLabel={(option) =>
+              option?.brand ? `${option?.name || ""} · ${option.brand}` : option?.name || ""
+            }
+            isOptionEqualToValue={(option, value) =>
+              option?.name === value?.name &&
+              option?.brand === value?.brand &&
+              option?.category === value?.category
+            }
+            renderInput={(params) => <TextField {...params} label="Editar alimento creado" fullWidth />}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            type="button"
+            variant="outlined"
+            onClick={onStartEditingCustomFood}
+            disabled={!profileId || !selectedCustomFoodToEdit}
+          >
+            Editar alimento
+          </Button>
+        </Stack>
+        </>
+        )}
+
         {showCustomFoodForm && (
           <Box sx={{ display: "grid", gap: 1.5, p: 1.5, border: "1px solid", borderColor: "divider" }}>
+            <Typography variant="subtitle2">
+              {editingCustomFoodIdentity ? "Editando alimento personalizado" : "Nuevo alimento personalizado"}
+            </Typography>
             <TextField
               label="Nombre"
               value={customFoodForm.name}
               onChange={onChangeCustomFoodField("name")}
+              fullWidth
+            />
+            <TextField
+              label="Marca (opcional)"
+              value={customFoodForm.brand}
+              onChange={onChangeCustomFoodField("brand")}
               fullWidth
             />
             <FormControl fullWidth>
@@ -591,14 +736,86 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                 fullWidth
               />
             </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <TextField
+                label="Porción (ej: 45 g)"
+                value={customFoodForm.servingSize}
+                onChange={onChangeCustomFoodField("servingSize")}
+                fullWidth
+              />
+              <TextField
+                type="number"
+                label="Porciones por envase"
+                value={customFoodForm.servingsPerContainer}
+                onChange={onChangeCustomFoodField("servingsPerContainer")}
+                fullWidth
+              />
+            </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <TextField
+                type="number"
+                label="Sodio (mg)"
+                value={customFoodForm.sodium}
+                onChange={onChangeCustomFoodField("sodium")}
+                fullWidth
+              />
+              <TextField
+                type="number"
+                label="Azúcares (g)"
+                value={customFoodForm.sugars}
+                onChange={onChangeCustomFoodField("sugars")}
+                fullWidth
+              />
+            </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <TextField
+                type="number"
+                label="Fibra (g)"
+                value={customFoodForm.fiber}
+                onChange={onChangeCustomFoodField("fiber")}
+                fullWidth
+              />
+              <TextField
+                type="number"
+                label="Grasa saturada (g)"
+                value={customFoodForm.saturatedFat}
+                onChange={onChangeCustomFoodField("saturatedFat")}
+                fullWidth
+              />
+            </Stack>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <TextField
+                type="number"
+                label="Grasa trans (g)"
+                value={customFoodForm.transFat}
+                onChange={onChangeCustomFoodField("transFat")}
+                fullWidth
+              />
+              <TextField
+                type="number"
+                label="Colesterol (mg)"
+                value={customFoodForm.cholesterol}
+                onChange={onChangeCustomFoodField("cholesterol")}
+                fullWidth
+              />
+            </Stack>
             <Box>
-              <Button type="button" variant="outlined" onClick={onSaveCustomFood}>
-                Guardar alimento personalizado
-              </Button>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+                <Button type="button" variant="outlined" onClick={onSaveCustomFood}>
+                  {editingCustomFoodIdentity ? "Actualizar alimento" : "Guardar alimento personalizado"}
+                </Button>
+                {editingCustomFoodIdentity && (
+                  <Button type="button" variant="text" onClick={onCancelEditingCustomFood}>
+                    Cancelar edición
+                  </Button>
+                )}
+              </Stack>
             </Box>
           </Box>
         )}
 
+        {registerTab === 0 && (
+        <>
         <TextField
           type="number"
           label={formData.mealType === "bebida" ? "Cantidad" : "Cantidad (x100 g)"}
@@ -632,7 +849,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
             Agregar comida
           </Button>
         </Box>
+        </>
+        )}
       </Box>
+      )}
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -659,15 +879,33 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                   {block.label}
                 </Typography>
                 <Box sx={{ overflowX: "auto" }}>
-                  <Table size="small" sx={{ minWidth: 760 }}>
+                  <Table size="small" sx={{ minWidth: 760, tableLayout: "fixed" }}>
+                    <colgroup>
+                      <col style={{ width: "34%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "22%" }} />
+                    </colgroup>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Alimento</TableCell>
-                        <TableCell align="right">Calorías</TableCell>
-                        <TableCell align="right">Proteínas</TableCell>
-                        <TableCell align="right">Carbohidratos</TableCell>
-                        <TableCell align="right">Grasas</TableCell>
-                        <TableCell align="right">Acciones</TableCell>
+                        <TableCell sx={{ width: "34%" }}>Alimento</TableCell>
+                        <TableCell align="right" sx={{ width: "11%", whiteSpace: "nowrap" }}>
+                          Calorías
+                        </TableCell>
+                        <TableCell align="right" sx={{ width: "11%", whiteSpace: "nowrap" }}>
+                          Proteínas
+                        </TableCell>
+                        <TableCell align="right" sx={{ width: "11%", whiteSpace: "nowrap" }}>
+                          Carbohidratos
+                        </TableCell>
+                        <TableCell align="right" sx={{ width: "11%", whiteSpace: "nowrap" }}>
+                          Grasas
+                        </TableCell>
+                        <TableCell align="right" sx={{ width: "22%", whiteSpace: "nowrap" }}>
+                          Acciones
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -677,9 +915,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                         const contribution = getMealContributionValues(meal);
                         return (
                           <>
-                            <TableCell>
-                              <Typography variant="body1" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                            <TableCell sx={{ width: "34%" }}>
+                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
                                 {meal.name}
+                                {meal?.brand ? ` · ${meal.brand}` : ""}
                                 {meal?.mealType === "bebida" && meal?.beverageType
                                   ? ` · ${beverageTypeLabel(meal.beverageType)}`
                                   : ""}
@@ -688,29 +927,29 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                             </TableCell>
                             <TableCell
                               align="right"
-                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                              sx={{ width: "11%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
                             >
                               {contribution.calories} kcal
                             </TableCell>
                             <TableCell
                               align="right"
-                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                              sx={{ width: "11%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
                             >
                               {contribution.protein} g
                             </TableCell>
                             <TableCell
                               align="right"
-                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                              sx={{ width: "11%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
                             >
                               {contribution.carbs} g
                             </TableCell>
                             <TableCell
                               align="right"
-                              sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                              sx={{ width: "11%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
                             >
                               {contribution.fat} g
                             </TableCell>
-                            <TableCell align="right">
+                            <TableCell align="right" sx={{ width: "22%" }}>
                               {String(editingMealId) === String(meal.id) ? (
                                 <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
                                   <TextField

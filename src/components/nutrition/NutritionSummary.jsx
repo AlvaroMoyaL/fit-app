@@ -4,7 +4,7 @@ import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtil
 import {
   calculateBMR,
   calculateCalorieBalance,
-  calculateTDEE,
+  calculateTDEEDynamic,
 } from "../../utils/metabolism";
 
 function getTodayDateKey() {
@@ -27,12 +27,16 @@ function statusColor(status) {
   return "error.main";
 }
 
-export default function NutritionSummary({ profile, meals }) {
+export default function NutritionSummary({ profile, meals, tdeeOverride, activityMetrics = {} }) {
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const totals = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
   const bmr = useMemo(() => calculateBMR(profile), [profile]);
-  const tdee = useMemo(() => calculateTDEE(profile), [profile]);
+  const tdee = useMemo(() => {
+    const override = Number(tdeeOverride);
+    if (Number.isFinite(override) && override > 0) return override;
+    return calculateTDEEDynamic(profile, activityMetrics);
+  }, [activityMetrics, profile, tdeeOverride]);
   const calorieBalance = useMemo(
     () => calculateCalorieBalance(totals.calories, tdee),
     [totals.calories, tdee]
@@ -56,6 +60,9 @@ export default function NutritionSummary({ profile, meals }) {
         <Typography variant="body2">Calorías consumidas: {totals.calories} kcal</Typography>
         <Typography variant="body2">BMR estimado: {roundedBmr || 0} kcal</Typography>
         <Typography variant="body2">Gasto estimado (TDEE): {roundedTdee || 0} kcal</Typography>
+        <Typography variant="body2">
+          Pasos considerados: {Math.round(Number(activityMetrics?.steps || 0))}
+        </Typography>
         <Typography variant="body2">Balance: {balanceSign} kcal</Typography>
         <Typography variant="body2" sx={{ color: statusColor(calorieBalance.status), fontWeight: 700 }}>
           Estado: {statusLabel(calorieBalance.status)}

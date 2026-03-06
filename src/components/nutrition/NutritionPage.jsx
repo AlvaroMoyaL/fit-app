@@ -12,7 +12,7 @@ import WeightProjection from "./WeightProjection";
 import NutritionEvaluation from "./NutritionEvaluation";
 import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
-import { calculateCalorieBalance, calculateTDEE } from "../../utils/metabolism";
+import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
 import { recipes } from "../../data/recipes";
 import { foodCatalog } from "../../data/foodCatalog";
 
@@ -32,7 +32,12 @@ function inferMealTypeByHour() {
   return "snack";
 }
 
-export default function NutritionPage({ profileId, profile }) {
+export default function NutritionPage({
+  profileId,
+  profile,
+  metricsLog = [],
+  activeSection = "registro",
+}) {
   const [meals, setMeals] = useState([]);
   const todayKey = useMemo(() => getTodayDateKey(), []);
 
@@ -46,7 +51,20 @@ export default function NutritionPage({ profileId, profile }) {
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const totalsToday = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
-  const tdee = useMemo(() => calculateTDEE(profile), [profile]);
+  const metricsForTdee = useMemo(() => {
+    const safeLog = Array.isArray(metricsLog) ? metricsLog : [];
+    if (!safeLog.length) return {};
+    const todayMetric = [...safeLog].reverse().find((entry) => entry?.date === todayKey);
+    const source = todayMetric || {};
+    return {
+      steps: Number(source?.steps || 0),
+      activeKcal: Number(source?.activeKcal || 0),
+    };
+  }, [metricsLog, todayKey]);
+  const tdee = useMemo(
+    () => calculateTDEEDynamic(profile, metricsForTdee),
+    [profile, metricsForTdee]
+  );
   const calorieBalance = useMemo(
     () => calculateCalorieBalance(totalsToday.calories, tdee),
     [totalsToday.calories, tdee]
@@ -58,34 +76,54 @@ export default function NutritionPage({ profileId, profile }) {
     <Box sx={{ display: "grid", gap: 2 }}>
       <Typography variant="h4">Nutrición</Typography>
       <Divider />
-      <NutritionSummary profile={profile} meals={meals} />
-      <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
-      <MealSuggestions
-        dailyCaloriesTarget={tdee}
-        dailyCaloriesConsumed={totalsToday.calories}
-        recipes={recipes}
-        foodCatalog={foodCatalog}
-        mealType={suggestedMealType}
-      />
-      <DailyMealPlan
-        dailyCaloriesTarget={tdee}
-        recipes={recipes}
-        foodCatalog={foodCatalog}
-      />
-      <WeeklyMealPlanner
-        dailyCaloriesTarget={tdee}
-        recipes={recipes}
-        foodCatalog={foodCatalog}
-      />
-      <ShoppingListCard
-        dailyCaloriesTarget={tdee}
-        recipes={recipes}
-        foodCatalog={foodCatalog}
-      />
-      <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
-      <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
-      <NutritionLog profileId={profileId} meals={meals} onMealsChange={setMeals} />
-      <CasinoMealEvaluator />
+
+      {activeSection === "registro" && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <NutritionLog profileId={profileId} meals={meals} onMealsChange={setMeals} />
+          <CasinoMealEvaluator />
+        </Box>
+      )}
+
+      {activeSection === "estado" && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <NutritionSummary
+            profile={profile}
+            meals={meals}
+            tdeeOverride={tdee}
+            activityMetrics={metricsForTdee}
+          />
+          <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
+          <MealSuggestions
+            dailyCaloriesTarget={tdee}
+            dailyCaloriesConsumed={totalsToday.calories}
+            recipes={recipes}
+            foodCatalog={foodCatalog}
+            mealType={suggestedMealType}
+          />
+          <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
+          <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
+        </Box>
+      )}
+
+      {activeSection === "plan" && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <DailyMealPlan
+            dailyCaloriesTarget={tdee}
+            recipes={recipes}
+            foodCatalog={foodCatalog}
+          />
+          <WeeklyMealPlanner
+            dailyCaloriesTarget={tdee}
+            recipes={recipes}
+            foodCatalog={foodCatalog}
+          />
+          <ShoppingListCard
+            dailyCaloriesTarget={tdee}
+            recipes={recipes}
+            foodCatalog={foodCatalog}
+          />
+        </Box>
+      )}
     </Box>
   );
 }

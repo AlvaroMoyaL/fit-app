@@ -216,7 +216,28 @@
   - componente de sugerencias diarias (`MealSuggestions`) integrado en la vista de nutrición,
   - planificador de menú diario y semanal (`src/utils/mealPlanner.js` con `generateDailyMealPlan` y `generateWeeklyMealPlan`),
   - componentes visuales de planificación (`DailyMealPlan`, `WeeklyMealPlanner`),
-  - generación automática de lista de compras semanal (`generateShoppingList`) y visualización en `ShoppingListCard`.
+  - generación automática de lista de compras semanal (`generateShoppingList`) y visualización en `ShoppingListCard`,
+  - navegación de vistas de nutrición movida al `Sidebar` (secciones: `Registro`, `Estado diario`, `Planificación`),
+  - `Sidebar` muestra bloque dinámico de `Estado nutricional` al seleccionar `Nutrición` (consumo, TDEE, restantes, balance, comidas y macros del día),
+  - en `Nutrición` se oculta `Entreno adicional` del bloque general del sidebar para evitar ruido de contexto,
+  - selectores de sección de nutrición en sidebar con estilos dedicados para mejor legibilidad y estado activo,
+  - TDEE nutricional ajustado de forma dinámica por actividad del día (`steps` y `activeKcal` de `Stats`),
+  - regla de pasos aplicada: solo se consideran pasos del día actual; si no hay registro hoy, pasos considerados = `0`,
+  - sistema de nutrición adaptativa en `src/utils/adaptiveNutrition.js`:
+    - análisis de progreso de peso,
+    - eficiencia del déficit,
+    - detección de estancamiento,
+    - recomendación automática de ajuste calórico,
+    - proyección de peso futura y estimación de días a objetivo,
+  - nuevos componentes de UI adaptativa:
+    - `NutritionAlerts` (alertas inteligentes de progreso),
+    - `AdaptiveCalorieAdjustment` (objetivo actual, ajuste sugerido y nueva meta),
+  - soporte de bebidas en `NutritionLog`:
+    - nuevo `mealType: bebida`,
+    - subtipos (`agua`, `cafe_te`, `sin_calorias`, `calorica`, `alcohol`),
+    - para bebidas la cantidad se ingresa y muestra en `ml`,
+    - se mantiene cálculo de aporte nutricional automático,
+  - catálogo base ampliado con bebidas comunes/alcohólicas en `src/data/foods.js` (incluye `whisky`, `vodka`, `ron`, `cerveza`, vinos, etc.).
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.
@@ -247,6 +268,8 @@
 - Se mejoró la legibilidad clínica en `Stats` con interpretación automática y mensajes de riesgo orientativos por métrica.
 - Se consolidó `Stats` como centro de métricas (registro/tendencias/importación), dejando `History` enfocado en análisis operativo de entrenamientos.
 - Se introdujo navegación accionable desde analítica semanal hacia ejecución de plan (`Ir al día más débil`).
+- Se introdujo navegación interna de `Nutrición` desde el sidebar para reducir scroll vertical en la vista principal.
+- Se definió que el ajuste de gasto energético en `Nutrición` usa métricas del día actual (sin fallback a días previos).
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

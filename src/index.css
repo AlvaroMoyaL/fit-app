@@ -260,7 +260,7 @@ body.hc .help-icon {
 
 .sidebar-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 6px;
   padding: 4px;
   border: 2px solid #d9d1c8;
@@ -281,10 +281,8 @@ body.hc .help-icon {
   transition: all 120ms ease;
   min-height: 38px;
   width: 100%;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: left;
+  white-space: normal;
 }
 
 .tab.active {
@@ -363,6 +361,37 @@ body.hc .help-icon {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.sidebar-nutrition-nav {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.sidebar-nutrition-btn {
+  border: 2px solid #d9d1c8;
+  background: #fff;
+  color: #4f463f;
+  border-radius: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.sidebar-nutrition-btn:hover {
+  border-color: #b8d8d3;
+  background: #f5fbfa;
+}
+
+.sidebar-nutrition-btn.active {
+  border-color: #8acac1;
+  background: #0b5f58;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(11, 95, 88, 0.22);
 }
 
 .danger {
@@ -1486,7 +1515,7 @@ select:focus {
   }
 
   .sidebar-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .sidebar-metric-cards {

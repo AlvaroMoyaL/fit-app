@@ -675,6 +675,7 @@ export default function App() {
   const [newProfileName, setNewProfileName] = useState("");
   const [renameProfileName, setRenameProfileName] = useState("");
   const [sidebarTab, setSidebarTab] = useState("profile");
+  const [nutritionSection, setNutritionSection] = useState("registro");
   const [lang, setLang] = useState("es");
   const [sessionDayIndex, setSessionDayIndex] = useState(null);
   const [sessionExIndex, setSessionExIndex] = useState(0);
@@ -3331,6 +3332,8 @@ export default function App() {
         onChangeRenameProfileName={setRenameProfileName}
         activeTab={sidebarTab}
         onChangeTab={setSidebarTab}
+        nutritionSection={nutritionSection}
+        onChangeNutritionSection={setNutritionSection}
         profile={form}
         metrics={metrics}
         level={level}
@@ -3563,6 +3566,19 @@ export default function App() {
               <p className="note">
                 Panel orientado a métricas de salud, tendencias y carga de datos Garmin.
               </p>
+              <div className="sidebar-actions" style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className="tiny"
+                  onClick={() =>
+                    document
+                      .getElementById("metrics-log-stats")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  Agregar dato manual
+                </button>
+              </div>
               {renderCollapsible(
                 "Importar Garmin",
                 <div className="metrics-log">
@@ -3871,13 +3887,18 @@ export default function App() {
                     lang={lang}
                   />
                 </div>,
-                false
+                true
               )}
             </>
           )}
 
           {sidebarTab === "nutrition" && (
-            <NutritionPage profileId={activeProfileId} profile={form} />
+            <NutritionPage
+              profileId={activeProfileId}
+              profile={form}
+              metricsLog={metricsLog}
+              activeSection={nutritionSection}
+            />
           )}
         </div>
 
@@ -4063,6 +4084,8 @@ export default function App() {
               onChangeRenameProfileName={setRenameProfileName}
               activeTab={sidebarTab}
               onChangeTab={setSidebarTab}
+              nutritionSection={nutritionSection}
+              onChangeNutritionSection={setNutritionSection}
               profile={form}
               metrics={metrics}
               level={level}

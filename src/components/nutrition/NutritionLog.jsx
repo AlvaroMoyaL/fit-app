@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   FormControl,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
@@ -27,6 +28,7 @@ import QuickFoodInput from "./QuickFoodInput";
 
 const DEFAULT_FORM = {
   mealType: "desayuno",
+  beverageType: "agua",
   food: null,
   quantity: "1",
 };
@@ -52,7 +54,8 @@ const FOOD_CATEGORIES = [
   "processed",
   "traditional",
 ];
-const MEAL_TYPE_ORDER = ["desayuno", "almuerzo", "cena", "snack"];
+const MEAL_TYPE_ORDER = ["desayuno", "almuerzo", "cena", "snack", "bebida"];
+const BEVERAGE_TYPES = ["agua", "cafe_te", "sin_calorias", "calorica", "alcohol"];
 
 function getTodayDateKey() {
   const now = new Date();
@@ -67,7 +70,17 @@ function mealTypeLabel(type) {
   if (type === "almuerzo") return "Almuerzo";
   if (type === "cena") return "Cena";
   if (type === "snack") return "Snack";
+  if (type === "bebida") return "Bebida";
   return type;
+}
+
+function beverageTypeLabel(type) {
+  if (type === "agua") return "Agua";
+  if (type === "cafe_te") return "Café / Té";
+  if (type === "sin_calorias") return "Sin calorías";
+  if (type === "calorica") return "Calórica";
+  if (type === "alcohol") return "Alcohol";
+  return type || "";
 }
 
 function getMealContributionValues(meal) {
@@ -118,7 +131,16 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
   }, [profileId]);
 
   const onChangeMealType = (event) => {
-    setFormData((prev) => ({ ...prev, mealType: event.target.value }));
+    const nextMealType = event.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      mealType: nextMealType,
+      quantity: nextMealType === "bebida" ? "200" : "1",
+    }));
+  };
+
+  const onChangeBeverageType = (event) => {
+    setFormData((prev) => ({ ...prev, beverageType: event.target.value }));
   };
 
   const onChangeQuantity = (event) => {
@@ -138,13 +160,14 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     if (!formData.food || !Number.isFinite(quantityNumber) || quantityNumber <= 0) {
       return null;
     }
+    const ratio = formData.mealType === "bebida" ? quantityNumber / 100 : quantityNumber;
     return {
-      calories: scaleNutrient(formData.food.calories, quantityNumber),
-      protein: scaleNutrient(formData.food.protein, quantityNumber),
-      carbs: scaleNutrient(formData.food.carbs, quantityNumber),
-      fat: scaleNutrient(formData.food.fat, quantityNumber),
+      calories: scaleNutrient(formData.food.calories, ratio),
+      protein: scaleNutrient(formData.food.protein, ratio),
+      carbs: scaleNutrient(formData.food.carbs, ratio),
+      fat: scaleNutrient(formData.food.fat, ratio),
     };
-  }, [formData.food, quantityNumber]);
+  }, [formData.food, formData.mealType, quantityNumber]);
 
   const onSubmit = (event) => {
     event.preventDefault();
@@ -153,17 +176,21 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
 
     const quantity = Number(formData.quantity || 0);
     if (!Number.isFinite(quantity) || quantity <= 0) return;
+    const ratio = formData.mealType === "bebida" ? quantity / 100 : quantity;
+    const unit = formData.mealType === "bebida" ? "ml" : "x100g";
 
     const meal = {
       id: String(Date.now()),
       date: getTodayDateKey(),
       mealType: formData.mealType,
+      beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
       name: formData.food.name,
       quantity,
-      calories: scaleNutrient(formData.food.calories, quantity),
-      protein: scaleNutrient(formData.food.protein, quantity),
-      carbs: scaleNutrient(formData.food.carbs, quantity),
-      fat: scaleNutrient(formData.food.fat, quantity),
+      unit,
+      calories: scaleNutrient(formData.food.calories, ratio),
+      protein: scaleNutrient(formData.food.protein, ratio),
+      carbs: scaleNutrient(formData.food.carbs, ratio),
+      fat: scaleNutrient(formData.food.fat, ratio),
     };
 
     addMeal(profileId, meal);
@@ -270,8 +297,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
         id: `${baseId}-${index}`,
         date: getTodayDateKey(),
         mealType: formData.mealType,
+        beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
         name: food.name,
-        quantity: Number(ratio.toFixed(2)),
+        quantity: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
+        unit: formData.mealType === "bebida" ? "ml" : "x100g",
         grams: Number(grams.toFixed(2)),
         calories: scaleNutrient(food.calories, ratio),
         protein: scaleNutrient(food.protein, ratio),
@@ -449,8 +478,27 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
             <MenuItem value="almuerzo">Almuerzo</MenuItem>
             <MenuItem value="cena">Cena</MenuItem>
             <MenuItem value="snack">Snack</MenuItem>
+            <MenuItem value="bebida">Bebida</MenuItem>
           </Select>
         </FormControl>
+
+        {formData.mealType === "bebida" && (
+          <FormControl fullWidth>
+            <InputLabel id="beverage-type-label">Tipo de bebida</InputLabel>
+            <Select
+              labelId="beverage-type-label"
+              label="Tipo de bebida"
+              value={formData.beverageType}
+              onChange={onChangeBeverageType}
+            >
+              {BEVERAGE_TYPES.map((type) => (
+                <MenuItem key={type} value={type}>
+                  {beverageTypeLabel(type)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <Autocomplete
           options={foodOptions}
@@ -544,10 +592,20 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
 
         <TextField
           type="number"
-          label="Cantidad"
+          label={formData.mealType === "bebida" ? "Cantidad" : "Cantidad (x100 g)"}
           value={formData.quantity}
           onChange={onChangeQuantity}
-          inputProps={{ min: 0, step: 0.1 }}
+          inputProps={{
+            min: formData.mealType === "bebida" ? 10 : 0,
+            step: formData.mealType === "bebida" ? 10 : 0.1,
+          }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                {formData.mealType === "bebida" ? "ml" : "x100 g"}
+              </InputAdornment>
+            ),
+          }}
           fullWidth
         />
 
@@ -613,6 +671,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
                             <TableCell>
                               <Typography variant="body1" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
                                 {meal.name}
+                                {meal?.mealType === "bebida" && meal?.beverageType
+                                  ? ` · ${beverageTypeLabel(meal.beverageType)}`
+                                  : ""}
+                                {meal?.quantity && meal?.unit ? ` (${meal.quantity} ${meal.unit})` : ""}
                               </Typography>
                             </TableCell>
                             <TableCell
@@ -644,11 +706,14 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
                                 <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
                                   <TextField
                                     type="number"
-                                    label="Cant."
+                                    label={meal?.unit === "ml" ? "ml" : "Cant."}
                                     size="small"
                                     value={editingQuantity}
                                     onChange={(event) => setEditingQuantity(event.target.value)}
-                                    inputProps={{ min: 0.1, step: 0.1 }}
+                                    inputProps={{
+                                      min: meal?.unit === "ml" ? 10 : 0.1,
+                                      step: meal?.unit === "ml" ? 10 : 0.1,
+                                    }}
                                     sx={{ width: 95 }}
                                   />
                                   <Button type="button" size="small" variant="contained" onClick={() => onSaveMealEdit(meal)}>

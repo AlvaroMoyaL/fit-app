@@ -2,6 +2,9 @@ import LocalDbStatus from "./LocalDbStatus";
 import GifDbStatus from "./GifDbStatus";
 import { getLevelProgress } from "../utils/levelProgress";
 import { buildDayFocusLabel } from "../utils/dayFocus";
+import { getMeals } from "../utils/nutritionStorage";
+import { calculateDailyTotals, getMealsForDate } from "../utils/nutritionUtils";
+import { calculateCalorieBalance, calculateTDEEDynamic } from "../utils/metabolism";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -25,6 +28,8 @@ export default function Sidebar({
   onChangeRenameProfileName,
   activeTab,
   onChangeTab,
+  nutritionSection,
+  onChangeNutritionSection,
   profile,
   metrics,
   level,
@@ -169,6 +174,32 @@ export default function Sidebar({
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
       date.getDate()
     ).padStart(2, "0")}`;
+  const todayKey = toDateKey(new Date());
+  const metricToday =
+    [...(Array.isArray(metricsLog) ? metricsLog : [])]
+      .reverse()
+      .find((entry) => entry?.date === todayKey) || null;
+  const metricForNutrition = metricToday || {};
+  const allMeals = activeProfileId ? getMeals(activeProfileId) : [];
+  const mealsToday = getMealsForDate(allMeals, todayKey);
+  const nutritionTotals = calculateDailyTotals(mealsToday);
+  const nutritionTdee = calculateTDEEDynamic(profile, {
+    steps: Number(metricForNutrition?.steps || 0),
+    activeKcal: Number(metricForNutrition?.activeKcal || 0),
+  });
+  const nutritionBalance = calculateCalorieBalance(nutritionTotals.calories, nutritionTdee);
+  const caloriesRemaining = Math.max(0, Math.round(nutritionTdee - nutritionTotals.calories));
+  const calorieProgress =
+    nutritionTdee > 0 ? Math.min(1, nutritionTotals.calories / nutritionTdee) : 0;
+  const nutritionStatusLabel =
+    nutritionBalance.status === "deficit"
+      ? "Déficit"
+      : nutritionBalance.status === "surplus"
+      ? "Superávit"
+      : "Mantenimiento";
+  const nutritionBalanceLabel = `${nutritionBalance.balance >= 0 ? "+" : ""}${Math.round(
+    nutritionBalance.balance
+  )} kcal`;
   const normalizeName = (value) =>
     String(value || "")
       .toLowerCase()
@@ -257,38 +288,86 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-section">
-        <h3>Estado actual</h3>
-        <div className="sidebar-progress">
-          <strong>Nivel {level}</strong>
-          <span>
-            XP nivel: {xpInLevel} / {levelXpRequired}
-          </span>
-          <span>XP total: {earnedXp}</span>
-          <div className="xp-bar">
-            <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
-          </div>
-        </div>
-        <div className="sidebar-kv">
-          <div>
-            <span>Días entrenados</span>
-            <strong>{trainedDaysTotal || 0}</strong>
-          </div>
-          <div>
-            <span>Este mes</span>
-            <strong>{trainedDaysThisMonth || 0}</strong>
-          </div>
-          <div>
-            <span>Racha actual</span>
-            <strong>{trainingStreak || 0}</strong>
-          </div>
-          <div>
-            <span>Ejercicios</span>
-            <strong>
-              {completedCount} / {totalExercises}
-            </strong>
-          </div>
-        </div>
-        {plan && (
+        <h3>{activeTab === "nutrition" ? "Estado nutricional" : "Estado actual"}</h3>
+        {activeTab === "nutrition" ? (
+          <>
+            <div className="sidebar-progress">
+              <strong>
+                Calorías: {Math.round(nutritionTotals.calories)} /{" "}
+                {nutritionTdee ? Math.round(nutritionTdee) : "—"} kcal
+              </strong>
+              <span>Consumidas: {Math.round(nutritionTotals.calories)} kcal</span>
+              <span>Restantes: {caloriesRemaining} kcal</span>
+              <div className="xp-bar">
+                <div className="xp-bar-fill" style={{ width: `${calorieProgress * 100}%` }} />
+              </div>
+            </div>
+            <div className="sidebar-kv">
+              <div>
+                <span>Estado</span>
+                <strong>{nutritionStatusLabel}</strong>
+              </div>
+              <div>
+                <span>Balance</span>
+                <strong>{nutritionBalanceLabel}</strong>
+              </div>
+              <div>
+                <span>Comidas hoy</span>
+                <strong>{nutritionTotals.mealsCount}</strong>
+              </div>
+              <div>
+                <span>Pasos (stats)</span>
+                <strong>{Math.round(Number(metricForNutrition?.steps || 0))}</strong>
+              </div>
+              <div>
+                <span>Proteína</span>
+                <strong>{Math.round(nutritionTotals.protein)} g</strong>
+              </div>
+              <div>
+                <span>Carbs</span>
+                <strong>{Math.round(nutritionTotals.carbs)} g</strong>
+              </div>
+              <div>
+                <span>Grasas</span>
+                <strong>{Math.round(nutritionTotals.fat)} g</strong>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="sidebar-progress">
+              <strong>Nivel {level}</strong>
+              <span>
+                XP nivel: {xpInLevel} / {levelXpRequired}
+              </span>
+              <span>XP total: {earnedXp}</span>
+              <div className="xp-bar">
+                <div className="xp-bar-fill" style={{ width: `${progress * 100}%` }} />
+              </div>
+            </div>
+            <div className="sidebar-kv">
+              <div>
+                <span>Días entrenados</span>
+                <strong>{trainedDaysTotal || 0}</strong>
+              </div>
+              <div>
+                <span>Este mes</span>
+                <strong>{trainedDaysThisMonth || 0}</strong>
+              </div>
+              <div>
+                <span>Racha actual</span>
+                <strong>{trainingStreak || 0}</strong>
+              </div>
+              <div>
+                <span>Ejercicios</span>
+                <strong>
+                  {completedCount} / {totalExercises}
+                </strong>
+              </div>
+            </div>
+          </>
+        )}
+        {plan && activeTab !== "nutrition" && (
           <div className="sidebar-actions">
             <button type="button" className="tiny" onClick={onAddExtraDay}>
               Entreno adicional
@@ -388,32 +467,35 @@ export default function Sidebar({
             </button>
           </div>
           {planActionStatus && <p className="note">{planActionStatus}</p>}
-          <ul className="sidebar-plan">
-            {plan?.days?.map((d, index) => {
-              const dayDone = isPlanDayComplete(d, index);
-              return (
-              <li key={d.title}>
-                <button
-                  type="button"
-                  className={`sidebar-plan-day-btn ${
-                    Number(selectedPlanDayIndex) === index ? "active" : ""
-                  } ${dayDone ? "done" : ""}`}
-                  onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
-                >
-                  <strong>{d.title}</strong>
-                  <span>{getPlanDateLabel(index)}</span>
-                  <span className="sidebar-day-focus">
-                    {buildDayFocusLabel(d, lang, d.focus || "")}
-                  </span>
-                  <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
-                    {getPlanDayTypeLabel(index)}
-                  </span>
-                  <span>{d.exercises.length} ejercicios</span>
-                  {dayDone && <span className="sidebar-day-done">Completado ✓</span>}
-                </button>
-              </li>
-            )}) || <li>Sin plan</li>}
-          </ul>
+          <details className="sidebar-collapsible" open>
+            <summary>Seleccionar día</summary>
+            <ul className="sidebar-plan">
+              {plan?.days?.map((d, index) => {
+                const dayDone = isPlanDayComplete(d, index);
+                return (
+                <li key={d.title}>
+                  <button
+                    type="button"
+                    className={`sidebar-plan-day-btn ${
+                      Number(selectedPlanDayIndex) === index ? "active" : ""
+                    } ${dayDone ? "done" : ""}`}
+                    onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
+                  >
+                    <strong>{d.title}</strong>
+                    <span>{getPlanDateLabel(index)}</span>
+                    <span className="sidebar-day-focus">
+                      {buildDayFocusLabel(d, lang, d.focus || "")}
+                    </span>
+                    <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
+                      {getPlanDayTypeLabel(index)}
+                    </span>
+                    <span>{d.exercises.length} ejercicios</span>
+                    {dayDone && <span className="sidebar-day-done">Completado ✓</span>}
+                  </button>
+                </li>
+              )}) || <li>Sin plan</li>}
+            </ul>
+          </details>
         </div>
       )}
 
@@ -448,6 +530,44 @@ export default function Sidebar({
         </div>
       )}
 
+      {activeTab === "nutrition" && (
+        <div className="sidebar-section">
+          <h3>Nutrición</h3>
+          <div className="sidebar-nutrition-nav">
+            <button
+              type="button"
+              className={`sidebar-nutrition-btn ${
+                nutritionSection === "registro" ? "active" : ""
+              }`}
+              onClick={() => onChangeNutritionSection && onChangeNutritionSection("registro")}
+            >
+              Registro
+            </button>
+            <button
+              type="button"
+              className={`sidebar-nutrition-btn ${
+                nutritionSection === "estado" ? "active" : ""
+              }`}
+              onClick={() => onChangeNutritionSection && onChangeNutritionSection("estado")}
+            >
+              Estado diario
+            </button>
+            <button
+              type="button"
+              className={`sidebar-nutrition-btn ${nutritionSection === "plan" ? "active" : ""}`}
+              onClick={() => onChangeNutritionSection && onChangeNutritionSection("plan")}
+            >
+              Planificación
+            </button>
+          </div>
+          <p className="note">
+            Orden sugerido: 1) Registro rápido, 2) Revisar balance, 3) Ver plan semanal y compras.
+          </p>
+        </div>
+      )}
+
+      {activeTab === "profile" && (
+        <>
       <details className="sidebar-section sidebar-collapsible">
         <summary>Cuenta</summary>
         {!authEnabled && (
@@ -641,6 +761,8 @@ export default function Sidebar({
           </div>
         </div>
       </details>
+        </>
+      )}
     </aside>
   );
 }

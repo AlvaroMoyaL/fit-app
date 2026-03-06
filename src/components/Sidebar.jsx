@@ -73,6 +73,7 @@ export default function Sidebar({
   authLoading,
   authError,
   syncStatus,
+  syncIndicator,
   syncRestoreSummary,
   onSyncUp,
   onSyncDown,
@@ -612,6 +613,7 @@ export default function Sidebar({
         {authEnabled && authUser && (
           <div className="auth-box">
             <span className="note">Conectado: {authUser.email}</span>
+            <span className="note">Estado sync: {syncIndicator || "—"}</span>
             <div className="sidebar-actions">
               <button type="button" className="tiny" onClick={onSyncUp} disabled={!canSyncUp}>
                 Subir

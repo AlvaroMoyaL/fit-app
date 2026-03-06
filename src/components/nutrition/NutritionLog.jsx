@@ -25,6 +25,7 @@ import { getCustomFoods, saveCustomFood } from "../../utils/customFoodsStorage";
 import { getCustomRecipes, saveCustomRecipe } from "../../utils/customRecipesStorage";
 import RecipeSelector from "./RecipeSelector";
 import QuickFoodInput from "./QuickFoodInput";
+import FoodDetailDrawer from "./FoodDetailDrawer";
 
 const DEFAULT_FORM = {
   mealType: "desayuno",
@@ -92,7 +93,7 @@ function getMealContributionValues(meal) {
   };
 }
 
-export default function NutritionLog({ profileId, meals, onMealsChange }) {
+export default function NutritionLog({ profileId, meals, onMealsChange, onDataChange }) {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [customFoods, setCustomFoods] = useState([]);
   const [customRecipes, setCustomRecipes] = useState([]);
@@ -102,6 +103,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
   const [customRecipeForm, setCustomRecipeForm] = useState(DEFAULT_RECIPE_FORM);
   const [editingMealId, setEditingMealId] = useState("");
   const [editingQuantity, setEditingQuantity] = useState("");
+  const [detailMeal, setDetailMeal] = useState(null);
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const mealsTodayByType = useMemo(() => {
@@ -197,6 +199,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     if (typeof onMealsChange === "function") {
       onMealsChange([...(Array.isArray(meals) ? meals : []), meal]);
     }
+    if (typeof onDataChange === "function") onDataChange();
     setFormData(DEFAULT_FORM);
   };
 
@@ -219,6 +222,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     setFormData((prev) => ({ ...prev, food: customFood }));
     setCustomFoodForm(DEFAULT_CUSTOM_FOOD_FORM);
     setShowCustomFoodForm(false);
+    if (typeof onDataChange === "function") onDataChange();
   };
 
   const onChangeCustomRecipeName = (event) => {
@@ -315,6 +319,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     if (typeof onMealsChange === "function") {
       onMealsChange([...(Array.isArray(meals) ? meals : []), ...createdMeals]);
     }
+    if (typeof onDataChange === "function") onDataChange();
   };
 
   const onQuickAddFoods = (items) => {
@@ -357,6 +362,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
 
     saveMeals(profileId, nextMeals);
     if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (typeof onDataChange === "function") onDataChange();
     cancelEditMeal();
   };
 
@@ -364,7 +370,9 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     if (!profileId || !mealId) return;
     const nextMeals = deleteMeal(profileId, mealId);
     if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (typeof onDataChange === "function") onDataChange();
     if (String(editingMealId) === String(mealId)) cancelEditMeal();
+    if (String(detailMeal?.id) === String(mealId)) setDetailMeal(null);
   };
 
   const onSaveCustomRecipe = () => {
@@ -392,6 +400,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
     setCustomRecipes(nextRecipes);
     setCustomRecipeForm(DEFAULT_RECIPE_FORM);
     setShowCustomRecipeForm(false);
+    if (typeof onDataChange === "function") onDataChange();
   };
 
   return (
@@ -725,6 +734,14 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
                                 </Stack>
                               ) : (
                                 <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
+                                  <Button
+                                    type="button"
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => setDetailMeal(meal)}
+                                  >
+                                    Detalle
+                                  </Button>
                                   <Button type="button" size="small" variant="text" onClick={() => startEditMeal(meal)}>
                                     Editar
                                   </Button>
@@ -753,6 +770,11 @@ export default function NutritionLog({ profileId, meals, onMealsChange }) {
           </Box>
         )}
       </Box>
+      <FoodDetailDrawer
+        open={Boolean(detailMeal)}
+        onClose={() => setDetailMeal(null)}
+        meal={detailMeal}
+      />
     </Box>
   );
 }

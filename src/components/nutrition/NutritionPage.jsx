@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, Divider, Typography } from "@mui/material";
+import { Box, Button, Divider, Typography } from "@mui/material";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
 import MealSuggestions from "./MealSuggestions";
@@ -10,6 +10,9 @@ import NutritionLog from "./NutritionLog";
 import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WeightProjection from "./WeightProjection";
 import NutritionEvaluation from "./NutritionEvaluation";
+import NutritionAlerts from "./NutritionAlerts";
+import AdaptiveCalorieAdjustment from "./AdaptiveCalorieAdjustment";
+import AdaptiveInsightDrawer from "./AdaptiveInsightDrawer";
 import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
@@ -37,8 +40,11 @@ export default function NutritionPage({
   profile,
   metricsLog = [],
   activeSection = "registro",
+  onNutritionDataChange,
 }) {
   const [meals, setMeals] = useState([]);
+  const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
+  const [adaptiveDrawerSection, setAdaptiveDrawerSection] = useState("progreso");
   const todayKey = useMemo(() => getTodayDateKey(), []);
 
   useEffect(() => {
@@ -71,6 +77,48 @@ export default function NutritionPage({
   );
   const suggestedMealType = useMemo(() => inferMealTypeByHour(), []);
   const currentWeight = Number(profile?.weight ?? profile?.peso ?? 0);
+  const calorieHistory = useMemo(() => {
+    const byDate = new Map();
+    (Array.isArray(meals) ? meals : []).forEach((meal) => {
+      const key = meal?.date;
+      if (!key) return;
+      const prev = byDate.get(key) || 0;
+      byDate.set(key, prev + Number(meal?.calories || 0));
+    });
+
+    const metricsByDate = new Map(
+      (Array.isArray(metricsLog) ? metricsLog : []).map((entry) => [entry?.date, entry || {}])
+    );
+
+    return [...byDate.entries()]
+      .map(([date, caloriesConsumed]) => {
+        const metric = metricsByDate.get(date) || {};
+        const tdeeForDate = calculateTDEEDynamic(profile, {
+          steps: Number(metric?.steps || 0),
+          activeKcal: Number(metric?.activeKcal || 0),
+        });
+        return {
+          date,
+          caloriesConsumed: Number(caloriesConsumed.toFixed(2)),
+          tdee: Number(tdeeForDate.toFixed(2)),
+        };
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [meals, metricsLog, profile]);
+  const weightHistory = useMemo(() => {
+    return (Array.isArray(metricsLog) ? metricsLog : [])
+      .filter((entry) => entry?.date && Number.isFinite(Number(entry?.weight)))
+      .map((entry) => ({
+        date: entry.date,
+        weight: Number(entry.weight),
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [metricsLog]);
+  const currentTargetCalories = Math.round(tdee || 0);
+  const openAdaptiveDrawer = (section = "progreso") => {
+    setAdaptiveDrawerSection(section);
+    setShowAdaptiveDrawer(true);
+  };
 
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
@@ -79,7 +127,12 @@ export default function NutritionPage({
 
       {activeSection === "registro" && (
         <Box sx={{ display: "grid", gap: 2 }}>
-          <NutritionLog profileId={profileId} meals={meals} onMealsChange={setMeals} />
+          <NutritionLog
+            profileId={profileId}
+            meals={meals}
+            onMealsChange={setMeals}
+            onDataChange={onNutritionDataChange}
+          />
           <CasinoMealEvaluator />
         </Box>
       )}
@@ -102,6 +155,23 @@ export default function NutritionPage({
           />
           <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
           <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
+          <NutritionAlerts
+            calorieHistory={calorieHistory}
+            weightHistory={weightHistory}
+            currentTargetCalories={currentTargetCalories}
+            onOpenDetail={openAdaptiveDrawer}
+          />
+          <AdaptiveCalorieAdjustment
+            calorieHistory={calorieHistory}
+            weightHistory={weightHistory}
+            currentTargetCalories={currentTargetCalories}
+            onOpenDetail={openAdaptiveDrawer}
+          />
+          <Box>
+            <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
+              Ver análisis adaptativo
+            </Button>
+          </Box>
         </Box>
       )}
 
@@ -124,6 +194,15 @@ export default function NutritionPage({
           />
         </Box>
       )}
+
+      <AdaptiveInsightDrawer
+        open={showAdaptiveDrawer}
+        onClose={() => setShowAdaptiveDrawer(false)}
+        calorieHistory={calorieHistory}
+        weightHistory={weightHistory}
+        currentTargetCalories={currentTargetCalories}
+        focusSection={adaptiveDrawerSection}
+      />
     </Box>
   );
 }

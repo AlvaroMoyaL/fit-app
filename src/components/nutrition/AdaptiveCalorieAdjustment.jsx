@@ -25,6 +25,7 @@ export default function AdaptiveCalorieAdjustment({
   calorieHistory = [],
   weightHistory = [],
   currentTargetCalories = 0,
+  onOpenDetail,
 }) {
   const adjustment = calcularAjusteCalorico({
     calorieHistory,
@@ -76,6 +77,15 @@ export default function AdaptiveCalorieAdjustment({
           <Typography variant="body2">
             {getExplanationText(adjustment?.explanation || "mantener_calorias")}
           </Typography>
+          <Box>
+            <Chip
+              clickable
+              color="info"
+              label="Ver detalle del ajuste"
+              onClick={() => onOpenDetail?.("ajuste")}
+              sx={{ width: "fit-content" }}
+            />
+          </Box>
         </Box>
       </CardContent>
     </Card>

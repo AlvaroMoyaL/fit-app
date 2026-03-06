@@ -13,6 +13,9 @@ function profileKeys(id) {
     history: `fit_history:${id}`,
     metricsLog: `fit_metrics_log:${id}`,
     lang: `fit_lang:${id}`,
+    nutritionLog: `nutrition_log_${id}`,
+    customFoods: `custom_foods_${id}`,
+    customRecipes: `custom_recipes_${id}`,
   };
 }
 
@@ -37,7 +40,9 @@ function deriveProfileIdsFromStorage(activeProfileId) {
     const m = k.match(
       /^fit_(?:profile|plan|progress|progress_details|history|metrics_log|lang):(.+)$/
     );
+    const n = k.match(/^(?:nutrition_log|custom_foods|custom_recipes)_(.+)$/);
     if (m?.[1]) ids.add(m[1]);
+    if (n?.[1]) ids.add(n[1]);
   }
   return Array.from(ids);
 }
@@ -77,6 +82,9 @@ export function buildCloudPayload() {
       history: localStorage.getItem(keys.history),
       metricsLog: localStorage.getItem(keys.metricsLog),
       lang: localStorage.getItem(keys.lang),
+      nutritionLog: localStorage.getItem(keys.nutritionLog),
+      customFoods: localStorage.getItem(keys.customFoods),
+      customRecipes: localStorage.getItem(keys.customRecipes),
     };
   });
 
@@ -89,6 +97,9 @@ export function buildCloudPayload() {
     const legacyHistory = localStorage.getItem("fit_history");
     const legacyMetricsLog = localStorage.getItem("fit_metrics_log");
     const legacyLang = localStorage.getItem("fit_lang");
+    const legacyNutritionLog = localStorage.getItem("nutrition_log");
+    const legacyCustomFoods = localStorage.getItem("custom_foods");
+    const legacyCustomRecipes = localStorage.getItem("custom_recipes");
     const hasLegacyData = Boolean(
       legacyProfile ||
         legacyPlan ||
@@ -96,7 +107,10 @@ export function buildCloudPayload() {
         legacyProgressDetails ||
         legacyHistory ||
         legacyMetricsLog ||
-        legacyLang
+        legacyLang ||
+        legacyNutritionLog ||
+        legacyCustomFoods ||
+        legacyCustomRecipes
     );
     if (hasLegacyData) {
       const legacyId = activeProfileId || "legacy-default";
@@ -115,6 +129,9 @@ export function buildCloudPayload() {
         history: legacyHistory,
         metricsLog: legacyMetricsLog,
         lang: legacyLang,
+        nutritionLog: legacyNutritionLog,
+        customFoods: legacyCustomFoods,
+        customRecipes: legacyCustomRecipes,
       };
     }
   }
@@ -185,6 +202,15 @@ export function applyCloudPayload(payload) {
         localStorage.setItem(keys.metricsLog, metricsLogRaw);
       }
       if (block.lang) localStorage.setItem(keys.lang, block.lang);
+      if (block.nutritionLog !== undefined && block.nutritionLog !== null) {
+        localStorage.setItem(keys.nutritionLog, block.nutritionLog);
+      }
+      if (block.customFoods !== undefined && block.customFoods !== null) {
+        localStorage.setItem(keys.customFoods, block.customFoods);
+      }
+      if (block.customRecipes !== undefined && block.customRecipes !== null) {
+        localStorage.setItem(keys.customRecipes, block.customRecipes);
+      }
     });
   }
   if (meta?.updatedAt) {

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Card, CardContent, Typography, Alert } from "@mui/material";
+import { Box, Card, CardContent, Typography, Alert, Button } from "@mui/material";
 import {
   analizarProgresoPeso,
   detectarEstancamientoPeso,
@@ -10,6 +10,7 @@ export default function NutritionAlerts({
   calorieHistory = [],
   weightHistory = [],
   currentTargetCalories,
+  onOpenDetail,
 }) {
   const progress = analizarProgresoPeso({
     calorieHistory,
@@ -42,31 +43,70 @@ export default function NutritionAlerts({
           )}
 
           {progress.analysisAvailable && efficiencyRatio >= 0.8 && efficiencyRatio <= 1.2 && (
-            <Alert severity="success">
+            <Alert
+              severity="success"
+              action={
+                <Button color="inherit" size="small" onClick={() => onOpenDetail?.("progreso")}>
+                  Ver detalle
+                </Button>
+              }
+            >
               Tu progreso de pérdida de peso está dentro de lo esperado.
             </Alert>
           )}
 
           {progress.analysisAvailable && efficiencyRatio >= 0.4 && efficiencyRatio < 0.8 && (
-            <Alert severity="warning">
+            <Alert
+              severity="warning"
+              action={
+                <Button color="inherit" size="small" onClick={() => onOpenDetail?.("progreso")}>
+                  Ver detalle
+                </Button>
+              }
+            >
               Tu pérdida de peso está siendo más lenta de lo esperado.
             </Alert>
           )}
 
           {progress.analysisAvailable && stall.stallDetected && (
-            <Alert severity="error">
+            <Alert
+              severity="error"
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => onOpenDetail?.("estancamiento")}
+                >
+                  Ver detalle
+                </Button>
+              }
+            >
               Se detecta posible estancamiento en la pérdida de peso.
             </Alert>
           )}
 
           {progress.analysisAvailable && efficiencyRatio > 1.2 && (
-            <Alert severity="info">
+            <Alert
+              severity="info"
+              action={
+                <Button color="inherit" size="small" onClick={() => onOpenDetail?.("progreso")}>
+                  Ver detalle
+                </Button>
+              }
+            >
               Estás perdiendo peso más rápido de lo esperado.
             </Alert>
           )}
 
           {progress.analysisAvailable && adjustment.adjustmentNeeded && (
-            <Alert severity="info">
+            <Alert
+              severity="info"
+              action={
+                <Button color="inherit" size="small" onClick={() => onOpenDetail?.("ajuste")}>
+                  Ver detalle
+                </Button>
+              }
+            >
               Recomendación: ajustar calorías en {adjustment.recommendedAdjustment} kcal/día.
             </Alert>
           )}

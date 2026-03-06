@@ -266,6 +266,10 @@
     - registros de comida guardan también `brand` y se muestra en lista + `FoodDetailDrawer`,
     - `Estado diario` en `NutritionPage` ahora usa tabs (`Resumen`, `Balance y proyección`, `Adaptativo`) para navegación más clara,
     - `AdaptiveInsightDrawer` ya no queda vacío con pocos datos: siempre muestra secciones y mensajes de estado (`datos insuficientes`, conteo de registros, motivo de no recomendación).
+    - nuevo estimador de hambre/saciedad diario (`src/utils/hungerEstimate.js`) reutilizando `satietyFoods`:
+      - muestra `Índice de saciedad del día` en `Estado diario > Resumen`,
+      - muestra el mismo indicador en `Registro`, arriba de `Comidas de hoy`,
+      - entrega score, nivel de saciedad, nivel de hambre y ventana horaria estimada para próxima hambre.
   - Herramientas de `Nutrición en el trabajo` consolidadas en tabs (`NutritionTools`):
     - `Registrar comida` (SmartFoodInput),
     - `Qué puedo cocinar` (CookWithWhatIHave),

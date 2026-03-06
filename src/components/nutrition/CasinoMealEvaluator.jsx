@@ -28,7 +28,7 @@ export default function CasinoMealEvaluator() {
     (!Array.isArray(result.avoid) || result.avoid.length === 0);
 
   return (
-    <Paper sx={{ p: 2.5 }}>
+    <Paper sx={{ p: 2.5, width: "100%", boxSizing: "border-box" }}>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Typography variant="h6">Evaluador de comida de casino</Typography>
 

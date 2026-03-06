@@ -103,6 +103,17 @@ body.hc .help-icon {
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 720px) {
   .app-shell {
     padding: 0;
@@ -3079,5 +3090,204 @@ select:focus {
 
   .sidebar-actions {
     flex-wrap: wrap;
+  }
+}
+
+/* ---- Visual Pass V2.3 (global alignment + overflow fixes) ---- */
+
+.page,
+.card,
+.rest-panel,
+.metrics,
+.metrics-log,
+.metrics-charts,
+.metric-card,
+.chart,
+.chart-highlight,
+.form-section,
+.stats-group,
+.summary-card,
+.metric-week-card,
+.history-day-row,
+.weekly-card {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card,
+.rest-panel,
+.metrics,
+.metrics-log,
+.metrics-charts,
+.metric-card,
+.chart,
+.form-section,
+.stats-group,
+.summary-card,
+.metric-week-card,
+.history-day-row {
+  overflow: hidden;
+}
+
+.collapsible-body,
+.collapsible-body > * {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.chart,
+.chart-highlight,
+.metrics-log,
+.metrics-charts,
+.stats-group,
+.summary-card,
+.metric-card {
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.chart-bars {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+
+.metric-chart-grid,
+.metrics-grid,
+.summary-grid,
+.chart-kpis {
+  align-items: stretch;
+}
+
+.metrics-grid > *,
+.chart-kpis > div,
+.summary-card,
+.metric-week-card {
+  height: 100%;
+}
+
+.note {
+  line-height: 1.45;
+}
+
+.tab,
+.tiny,
+.primary,
+.primary-btn,
+.link {
+  min-height: 36px;
+}
+
+.tab,
+.tiny,
+.primary,
+.primary-btn,
+.link,
+.profile-item {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+.tab:hover,
+.tiny:hover,
+.primary:hover,
+.primary-btn:hover,
+.profile-item:hover {
+  transform: translateY(-1px);
+}
+
+.tab:active,
+.tiny:active,
+.primary:active,
+.primary-btn:active {
+  transform: translateY(0);
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.sidebar-actions,
+.summary-actions,
+.drawer-save-actions,
+.drawer-actions {
+  gap: 10px;
+}
+
+/* Dark mode parity for legacy classes */
+body.theme-dark .app-shell {
+  background: radial-gradient(circle at top, #1b2330, #0f1318);
+}
+
+body.theme-dark .sidebar,
+body.theme-dark .card,
+body.theme-dark .rest-panel,
+body.theme-dark .metrics,
+body.theme-dark .metrics-log,
+body.theme-dark .metrics-charts,
+body.theme-dark .metric-card,
+body.theme-dark .chart,
+body.theme-dark .form-section,
+body.theme-dark .stats-group,
+body.theme-dark .summary-card,
+body.theme-dark .metric-week-card {
+  background: #171d24;
+  border-color: #2d3745;
+  color: #e5e7eb;
+}
+
+body.theme-dark .note,
+body.theme-dark .subtitle,
+body.theme-dark .chart-kpis span,
+body.theme-dark .chart-kpis small,
+body.theme-dark .metrics-grid span,
+body.theme-dark .sidebar-kv span,
+body.theme-dark .field,
+body.theme-dark .drawer-replace label {
+  color: #9aa4b2;
+}
+
+body.theme-dark .bar-track {
+  background: #0f172a;
+}
+
+body.theme-dark input,
+body.theme-dark select,
+body.theme-dark textarea,
+body.theme-dark .profile-new input,
+body.theme-dark .profile-actions input,
+body.theme-dark .auth-box input {
+  background: #0f172a;
+  border-color: #3b495d;
+  color: #e5e7eb;
+}
+
+@media (max-width: 900px) {
+  .card,
+  .rest-panel,
+  .metrics,
+  .metrics-log,
+  .metrics-charts,
+  .metric-card,
+  .chart,
+  .form-section,
+  .stats-group,
+  .summary-card,
+  .metric-week-card,
+  .history-day-row {
+    padding: 12px;
+    border-radius: 12px;
   }
 }

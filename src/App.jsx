@@ -670,7 +670,7 @@ function reloadAfterSyncOnce() {
   return true;
 }
 
-export default function App() {
+export default function App({ themeMode = "light", onToggleTheme }) {
   const [profiles, setProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState("");
   const [newProfileName, setNewProfileName] = useState("");
@@ -3429,6 +3429,8 @@ export default function App() {
         authEnabled={authEnabled}
         highContrast={highContrast}
         onToggleContrast={() => setHighContrast((v) => !v)}
+        themeMode={themeMode}
+        onToggleTheme={onToggleTheme}
       />
 
       <div className="page">
@@ -4194,6 +4196,8 @@ export default function App() {
               authEnabled={authEnabled}
               highContrast={highContrast}
               onToggleContrast={() => setHighContrast((v) => !v)}
+              themeMode={themeMode}
+              onToggleTheme={onToggleTheme}
             />
           </div>
         </div>

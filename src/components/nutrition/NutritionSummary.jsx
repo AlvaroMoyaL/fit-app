@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card, CardContent, Divider, Typography } from "@mui/material";
+import { Box, Card, CardContent, Chip, Divider, Typography } from "@mui/material";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import {
   calculateBMR,
@@ -45,16 +45,46 @@ export default function NutritionSummary({ profile, meals, tdeeOverride, activit
   const roundedTdee = Math.round(tdee);
   const roundedBalance = Math.round(calorieBalance.balance);
   const balanceSign = roundedBalance > 0 ? `+${roundedBalance}` : `${roundedBalance}`;
+  const statCardSx = {
+    p: 1,
+    border: "1px solid",
+    borderColor: "divider",
+    borderRadius: 1.6,
+    bgcolor: "background.paper",
+  };
 
   return (
     <Card variant="outlined">
-      <CardContent sx={{ display: "grid", gap: 1 }}>
+      <CardContent sx={{ display: "grid", gap: 1.2 }}>
         <Typography variant="h6">Resumen nutricional del día</Typography>
-        <Typography variant="body1">Calorías: {totals.calories} kcal</Typography>
-        <Typography variant="body1">Proteína: {totals.protein} g</Typography>
-        <Typography variant="body1">Carbohidratos: {totals.carbs} g</Typography>
-        <Typography variant="body1">Grasas: {totals.fat} g</Typography>
-        <Typography variant="body1">Comidas registradas: {totals.mealsCount}</Typography>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+            gap: 1,
+          }}
+        >
+          <Box sx={statCardSx}>
+            <Typography variant="caption" color="text.secondary">Calorías</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.calories)} kcal</Typography>
+          </Box>
+          <Box sx={statCardSx}>
+            <Typography variant="caption" color="text.secondary">Proteína</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.protein)} g</Typography>
+          </Box>
+          <Box sx={statCardSx}>
+            <Typography variant="caption" color="text.secondary">Carbohidratos</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.carbs)} g</Typography>
+          </Box>
+          <Box sx={statCardSx}>
+            <Typography variant="caption" color="text.secondary">Grasas</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.fat)} g</Typography>
+          </Box>
+          <Box sx={statCardSx}>
+            <Typography variant="caption" color="text.secondary">Comidas</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700 }}>{totals.mealsCount}</Typography>
+          </Box>
+        </Box>
         <Divider sx={{ my: 1 }} />
         <Typography variant="subtitle1">Balance energetico</Typography>
         <Typography variant="body2">Calorías consumidas: {totals.calories} kcal</Typography>
@@ -64,9 +94,19 @@ export default function NutritionSummary({ profile, meals, tdeeOverride, activit
           Pasos considerados: {Math.round(Number(activityMetrics?.steps || 0))}
         </Typography>
         <Typography variant="body2">Balance: {balanceSign} kcal</Typography>
-        <Typography variant="body2" sx={{ color: statusColor(calorieBalance.status), fontWeight: 700 }}>
-          Estado: {statusLabel(calorieBalance.status)}
-        </Typography>
+        <Box>
+          <Chip
+            size="small"
+            label={`Estado: ${statusLabel(calorieBalance.status)}`}
+            sx={{
+              color: statusColor(calorieBalance.status),
+              borderColor: statusColor(calorieBalance.status),
+              bgcolor: "transparent",
+              fontWeight: 700,
+            }}
+            variant="outlined"
+          />
+        </Box>
       </CardContent>
     </Card>
   );

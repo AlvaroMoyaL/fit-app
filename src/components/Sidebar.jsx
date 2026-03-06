@@ -81,6 +81,8 @@ export default function Sidebar({
   authEnabled,
   highContrast,
   onToggleContrast,
+  themeMode,
+  onToggleTheme,
 }) {
   const levelProgress = getLevelProgress(earnedXp);
   const xpInLevel = levelProgress.xpInLevel;
@@ -735,6 +737,14 @@ export default function Sidebar({
           </select>
           <button type="button" className="tiny" onClick={onToggleContrast}>
             Contraste alto: {highContrast ? "On" : "Off"}
+          </button>
+          <button
+            type="button"
+            className="tiny"
+            onClick={() => onToggleTheme?.()}
+            disabled={typeof onToggleTheme !== "function"}
+          >
+            Tema: {themeMode === "dark" ? "Oscuro" : "Claro"}
           </button>
         </div>
       </div>

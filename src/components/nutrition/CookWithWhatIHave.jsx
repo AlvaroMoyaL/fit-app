@@ -31,7 +31,7 @@ export default function CookWithWhatIHave() {
   const hasNoResults = result && cookNow.length === 0 && cookAlmost.length === 0;
 
   return (
-    <Paper sx={{ p: 2.5 }}>
+    <Paper sx={{ p: 2.5, width: "100%", boxSizing: "border-box" }}>
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <Typography variant="h6">Cocina con lo que tienes</Typography>
 

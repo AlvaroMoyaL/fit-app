@@ -211,7 +211,12 @@
   - ingreso rápido multilinea (`QuickFoodInput`) para pegar múltiples líneas y registrar todo en un clic,
   - edición y eliminación de comidas del día desde la lista de registro,
   - sección `Comidas de hoy` mejorada a tabla por bloque (`Desayuno/Almuerzo/Cena/Snack`) con columnas alineadas (`Calorías`, `Proteínas`, `Carbohidratos`, `Grasas`) y acciones a la derecha,
-  - tarjeta de balance energético en tiempo real (`EnergyBalanceCard`) con interpretación, proyección semanal y gráfico visual de barras (consumo vs gasto y balance).
+  - tarjeta de balance energético en tiempo real (`EnergyBalanceCard`) con interpretación, proyección semanal y gráfico visual de barras (consumo vs gasto y balance),
+  - motor de sugerencias de comida (`src/utils/mealSuggestions.js`) por calorías restantes y tipo de comida (`breakfast/lunch/dinner/snack`),
+  - componente de sugerencias diarias (`MealSuggestions`) integrado en la vista de nutrición,
+  - planificador de menú diario y semanal (`src/utils/mealPlanner.js` con `generateDailyMealPlan` y `generateWeeklyMealPlan`),
+  - componentes visuales de planificación (`DailyMealPlan`, `WeeklyMealPlanner`),
+  - generación automática de lista de compras semanal (`generateShoppingList`) y visualización en `ShoppingListCard`.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Box, Divider, Typography } from "@mui/material";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
+import MealSuggestions from "./MealSuggestions";
+import DailyMealPlan from "./DailyMealPlan";
+import WeeklyMealPlanner from "./WeeklyMealPlanner";
+import ShoppingListCard from "./ShoppingListCard";
 import NutritionLog from "./NutritionLog";
 import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WeightProjection from "./WeightProjection";
@@ -9,6 +13,8 @@ import NutritionEvaluation from "./NutritionEvaluation";
 import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEE } from "../../utils/metabolism";
+import { recipes } from "../../data/recipes";
+import { foodCatalog } from "../../data/foodCatalog";
 
 function getTodayDateKey() {
   const now = new Date();
@@ -16,6 +22,14 @@ function getTodayDateKey() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function inferMealTypeByHour() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) return "breakfast";
+  if (hour >= 11 && hour < 17) return "lunch";
+  if (hour >= 17 && hour < 22) return "dinner";
+  return "snack";
 }
 
 export default function NutritionPage({ profileId, profile }) {
@@ -37,6 +51,7 @@ export default function NutritionPage({ profileId, profile }) {
     () => calculateCalorieBalance(totalsToday.calories, tdee),
     [totalsToday.calories, tdee]
   );
+  const suggestedMealType = useMemo(() => inferMealTypeByHour(), []);
   const currentWeight = Number(profile?.weight ?? profile?.peso ?? 0);
 
   return (
@@ -45,6 +60,28 @@ export default function NutritionPage({ profileId, profile }) {
       <Divider />
       <NutritionSummary profile={profile} meals={meals} />
       <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
+      <MealSuggestions
+        dailyCaloriesTarget={tdee}
+        dailyCaloriesConsumed={totalsToday.calories}
+        recipes={recipes}
+        foodCatalog={foodCatalog}
+        mealType={suggestedMealType}
+      />
+      <DailyMealPlan
+        dailyCaloriesTarget={tdee}
+        recipes={recipes}
+        foodCatalog={foodCatalog}
+      />
+      <WeeklyMealPlanner
+        dailyCaloriesTarget={tdee}
+        recipes={recipes}
+        foodCatalog={foodCatalog}
+      />
+      <ShoppingListCard
+        dailyCaloriesTarget={tdee}
+        recipes={recipes}
+        foodCatalog={foodCatalog}
+      />
       <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
       <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
       <NutritionLog profileId={profileId} meals={meals} onMealsChange={setMeals} />

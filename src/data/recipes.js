@@ -2,6 +2,7 @@ export const recipes = [
   {
     id: "completo",
     name: "Completo",
+    mealType: "lunch",
     ingredients: [
       { foodId: "pan_blanco", grams: 80 },
       { foodId: "vienesa", grams: 100 },
@@ -12,6 +13,7 @@ export const recipes = [
   {
     id: "chucrut_con_salchicha",
     name: "Chucrut con salchicha",
+    mealType: "lunch",
     ingredients: [
       { foodId: "salchicha", grams: 120 },
       { foodId: "chucrut", grams: 80 },
@@ -20,6 +22,7 @@ export const recipes = [
   {
     id: "desayuno_huevos",
     name: "Desayuno huevos",
+    mealType: "breakfast",
     ingredients: [
       // 2 huevos aprox. equivalen a 100 g de parte comestible.
       { foodId: "huevo", grams: 100 },
@@ -31,6 +34,7 @@ export const recipes = [
   {
     id: "avena_desayuno",
     name: "Avena desayuno",
+    mealType: "breakfast",
     ingredients: [
       { foodId: "avena", grams: 50 },
       { foodId: "leche", grams: 200 },

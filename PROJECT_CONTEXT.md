@@ -278,6 +278,12 @@
     - items checkeables por fila, ocultar/mostrar comprados y estado `Todo comprado`,
     - unidades visibles de compra (`unidad`, `paquete`, `lata`, `botella`),
     - recuperación automática: si la lista está vacía, se reconstruye desde el kit guardado.
+  - Nueva vista independiente `NutritionHomePage` (`src/components/nutrition/NutritionHomePage.jsx`):
+    - muestra dashboard nutricional superior + herramientas en tabs (`Registrar comida`, `Qué puedo cocinar`, `Casino / Restaurante`, `Lista de compras`),
+    - usa valores de ejemplo para visualizar `NutritionDashboard` sin alterar la lógica actual de `NutritionPage`.
+  - Integración de navegación para vista nueva:
+    - en `Sidebar > Nutrición` se agregó opción `Inicio`,
+    - `App.jsx` renderiza `NutritionHomePage` cuando `nutritionSection === "home"`, manteniendo `NutritionPage` para el resto de secciones.
       - herramientas laborales reunidas en vista con tabs,
     - `CasinoMealEvaluator` actualizado:
       - entrada por línea/coma,

@@ -537,6 +537,13 @@ export default function Sidebar({
           <div className="sidebar-nutrition-nav">
             <button
               type="button"
+              className={`sidebar-nutrition-btn ${nutritionSection === "home" ? "active" : ""}`}
+              onClick={() => onChangeNutritionSection && onChangeNutritionSection("home")}
+            >
+              Inicio
+            </button>
+            <button
+              type="button"
               className={`sidebar-nutrition-btn ${
                 nutritionSection === "registro" ? "active" : ""
               }`}

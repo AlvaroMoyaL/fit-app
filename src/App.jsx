@@ -23,6 +23,7 @@ import MetricsLogForm from "./components/MetricsLogForm";
 import MetricsCharts from "./components/MetricsCharts";
 import StatsMetricDrawer from "./components/StatsMetricDrawer";
 import NutritionPage from "./components/nutrition/NutritionPage";
+import NutritionHomePage from "./components/nutrition/NutritionHomePage";
 import { getLevelProgress } from "./utils/levelProgress";
 import {
   countExercises,
@@ -3937,13 +3938,17 @@ export default function App() {
           )}
 
           {sidebarTab === "nutrition" && (
-            <NutritionPage
-              profileId={activeProfileId}
-              profile={form}
-              metricsLog={metricsLog}
-              activeSection={nutritionSection}
-              onNutritionDataChange={touchLocalChange}
-            />
+            nutritionSection === "home" ? (
+              <NutritionHomePage />
+            ) : (
+              <NutritionPage
+                profileId={activeProfileId}
+                profile={form}
+                metricsLog={metricsLog}
+                activeSection={nutritionSection}
+                onNutritionDataChange={touchLocalChange}
+              />
+            )
           )}
         </div>
 

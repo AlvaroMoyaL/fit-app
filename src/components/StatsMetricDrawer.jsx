@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const AUTO_COMPARE_VALUE = "__auto__";
 const CHART_WINDOW_SIZE = 30;
@@ -172,6 +172,33 @@ const METRIC_META = {
     related: ["sleepHours", "hrv", "bodyBattery"],
     description: "Preparación para entrenar según recuperación.",
   },
+};
+
+const METRIC_INPUT_RULES = {
+  weight: { min: 20, max: 300, step: 0.1 },
+  waist: { min: 40, max: 200, step: 0.1 },
+  hip: { min: 40, max: 200, step: 0.1 },
+  neck: { min: 20, max: 80, step: 0.1 },
+  bodyFat: { min: 2, max: 60, step: 0.1 },
+  restHr: { min: 30, max: 200, step: 1 },
+  sleepHours: { min: 0, max: 16, step: 0.1 },
+  steps: { min: 0, max: 100000, step: 1 },
+  sleepScore: { min: 0, max: 100, step: 1 },
+  sleepStress: { min: 0, max: 100, step: 1 },
+  hrv: { min: 0, max: 250, step: 1 },
+  bodyBattery: { min: 0, max: 100, step: 1 },
+  stress: { min: 0, max: 100, step: 1 },
+  spo2: { min: 70, max: 100, step: 0.1 },
+  respiration: { min: 5, max: 40, step: 0.1 },
+  loadRatio: { min: 0, max: 5, step: 0.01 },
+  acuteLoad: { min: 0, max: 5000, step: 1 },
+  chronicLoad: { min: 0, max: 5000, step: 1 },
+  activeKcal: { min: 0, max: 8000, step: 1 },
+  totalKcal: { min: 0, max: 10000, step: 1 },
+  distanceKm: { min: 0, max: 100, step: 0.01 },
+  activeMinutes: { min: 0, max: 1440, step: 1 },
+  vo2max: { min: 10, max: 90, step: 0.1 },
+  readiness: { min: 0, max: 100, step: 1 },
 };
 
 function toNum(v) {
@@ -601,9 +628,15 @@ export default function StatsMetricDrawer({
   compareKey,
   onChangeCompareKey,
   metricsLog,
+  onAddEntry,
 }) {
   const [activeTooltip, setActiveTooltip] = useState(null);
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [manualValue, setManualValue] = useState("");
+  const [manualStatus, setManualStatus] = useState("");
   const meta = METRIC_META[metricKey] || { label: metricKey || "Métrica", unit: "", related: [] };
+  const inputRule = METRIC_INPUT_RULES[metricKey] || null;
+  const isEditableMetric = Boolean(inputRule);
   const primary = useMemo(() => getSeries(metricsLog, metricKey), [metricsLog, metricKey]);
 
   const compareOptions = useMemo(() => {
@@ -694,6 +727,33 @@ export default function StatsMetricDrawer({
   const medicalText = medicalMessage(metricKey, primaryCurrent, latestRow, primaryDelta);
   const coachText = coachMessage(metricKey, primaryCurrent, primaryDelta);
 
+  useEffect(() => {
+    setManualValue("");
+    setManualStatus("");
+  }, [metricKey, open]);
+
+  const onSubmitManualEntry = () => {
+    if (!isEditableMetric || typeof onAddEntry !== "function") return;
+    if (!manualDate) {
+      setManualStatus("Selecciona fecha");
+      return;
+    }
+    const numeric = Number(manualValue);
+    if (!Number.isFinite(numeric)) {
+      setManualStatus("Ingresa un valor válido");
+      return;
+    }
+    if (numeric < inputRule.min || numeric > inputRule.max) {
+      setManualStatus(`Rango permitido: ${inputRule.min} a ${inputRule.max}`);
+      return;
+    }
+    onAddEntry({
+      date: manualDate,
+      [metricKey]: numeric,
+    });
+    setManualStatus("Dato guardado ✓");
+  };
+
   return (
     <>
       <div className={`drawer-backdrop ${open ? "is-open" : ""}`} onClick={onClose} />
@@ -730,6 +790,45 @@ export default function StatsMetricDrawer({
               ))}
             </select>
           </label>
+        </div>
+
+        <div className="stats-drawer-insight">
+          <h4>Agregar Dato Manual</h4>
+          {!isEditableMetric ? (
+            <p>
+              Esta métrica se calcula automáticamente y no se registra manualmente.
+            </p>
+          ) : (
+            <>
+              <div className="stats-drawer-controls">
+                <label>
+                  Fecha
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                  />
+                </label>
+                <label>
+                  {meta.label} {meta.unit ? `(${meta.unit})` : ""}
+                  <input
+                    type="number"
+                    min={inputRule.min}
+                    max={inputRule.max}
+                    step={inputRule.step}
+                    value={manualValue}
+                    onChange={(e) => setManualValue(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="drawer-actions">
+                <button className="tiny primary-btn" type="button" onClick={onSubmitManualEntry}>
+                  Guardar dato
+                </button>
+              </div>
+              {manualStatus && <p className="note">{manualStatus}</p>}
+            </>
+          )}
         </div>
 
         <div className="stats-drawer-summary">

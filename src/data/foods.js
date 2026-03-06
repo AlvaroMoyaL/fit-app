@@ -23,6 +23,7 @@ export const foods = [
   { name: "pan marraqueta", category: "carbs", calories: 270, protein: 8, carbs: 56, fat: 2 },
   { name: "pan hallulla", category: "carbs", calories: 288, protein: 8.3, carbs: 51, fat: 5.7 },
   { name: "pan pita", category: "carbs", calories: 275, protein: 9.1, carbs: 55, fat: 1.2 },
+  { name: "pan pita integral", category: "carbs", calories: 262, protein: 9.8, carbs: 47, fat: 3.1 },
   { name: "tortilla de trigo", category: "carbs", calories: 310, protein: 8.1, carbs: 52, fat: 7.8 },
   { name: "arepa", category: "carbs", calories: 218, protein: 5.5, carbs: 43, fat: 2.1 },
   { name: "tortilla de maiz", category: "carbs", calories: 218, protein: 5.7, carbs: 44.6, fat: 2.9 },

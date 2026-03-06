@@ -2227,7 +2227,7 @@ export default function App() {
   const onAddMetricsEntry = (entry) => {
     setMetricsLog((prev) => {
       const existing = prev.find((e) => e.date === entry.date) || {};
-      const keys = ["weight", "waist", "hip", "neck", "bodyFat", "restHr", "sleepHours", "steps"];
+      const keys = [...GARMIN_IMPORT_KEYS, "weight", "waist", "hip", "neck"];
       const merged = { ...existing, ...entry };
       keys.forEach((key) => {
         if (entry[key] === null || entry[key] === undefined) merged[key] = existing[key];
@@ -3957,6 +3957,7 @@ export default function App() {
         metricKey={statsDrawer.metricKey}
         compareKey={statsDrawer.compareKey}
         metricsLog={metricsLog}
+        onAddEntry={onAddMetricsEntry}
         onClose={() => setStatsDrawer((prev) => ({ ...prev, open: false }))}
         onChangeCompareKey={(nextKey) =>
           setStatsDrawer((prev) => ({ ...prev, compareKey: nextKey }))

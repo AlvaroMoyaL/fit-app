@@ -7,12 +7,12 @@ import DailyMealPlan from "./DailyMealPlan";
 import WeeklyMealPlanner from "./WeeklyMealPlanner";
 import ShoppingListCard from "./ShoppingListCard";
 import NutritionLog from "./NutritionLog";
-import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WeightProjection from "./WeightProjection";
 import NutritionEvaluation from "./NutritionEvaluation";
 import NutritionAlerts from "./NutritionAlerts";
 import AdaptiveCalorieAdjustment from "./AdaptiveCalorieAdjustment";
 import AdaptiveInsightDrawer from "./AdaptiveInsightDrawer";
+import WorkNutritionTools from "./WorkNutritionTools";
 import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
@@ -133,7 +133,6 @@ export default function NutritionPage({
             onMealsChange={setMeals}
             onDataChange={onNutritionDataChange}
           />
-          <CasinoMealEvaluator />
         </Box>
       )}
 
@@ -192,6 +191,12 @@ export default function NutritionPage({
             recipes={recipes}
             foodCatalog={foodCatalog}
           />
+        </Box>
+      )}
+
+      {activeSection === "work" && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <WorkNutritionTools />
         </Box>
       )}
 

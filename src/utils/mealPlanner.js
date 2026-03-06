@@ -1,52 +1,9 @@
-import { getMealSuggestions } from "./mealSuggestions";
+import { generateDailyMealPlan, generateWeeklyMealPlan } from "./weeklyMealPlan";
+export { generateDailyMealPlan, generateWeeklyMealPlan };
 
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-const MEAL_DISTRIBUTION = {
-  breakfast: 0.25,
-  lunch: 0.35,
-  dinner: 0.3,
-  snack: 0.1,
-};
-
-export function generateDailyMealPlan(dailyCaloriesTarget, recipes, foodCatalog) {
-  const target = Math.max(0, toNumber(dailyCaloriesTarget));
-
-  const mealTypes = ["breakfast", "lunch", "dinner", "snack"];
-  const plan = {
-    breakfast: null,
-    lunch: null,
-    dinner: null,
-    snack: null,
-  };
-
-  mealTypes.forEach((mealType) => {
-    const mealCalories = target * (MEAL_DISTRIBUTION[mealType] || 0);
-    const suggestions = getMealSuggestions(mealCalories, recipes, foodCatalog, mealType);
-    plan[mealType] = suggestions.length > 0 ? suggestions[0] : null;
-  });
-
-  return plan;
-}
-
-export function generateWeeklyMealPlan(dailyCaloriesTarget, recipes, foodCatalog) {
-  const days = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-  ];
-
-  return days.reduce((acc, day) => {
-    acc[day] = generateDailyMealPlan(dailyCaloriesTarget, recipes, foodCatalog);
-    return acc;
-  }, {});
 }
 
 function normalizeId(value) {
@@ -73,7 +30,11 @@ function resolveIngredientMeasure(ingredient) {
 }
 
 export function generateShoppingList(weeklyMealPlan, recipes, foodCatalog) {
-  const safePlan = weeklyMealPlan && typeof weeklyMealPlan === "object" ? weeklyMealPlan : {};
+  const safePlan = Array.isArray(weeklyMealPlan)
+    ? weeklyMealPlan
+    : weeklyMealPlan && typeof weeklyMealPlan === "object"
+    ? Object.entries(weeklyMealPlan).map(([day, value]) => ({ day, ...(value || {}) }))
+    : [];
   const safeRecipes = Array.isArray(recipes) ? recipes : [];
   const safeFoods = Array.isArray(foodCatalog) ? foodCatalog : [];
 
@@ -92,8 +53,7 @@ export function generateShoppingList(weeklyMealPlan, recipes, foodCatalog) {
   const shoppingMap = new Map();
   const mealTypes = ["breakfast", "lunch", "dinner", "snack"];
 
-  Object.keys(safePlan).forEach((dayKey) => {
-    const dayPlan = safePlan?.[dayKey] || {};
+  safePlan.forEach((dayPlan) => {
     mealTypes.forEach((mealType) => {
       const plannedMeal = dayPlan?.[mealType];
       if (!plannedMeal) return;

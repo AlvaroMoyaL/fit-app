@@ -2,27 +2,6 @@ import React, { useMemo } from "react";
 import { Card, CardContent, Typography, Grid, Box, Divider } from "@mui/material";
 import { generateWeeklyMealPlan } from "../../utils/mealPlanner";
 
-const days = [
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-  "sunday",
-];
-
-function dayLabel(day) {
-  if (day === "monday") return "Monday";
-  if (day === "tuesday") return "Tuesday";
-  if (day === "wednesday") return "Wednesday";
-  if (day === "thursday") return "Thursday";
-  if (day === "friday") return "Friday";
-  if (day === "saturday") return "Saturday";
-  if (day === "sunday") return "Sunday";
-  return day;
-}
-
 function mealLabel(type) {
   if (type === "breakfast") return "Breakfast";
   if (type === "lunch") return "Lunch";
@@ -40,16 +19,16 @@ export default function WeeklyMealPlanner({ dailyCaloriesTarget, recipes, foodCa
   const weeklyPlan = useMemo(() => {
     return generateWeeklyMealPlan(dailyCaloriesTarget, recipes, foodCatalog);
   }, [dailyCaloriesTarget, recipes, foodCatalog]);
+  const safeWeeklyPlan = Array.isArray(weeklyPlan) ? weeklyPlan : [];
 
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: "grid", gap: 1.5 }}>
         <Typography variant="h6">Plan nutricional semanal</Typography>
         <Grid container spacing={1.5}>
-          {days.map((day) => {
-            const dayPlan = weeklyPlan?.[day] || {};
+          {safeWeeklyPlan.map((dayPlan, index) => {
             return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={day}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={`${dayPlan?.day || "day"}-${index}`}>
                 <Box
                   sx={{
                     border: "1px solid",
@@ -62,7 +41,7 @@ export default function WeeklyMealPlanner({ dailyCaloriesTarget, recipes, foodCa
                   }}
                 >
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {dayLabel(day)}
+                    {dayPlan?.day || "Day"}
                   </Typography>
                   <Divider />
 

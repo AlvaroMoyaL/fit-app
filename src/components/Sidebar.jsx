@@ -560,6 +560,13 @@ export default function Sidebar({
             >
               Planificación
             </button>
+            <button
+              type="button"
+              className={`sidebar-nutrition-btn ${nutritionSection === "work" ? "active" : ""}`}
+              onClick={() => onChangeNutritionSection && onChangeNutritionSection("work")}
+            >
+              Nutrición en el trabajo
+            </button>
           </div>
           <p className="note">
             Orden sugerido: 1) Registro rápido, 2) Revisar balance, 3) Ver plan semanal y compras.

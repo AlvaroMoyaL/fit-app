@@ -244,6 +244,29 @@
     - payload cloud por perfil ahora incluye `nutritionLog`, `customFoods`, `customRecipes`,
     - restore cloud repone esas claves en `localStorage`,
     - `NutritionLog` emite cambios para disparar sincronización automática.
+  - Sprint 6 (nutrición para contexto laboral) incorporado:
+    - utilidades nuevas:
+      - `src/utils/satietyFoods.js` (evaluación base de saciedad por comida),
+      - `src/utils/portableMeals.js` (biblioteca de comidas portables + filtros),
+      - `src/utils/workMealPlanner.js` (planificador de comidas portables por días/condiciones),
+      - `src/utils/casinoMealEvaluator.js` (estimación nutricional/evaluación de comida de casino),
+      - `src/utils/campMealKit.js` (kit de comida: plan + lista + preparación),
+      - `src/utils/weeklyMealPlan.js` (distribución calórica 25/35/25/15, filtro ±20%, anti-repetición),
+    - componentes nuevos:
+      - `WorkMealPlanner`,
+      - `CampMealKit`,
+      - `WorkNutritionTools` (tabs: casino, planificador, kit),
+    - integración en `NutritionPage`:
+      - nueva sección `work` (`Nutrición en el trabajo`) desde sidebar,
+      - herramientas laborales reunidas en vista con tabs,
+    - `CasinoMealEvaluator` actualizado:
+      - entrada por línea/coma,
+      - salida con macros, evaluación, recomendación e índice de saciedad visible,
+    - `WorkMealPlanner` y `CampMealKit` muestran nivel de saciedad por comida.
+  - `StatsMetricDrawer` ahora incluye registro manual contextual por métrica:
+    - ingreso por fecha/valor dentro del drawer,
+    - validación de rangos por tipo de métrica,
+    - métricas derivadas se marcan como no editables manualmente.
 
 ## Conventions for Future Changes
 - Do not hardcode secrets.
@@ -277,6 +300,7 @@
 - Se introdujo navegación interna de `Nutrición` desde el sidebar para reducir scroll vertical en la vista principal.
 - Se definió que el ajuste de gasto energético en `Nutrición` usa métricas del día actual (sin fallback a días previos).
 - Se habilitó auto-sync en segundo plano (foco/online/visibilidad/intervalo) con indicador persistente de estado de sincronización en `Cuenta`.
+- Se consolidó una sub-vista específica “Nutrición en el trabajo” para concentrar herramientas de logística alimentaria laboral.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

@@ -1,93 +1,110 @@
 import { useState } from "react";
+import { evaluateCasinoOptions } from "../../utils/casinoMealEvaluator";
+
 import {
   Box,
-  Card,
-  CardContent,
-  Typography,
   TextField,
   Button,
-  Stack,
-  Divider,
+  Typography,
+  Paper,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
-import { evaluateCasinoMeal } from "../../utils/casinoMealEvaluator";
 
 export default function CasinoMealEvaluator() {
-  const [input, setInput] = useState("");
+  const [casinoText, setCasinoText] = useState("");
   const [result, setResult] = useState(null);
 
   const handleEvaluate = () => {
-    const foods = input
-      .split(/[\n,]+/)
-      .map((food) => food.trim().toLowerCase())
-      .filter(Boolean);
-
-    if (!foods.length) {
-      setResult(null);
-      return;
-    }
-
-    const evaluation = evaluateCasinoMeal(foods);
+    const evaluation = evaluateCasinoOptions(casinoText);
     setResult(evaluation);
   };
 
-  const satietyLabel =
-    result?.satietyLevel === "high"
-      ? "Alta"
-      : result?.satietyLevel === "medium"
-      ? "Media"
-      : result?.satietyLevel === "low"
-      ? "Baja"
-      : "Sin datos";
+  const hasNoResults =
+    result &&
+    !result.bestOption &&
+    (!Array.isArray(result.alternatives) || result.alternatives.length === 0) &&
+    (!Array.isArray(result.avoid) || result.avoid.length === 0);
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={2}>
-          <Typography variant="h6">Evaluador de comida de casino</Typography>
+    <Paper sx={{ p: 2.5 }}>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Typography variant="h6">Evaluador de comida de casino</Typography>
 
-          <TextField
-            multiline
-            minRows={4}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder={`Ejemplo:\nrice\nchicken\nsalad`}
-            fullWidth
-          />
+        <TextField
+          label="Opciones del casino"
+          placeholder="lentejas arroz fideos pollo salsa lechuga tomate"
+          fullWidth
+          multiline
+          minRows={3}
+          value={casinoText}
+          onChange={(event) => setCasinoText(event.target.value)}
+        />
 
-          <Box>
-            <Button variant="contained" onClick={handleEvaluate}>
-              Evaluar comida
-            </Button>
-          </Box>
+        <Button variant="contained" onClick={handleEvaluate} disabled={!casinoText.trim()}>
+          Evaluar opciones
+        </Button>
 
-          {result && (
-            <Stack spacing={1.2}>
-              <Divider />
-              <Typography variant="body1">
-                Calorías: {Math.round(Number(result.calories || 0))} kcal
+        {result && (
+          <>
+            {hasNoResults ? (
+              <Typography variant="body2" color="text.secondary">
+                No se pudieron generar combinaciones con esas opciones
               </Typography>
-              <Typography variant="body1">
-                Proteína: {Math.round(Number(result.protein || 0))} g
-              </Typography>
-              <Typography variant="body1">
-                Carbohidratos: {Math.round(Number(result.carbs || 0))} g
-              </Typography>
-              <Typography variant="body1">
-                Grasas: {Math.round(Number(result.fat || 0))} g
-              </Typography>
+            ) : (
+              <>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Mejor opcion
+                  </Typography>
+                  <Typography variant="body1" color={result.bestOption ? "text.primary" : "text.secondary"}>
+                    {result.bestOption || "Sin opcion recomendada"}
+                  </Typography>
+                </Box>
 
-              <Divider />
-              <Typography variant="body1">
-                Saciedad: {satietyLabel} (índice: {Number(result.satietyScore || 0).toFixed(1)})
-              </Typography>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Alternativas
+                  </Typography>
+                  {Array.isArray(result.alternatives) && result.alternatives.length > 0 ? (
+                    <List dense>
+                      {result.alternatives.map((item) => (
+                        <ListItem key={`alternative-${item}`} disablePadding>
+                          <ListItemText primary={item} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No hay alternativas disponibles.
+                    </Typography>
+                  )}
+                </Box>
 
-              <Divider />
-              <Typography variant="body1">Evaluación: {result.evaluation}</Typography>
-              <Typography variant="body2">Recomendación: {result.recommendation}</Typography>
-            </Stack>
-          )}
-        </Stack>
-      </CardContent>
-    </Card>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Evitar
+                  </Typography>
+                  {Array.isArray(result.avoid) && result.avoid.length > 0 ? (
+                    <List dense>
+                      {result.avoid.map((item) => (
+                        <ListItem key={`avoid-${item}`} disablePadding>
+                          <ListItemText primary={item} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No hay combinaciones a evitar.
+                    </Typography>
+                  )}
+                </Box>
+              </>
+            )}
+          </>
+        )}
+      </Box>
+    </Paper>
   );
 }

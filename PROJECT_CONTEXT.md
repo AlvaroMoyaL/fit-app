@@ -258,6 +258,26 @@
       - `WorkNutritionTools` (tabs: casino, planificador, kit),
     - integración en `NutritionPage`:
       - nueva sección `work` (`Nutrición en el trabajo`) desde sidebar,
+  - Herramientas de `Nutrición en el trabajo` consolidadas en tabs (`NutritionTools`):
+    - `Registrar comida` (SmartFoodInput),
+    - `Qué puedo cocinar` (CookWithWhatIHave),
+    - `Casino / Restaurante` (CasinoMealEvaluator),
+    - `Plan campamento` (WorkMealPlanner),
+    - `Kit campamento` (CampMealKit),
+    - `Lista de compras` (ShoppingList),
+  - `CampMealKit` ahora persistente por perfil (`fitapp_camp_meal_kit_{profileId}`):
+    - al cambiar de pestaña o recargar, el kit permanece visible,
+    - botón `Resetear kit` borra kit persistido y limpia lista de compras asociada.
+  - `CampMealKit` permite edición manual por día:
+    - reemplazo de desayuno/snack/cena con selector,
+    - recalcula lista de alimentos y preparación automáticamente.
+  - Regla de refrigerador ajustada:
+    - `hasFridge` afecta solo desayuno y snack,
+    - cena siempre usa opciones sin refrigeración (en generación y en edición manual).
+  - Checklist de compras (`ShoppingList`) mejorado:
+    - items checkeables por fila, ocultar/mostrar comprados y estado `Todo comprado`,
+    - unidades visibles de compra (`unidad`, `paquete`, `lata`, `botella`),
+    - recuperación automática: si la lista está vacía, se reconstruye desde el kit guardado.
       - herramientas laborales reunidas en vista con tabs,
     - `CasinoMealEvaluator` actualizado:
       - entrada por línea/coma,

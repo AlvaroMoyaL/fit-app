@@ -12,7 +12,7 @@ import NutritionEvaluation from "./NutritionEvaluation";
 import NutritionAlerts from "./NutritionAlerts";
 import AdaptiveCalorieAdjustment from "./AdaptiveCalorieAdjustment";
 import AdaptiveInsightDrawer from "./AdaptiveInsightDrawer";
-import WorkNutritionTools from "./WorkNutritionTools";
+import NutritionTools from "./NutritionTools";
 import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
@@ -196,7 +196,7 @@ export default function NutritionPage({
 
       {activeSection === "work" && (
         <Box sx={{ display: "grid", gap: 2 }}>
-          <WorkNutritionTools />
+          <NutritionTools profileId={profileId} />
         </Box>
       )}
 

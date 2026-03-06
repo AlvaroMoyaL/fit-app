@@ -17,11 +17,6 @@ function getRandomMeal(meals) {
   return safeMeals[index] || null;
 }
 
-function filterMealsForConditions(hasFridge) {
-  if (hasFridge) return getPortableMeals();
-  return getNoFridgeMeals();
-}
-
 function getMealsByType(meals, type) {
   const safeMeals = Array.isArray(meals) ? meals : [];
   const mealType = String(type || "").trim().toLowerCase();
@@ -43,23 +38,27 @@ export function generateWorkMealPlan(options = {}) {
   const includeSnacks = options.includeSnacks !== false;
   const includeDinner = options.includeDinner !== false;
 
-  const availableMeals = filterMealsForConditions(hasFridge);
+  const allPortableMeals = getPortableMeals();
+  const noFridgeMeals = getNoFridgeMeals();
 
-  // Se usan ambas estrategias para cumplir con el contrato del prompt y la biblioteca existente.
-  const breakfastMeals = getMealsByType(availableMeals, "breakfast").length
-    ? getMealsByType(availableMeals, "breakfast")
+  // El refrigerador impacta solo desayuno y snack.
+  const breakfastSource = hasFridge ? allPortableMeals : noFridgeMeals;
+  const snackSource = hasFridge ? allPortableMeals : noFridgeMeals;
+  // Cena se mantiene siempre con opciones sin refrigeración.
+  const dinnerSource = noFridgeMeals;
+
+  const breakfastMeals = getMealsByType(breakfastSource, "breakfast").length
+    ? getMealsByType(breakfastSource, "breakfast")
     : hasFridge
     ? getPortableMealsByType("breakfast")
     : getPortableMealsByType("breakfast").filter((meal) => !meal.requiresRefrigeration);
-  const snackMeals = getMealsByType(availableMeals, "snack").length
-    ? getMealsByType(availableMeals, "snack")
+  const snackMeals = getMealsByType(snackSource, "snack").length
+    ? getMealsByType(snackSource, "snack")
     : hasFridge
     ? getPortableMealsByType("snack")
     : getPortableMealsByType("snack").filter((meal) => !meal.requiresRefrigeration);
-  const dinnerMeals = getMealsByType(availableMeals, "dinner").length
-    ? getMealsByType(availableMeals, "dinner")
-    : hasFridge
-    ? getPortableMealsByType("dinner")
+  const dinnerMeals = getMealsByType(dinnerSource, "dinner").length
+    ? getMealsByType(dinnerSource, "dinner")
     : getPortableMealsByType("dinner").filter((meal) => !meal.requiresRefrigeration);
 
   let lastBreakfastId = "";

@@ -1,5 +1,6 @@
 import { evaluateMealSatiety } from "./satietyFoods";
-import { foodCatalog } from "../data/foodCatalog";
+import { interpretFoodText } from "./foodInterpreter";
+import foodCatalog from "../data/foodCatalog";
 
 function toNumber(value) {
   const n = Number(value);
@@ -46,6 +47,155 @@ function resolveFood(foodId, foodIndex) {
   const key = normalizeId(foodId);
   const alias = ID_ALIASES[key] ? normalizeId(ID_ALIASES[key]) : "";
   return foodIndex.get(key) || (alias ? foodIndex.get(alias) : null) || null;
+}
+
+function getFoodId(foodId, foodIndex) {
+  const food = resolveFood(foodId, foodIndex);
+  if (!food) return "";
+  return normalizeId(food.id || food.name);
+}
+
+function buildMealLabel(items) {
+  return items.join(" + ");
+}
+
+function uniqueItems(items = []) {
+  return Array.from(new Set(items.filter(Boolean)));
+}
+
+export function parseCasinoOptions(text = "") {
+  const interpreted = interpretFoodText(text);
+  return uniqueItems(Array.isArray(interpreted) ? interpreted : []);
+}
+
+export function classifyFood(foodId) {
+  const foodIndex = buildFoodIndex(foodCatalog);
+  const food = resolveFood(foodId, foodIndex);
+  const normalizedCategory = normalizeId(food?.category || "");
+
+  if (normalizedCategory === "protein") return "protein";
+  if (normalizedCategory === "carbs") return "carb";
+  if (normalizedCategory === "vegetable") return "vegetable";
+  if (normalizedCategory === "fat") return "fat";
+  return "other";
+}
+
+export function generateCasinoMeals(foods = []) {
+  const safeFoods = uniqueItems(Array.isArray(foods) ? foods : []);
+  const foodIndex = buildFoodIndex(foodCatalog);
+
+  const classified = safeFoods.map((foodId) => ({
+    inputId: foodId,
+    resolvedId: getFoodId(foodId, foodIndex),
+    type: classifyFood(foodId),
+  }));
+
+  const bases = classified.filter((item) => item.type === "carb").map((item) => item.resolvedId);
+  const proteins = classified.filter((item) => item.type === "protein").map((item) => item.resolvedId);
+  const vegetables = classified
+    .filter((item) => item.type === "vegetable")
+    .map((item) => item.resolvedId);
+
+  const meals = [];
+  const seen = new Set();
+
+  bases.forEach((base) => {
+    proteins.forEach((protein) => {
+      vegetables.forEach((vegetable) => {
+        const items = uniqueItems([base, protein, vegetable]);
+        const key = items.join("|");
+        if (!seen.has(key)) {
+          seen.add(key);
+          meals.push({ items, label: buildMealLabel(items) });
+        }
+      });
+    });
+  });
+
+  bases.forEach((base) => {
+    vegetables.forEach((vegetable) => {
+      const items = uniqueItems([base, vegetable]);
+      const key = items.join("|");
+      if (!seen.has(key)) {
+        seen.add(key);
+        meals.push({ items, label: buildMealLabel(items) });
+      }
+    });
+  });
+
+  // Fallback combos when there are no vegetables or no proteins available.
+  if (meals.length === 0 && bases.length > 0 && proteins.length > 0) {
+    bases.forEach((base) => {
+      proteins.forEach((protein) => {
+        const items = uniqueItems([base, protein]);
+        const key = items.join("|");
+        if (!seen.has(key)) {
+          seen.add(key);
+          meals.push({ items, label: buildMealLabel(items) });
+        }
+      });
+    });
+  }
+
+  return meals;
+}
+
+export function scoreCasinoMeal(meal) {
+  const items = Array.isArray(meal?.items) ? meal.items : [];
+  if (items.length === 0) {
+    return {
+      ...meal,
+      score: 0,
+      onlyCarbs: false,
+      hasUltraProcessed: false,
+    };
+  }
+
+  const foodIndex = buildFoodIndex(foodCatalog);
+  const classes = items.map((foodId) => classifyFood(foodId));
+  const foods = items.map((foodId) => resolveFood(foodId, foodIndex)).filter(Boolean);
+
+  const hasProtein = classes.includes("protein");
+  const hasVegetable = classes.includes("vegetable");
+  const onlyCarbs = classes.every((type) => type === "carb");
+  const hasUltraProcessed = foods.some((food) => normalizeId(food?.category) === "processed");
+  const highSatiety = hasProtein || foods.some((food) => {
+    const id = normalizeId(food?.id || food?.name);
+    return id.includes("lentejas") || id.includes("quinoa") || id.includes("avena");
+  });
+
+  let score = 0;
+  if (hasProtein) score += 30;
+  if (hasVegetable) score += 20;
+  if (highSatiety) score += 10;
+  if (onlyCarbs) score -= 25;
+  if (hasUltraProcessed) score -= 10;
+
+  return {
+    ...meal,
+    score,
+    onlyCarbs,
+    hasUltraProcessed,
+  };
+}
+
+export function evaluateCasinoOptions(text = "") {
+  const parsedFoods = parseCasinoOptions(text);
+  const meals = generateCasinoMeals(parsedFoods).map(scoreCasinoMeal);
+  const ranked = [...meals].sort((a, b) => b.score - a.score);
+
+  const avoidMeals = ranked.filter((meal) => meal.score <= 0 || meal.onlyCarbs);
+  const validMeals = ranked.filter((meal) => !avoidMeals.includes(meal));
+
+  const bestOption = validMeals[0]?.label || null;
+  const alternatives = validMeals.slice(1, 4).map((meal) => meal.label);
+  const avoid = avoidMeals.map((meal) => meal.label);
+
+  return {
+    bestOption,
+    alternatives,
+    avoid,
+  };
 }
 
 export function createNutritionTotals(foodIds = []) {
@@ -109,4 +259,3 @@ export function evaluateCasinoMeal(foodIds = []) {
     recommendation: nutritionReview.recommendation,
   };
 }
-

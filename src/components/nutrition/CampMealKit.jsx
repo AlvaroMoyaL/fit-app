@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Card,
@@ -10,16 +10,133 @@ import {
   FormControlLabel,
   Switch,
   Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { generateCampMealKit } from "../../utils/campMealKit";
+import { getPortableMealsByType } from "../../utils/portableMeals";
+import {
+  generateShoppingListFromKit,
+  loadShoppingList,
+  saveShoppingList,
+} from "../../utils/mealKitShoppingList";
 
-export default function CampMealKit() {
+function normalizeId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+function getCampMealKitKey(profileId) {
+  if (!profileId) return "";
+  return `fitapp_camp_meal_kit_${profileId}`;
+}
+
+function buildFoodCountsFromMealPlan(mealPlan) {
+  const counts = {};
+  const days = Array.isArray(mealPlan?.days) ? mealPlan.days : [];
+  days.forEach((day) => {
+    [day?.breakfast, day?.snack, day?.dinner].filter(Boolean).forEach((meal) => {
+      (Array.isArray(meal?.foods) ? meal.foods : []).forEach((food) => {
+        const id = normalizeId(food);
+        if (!id) return;
+        counts[id] = (counts[id] || 0) + 1;
+      });
+    });
+  });
+  return counts;
+}
+
+function buildShoppingListView(foodCounts) {
+  return Object.entries(foodCounts || {})
+    .map(([food, quantity]) => ({ food, quantity }))
+    .sort((a, b) => a.food.localeCompare(b.food));
+}
+
+function buildPrepSuggestions(foodCounts) {
+  const suggestions = new Set();
+  Object.keys(foodCounts || {}).forEach((food) => {
+    const key = normalizeId(food);
+    if (key === "huevo") suggestions.add("Hervir huevos antes de salir");
+    if (key === "avena") suggestions.add("Preparar porciones de avena");
+    if (key === "atun" || key === "atun_en_lata")
+      suggestions.add("Llevar latas individuales de atún");
+    if (key === "manzana") suggestions.add("Llevar frutas lavadas");
+    if (
+      key === "pan" ||
+      key === "pan_integral" ||
+      key === "pan_pita" ||
+      key === "pan_pita_integral"
+    ) {
+      suggestions.add("Llevar pan porcionado");
+    }
+  });
+  return Array.from(suggestions);
+}
+
+export default function CampMealKit({ profileId }) {
   const [days, setDays] = useState(4);
   const [hasFridge, setHasFridge] = useState(false);
   const [includeBreakfast, setIncludeBreakfast] = useState(true);
   const [includeSnacks, setIncludeSnacks] = useState(true);
   const [includeDinner, setIncludeDinner] = useState(true);
   const [kit, setKit] = useState(null);
+
+  const getMealOptionsByType = (mealType) => {
+    const type = String(mealType || "").toLowerCase();
+    const options = getPortableMealsByType(type);
+    if (type === "dinner") {
+      return options.filter((meal) => !meal.requiresRefrigeration);
+    }
+    return hasFridge ? options : options.filter((meal) => !meal.requiresRefrigeration);
+  };
+
+  const persistKit = (nextKit) => {
+    setKit(nextKit);
+    const key = getCampMealKitKey(profileId);
+    if (key) {
+      localStorage.setItem(key, JSON.stringify(nextKit));
+    }
+
+    if (profileId) {
+      const previousById = new Map(
+        loadShoppingList(profileId).map((item) => [normalizeId(item?.id), Boolean(item?.checked)])
+      );
+      const flatMeals = (Array.isArray(nextKit?.mealPlan?.days) ? nextKit.mealPlan.days : []).flatMap(
+        (day) => [day?.breakfast, day?.snack, day?.dinner].filter(Boolean)
+      );
+      const checklist = generateShoppingListFromKit(flatMeals).map((item) => ({
+        ...item,
+        checked: previousById.get(normalizeId(item?.id)) || false,
+      }));
+      saveShoppingList(profileId, checklist);
+    }
+  };
+
+  useEffect(() => {
+    const key = getCampMealKitKey(profileId);
+    if (!key) {
+      setKit(null);
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setKit(null);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setKit(parsed && typeof parsed === "object" ? parsed : null);
+    } catch {
+      setKit(null);
+    }
+  }, [profileId]);
 
   const handleGenerate = () => {
     const result = generateCampMealKit({
@@ -29,7 +146,48 @@ export default function CampMealKit() {
       includeSnacks,
       includeDinner,
     });
-    setKit(result);
+    persistKit(result);
+  };
+
+  const handleReset = () => {
+    setDays(4);
+    setHasFridge(false);
+    setIncludeBreakfast(true);
+    setIncludeSnacks(true);
+    setIncludeDinner(true);
+    setKit(null);
+
+    const key = getCampMealKitKey(profileId);
+    if (key) {
+      localStorage.removeItem(key);
+    }
+
+    if (profileId) {
+      saveShoppingList(profileId, []);
+    }
+  };
+
+  const handleChangeMeal = (dayIndex, mealKey, nextMealId) => {
+    if (!kit || !nextMealId) return;
+    const mealType =
+      mealKey === "breakfast" ? "breakfast" : mealKey === "snack" ? "snack" : "dinner";
+    const replacement = getMealOptionsByType(mealType).find(
+      (meal) => normalizeId(meal?.id) === normalizeId(nextMealId)
+    );
+    if (!replacement) return;
+
+    const nextDays = (Array.isArray(kit?.mealPlan?.days) ? kit.mealPlan.days : []).map((day, idx) =>
+      idx === dayIndex ? { ...day, [mealKey]: replacement } : day
+    );
+    const nextMealPlan = { ...(kit?.mealPlan || {}), days: nextDays };
+    const foodCounts = buildFoodCountsFromMealPlan(nextMealPlan);
+    const nextKit = {
+      ...kit,
+      mealPlan: nextMealPlan,
+      shoppingList: buildShoppingListView(foodCounts),
+      prepSuggestions: buildPrepSuggestions(foodCounts),
+    };
+    persistKit(nextKit);
   };
 
   return (
@@ -77,6 +235,9 @@ export default function CampMealKit() {
             <Button variant="contained" onClick={handleGenerate}>
               Generar kit de comida
             </Button>
+            <Button variant="text" color="error" onClick={handleReset} sx={{ ml: 1 }}>
+              Resetear kit
+            </Button>
           </Box>
 
           {kit && (
@@ -96,6 +257,23 @@ export default function CampMealKit() {
                             Desayuno
                           </Typography>
                           <Typography variant="body1">{dayItem.breakfast.name}</Typography>
+                          <FormControl fullWidth size="small" sx={{ mt: 0.8 }}>
+                            <InputLabel id={`kit-breakfast-${index}`}>Cambiar desayuno</InputLabel>
+                            <Select
+                              labelId={`kit-breakfast-${index}`}
+                              label="Cambiar desayuno"
+                              value={dayItem.breakfast.id || ""}
+                              onChange={(event) =>
+                                handleChangeMeal(index, "breakfast", event.target.value)
+                              }
+                            >
+                              {getMealOptionsByType("breakfast").map((option) => (
+                                <MenuItem key={`breakfast-option-${option.id}`} value={option.id}>
+                                  {option.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                           <Typography variant="body2" color="text.secondary">
                             Saciedad: {dayItem.breakfast.satietyLevel || "—"}
                           </Typography>
@@ -108,6 +286,21 @@ export default function CampMealKit() {
                             Snack
                           </Typography>
                           <Typography variant="body1">{dayItem.snack.name}</Typography>
+                          <FormControl fullWidth size="small" sx={{ mt: 0.8 }}>
+                            <InputLabel id={`kit-snack-${index}`}>Cambiar snack</InputLabel>
+                            <Select
+                              labelId={`kit-snack-${index}`}
+                              label="Cambiar snack"
+                              value={dayItem.snack.id || ""}
+                              onChange={(event) => handleChangeMeal(index, "snack", event.target.value)}
+                            >
+                              {getMealOptionsByType("snack").map((option) => (
+                                <MenuItem key={`snack-option-${option.id}`} value={option.id}>
+                                  {option.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                           <Typography variant="body2" color="text.secondary">
                             Saciedad: {dayItem.snack.satietyLevel || "—"}
                           </Typography>
@@ -120,6 +313,21 @@ export default function CampMealKit() {
                             Cena
                           </Typography>
                           <Typography variant="body1">{dayItem.dinner.name}</Typography>
+                          <FormControl fullWidth size="small" sx={{ mt: 0.8 }}>
+                            <InputLabel id={`kit-dinner-${index}`}>Cambiar cena</InputLabel>
+                            <Select
+                              labelId={`kit-dinner-${index}`}
+                              label="Cambiar cena"
+                              value={dayItem.dinner.id || ""}
+                              onChange={(event) => handleChangeMeal(index, "dinner", event.target.value)}
+                            >
+                              {getMealOptionsByType("dinner").map((option) => (
+                                <MenuItem key={`dinner-option-${option.id}`} value={option.id}>
+                                  {option.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
                           <Typography variant="body2" color="text.secondary">
                             Saciedad: {dayItem.dinner.satietyLevel || "—"}
                           </Typography>

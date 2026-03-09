@@ -190,6 +190,7 @@ export const foods = [
   { name: "humita", category: "traditional", calories: 130, protein: 4, carbs: 20, fat: 4 },
   { name: "pastel de choclo", category: "traditional", calories: 190, protein: 8, carbs: 18, fat: 10 },
   { name: "cazuela", category: "traditional", calories: 85, protein: 7, carbs: 8, fat: 3 },
+  { name: "tortilla espanola", category: "traditional", calories: 192, protein: 6.2, carbs: 15, fat: 12 },
   { name: "porotos granados", category: "traditional", calories: 124, protein: 6, carbs: 20, fat: 2 },
   { name: "charquican", category: "traditional", calories: 110, protein: 5, carbs: 13, fat: 4 },
   { name: "pastel de papa", category: "traditional", calories: 170, protein: 8, carbs: 19, fat: 6 },

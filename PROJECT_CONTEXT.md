@@ -240,6 +240,7 @@
     - para bebidas la cantidad se ingresa y muestra en `ml`,
     - se mantiene cálculo de aporte nutricional automático,
   - catálogo base ampliado con bebidas comunes/alcohólicas en `src/data/foods.js` (incluye `whisky`, `vodka`, `ron`, `cerveza`, vinos, etc.).
+  - catálogo base actualizado con plato tradicional adicional: `tortilla espanola` en `src/data/foods.js`.
   - integración de nutrición con sincronización cloud:
     - payload cloud por perfil ahora incluye `nutritionLog`, `customFoods`, `customRecipes`,
     - restore cloud repone esas claves en `localStorage`,

@@ -46,6 +46,9 @@ export function applyThemeTokensToDocument(mode = "light") {
   const body = document.body;
   if (!root || !body) return;
 
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  const nextThemeColor = mode === "dark" ? "#0f1318" : "#0b5f58";
+
   root.style.setProperty("--fit-shell-bg", tokens.shellBg);
   root.style.setProperty("--fit-panel-bg", tokens.panelBg);
   root.style.setProperty("--fit-soft-bg", tokens.softBg);
@@ -58,7 +61,15 @@ export function applyThemeTokensToDocument(mode = "light") {
   root.style.setProperty("--fit-body-bg", tokens.bodyBackground);
   root.style.setProperty("--fit-paper", tokens.paper);
   root.style.setProperty("--fit-divider", tokens.border);
+  root.setAttribute("data-theme", mode);
+  root.style.colorScheme = mode;
 
   body.style.background = tokens.bodyBackground;
   body.style.color = tokens.textMain;
+  body.setAttribute("data-theme", mode);
+  body.style.colorScheme = mode;
+
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute("content", nextThemeColor);
+  }
 }

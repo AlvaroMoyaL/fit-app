@@ -56,8 +56,12 @@ if (document.readyState === "complete") {
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // ignore
-    });
+    const swUrl = `/sw.js?v=${import.meta.env.VITE_APP_BUILD || import.meta.env.VITE_APP_VERSION || "dev"}`;
+    navigator.serviceWorker
+      .register(swUrl)
+      .then((registration) => registration.update().catch(() => {}))
+      .catch(() => {
+        // ignore
+      });
   });
 }

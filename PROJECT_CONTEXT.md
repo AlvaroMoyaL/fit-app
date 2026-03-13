@@ -289,6 +289,10 @@
     - `NutritionSectionNav` se compacta en móvil con labels cortos,
     - hero de `Nutrición` se compacta en `xs` y recupera KPIs secundarios en un bloque plegable `KPIs de apoyo`,
     - `Plan` y `Stats` reducen densidad vertical en móvil (heroes, KPIs y cards más compactos).
+  - Ajuste reciente de despliegue/tema:
+    - el `service worker` se registra con versión por build para reducir cache viejo en producción,
+    - la aplicación del tema (`light`/`dark`) ahora fija también `data-theme`, `colorScheme` y `meta theme-color`,
+    - se añadió `-webkit-backdrop-filter` para acercar el render de Safari al look esperado.
   - Peso efectivo en nutrición y métricas:
     - el peso actual usado por KPI/cálculos ya no depende solo del perfil base; toma el último `weight` válido desde `metricsLog` cuando existe.
   - Catálogo nutricional enriquecido:

@@ -6,8 +6,14 @@ import MealSuggestions from "./MealSuggestions";
 import WeightProjection from "./WeightProjection";
 import NutritionEvaluation from "./NutritionEvaluation";
 import NutritionAlerts from "./NutritionAlerts";
+import NutritionInsights from "./NutritionInsights";
 import AdaptiveCalorieAdjustment from "./AdaptiveCalorieAdjustment";
 import NutritionSectionNav from "./NutritionSectionNav";
+import calculateDailyNutritionScore from "../../utils/dailyNutritionScore";
+import analyzeMacroBalance from "../../utils/macroAnalyzer";
+import analyzeProteinIntake from "../../utils/proteinAnalyzer";
+import trackVegetableIntake from "../../utils/vegetableTracker";
+import generateNutritionAlerts from "../../utils/nutritionAlerts";
 import { getMealNutritionScore } from "../../utils/nutritionScore";
 import { getMeals, saveMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
@@ -521,7 +527,7 @@ export default function NutritionPage({
     () => calculateMacroTargets(nutritionProfile, tdee),
     [nutritionProfile, tdee]
   );
-  const nutritionScore = useMemo(() => {
+  const mealQualityScore = useMemo(() => {
     if (!Array.isArray(mealsToday) || mealsToday.length === 0) return 0;
     const scores = mealsToday
       .map((meal) => {
@@ -537,6 +543,65 @@ export default function NutritionPage({
     const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
     return Math.round(average);
   }, [mealsToday]);
+  const macroAnalysis = useMemo(
+    () =>
+      analyzeMacroBalance({
+        proteinCalories: totalsToday.protein * 4,
+        carbCalories: totalsToday.carbs * 4,
+        fatCalories: totalsToday.fat * 9,
+        totalCalories: totalsToday.calories,
+      }),
+    [totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
+  );
+  const proteinAnalysis = useMemo(
+    () =>
+      analyzeProteinIntake({
+        proteinConsumedGrams: totalsToday.protein,
+        bodyWeightKg: currentWeight,
+      }),
+    [currentWeight, totalsToday.protein]
+  );
+  const vegetableAnalysis = useMemo(() => trackVegetableIntake(mealsToday), [mealsToday]);
+  const dailyNutritionScore = useMemo(
+    () =>
+      calculateDailyNutritionScore({
+        caloriesConsumed: totalsToday.calories,
+        calorieTarget: tdee,
+        proteinGrams: totalsToday.protein,
+        proteinTarget: proteinAnalysis.proteinTarget,
+        macroDistribution: {
+          protein: macroAnalysis.protein?.percent,
+          carbs: macroAnalysis.carbs?.percent,
+          fat: macroAnalysis.fats?.percent,
+        },
+        vegetableServings: vegetableAnalysis.servings,
+        satietyScore: hungerToday.satietyScore,
+      }),
+    [
+      hungerToday.satietyScore,
+      macroAnalysis.carbs?.percent,
+      macroAnalysis.fats?.percent,
+      macroAnalysis.protein?.percent,
+      proteinAnalysis.proteinTarget,
+      tdee,
+      totalsToday.calories,
+      totalsToday.protein,
+      vegetableAnalysis.servings,
+    ]
+  );
+  const dailyNutritionAlerts = useMemo(
+    () =>
+      generateNutritionAlerts({
+        proteinConsumedGrams: totalsToday.protein,
+        bodyWeightKg: currentWeight,
+        proteinCalories: totalsToday.protein * 4,
+        carbCalories: totalsToday.carbs * 4,
+        fatCalories: totalsToday.fat * 9,
+        totalCalories: totalsToday.calories,
+        meals: mealsToday,
+      }),
+    [currentWeight, mealsToday, totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
+  );
   const calorieState = useMemo(
     () => getHeroMetricState(totalsToday.calories, macroTargets.calories, { lowWarnRatio: 0.5 }),
     [macroTargets.calories, totalsToday.calories]
@@ -554,8 +619,8 @@ export default function NutritionPage({
     [macroTargets.fat, totalsToday.fat]
   );
   const scoreState = useMemo(
-    () => getHeroMetricState(nutritionScore, 100, { lowWarnRatio: 0.55, overWarnRatio: 1 }),
-    [nutritionScore]
+    () => getHeroMetricState(dailyNutritionScore.score, 100, { lowWarnRatio: 0.55, overWarnRatio: 1 }),
+    [dailyNutritionScore.score]
   );
   const openAdaptiveDrawer = (section = "progreso") => {
     setAdaptiveDrawerSection(section);
@@ -639,8 +704,8 @@ export default function NutritionPage({
           />
           <HeroMetricCard
             label="Nutrition score"
-            valueText={nutritionScore ? `${nutritionScore}/100` : "—"}
-            helperText="calidad promedio del día"
+            valueText={dailyNutritionScore.score ? `${dailyNutritionScore.score}/100` : "—"}
+            helperText={`calidad diaria · comidas ${mealQualityScore || 0}/100`}
             state={scoreState}
           />
         </Box>
@@ -666,6 +731,12 @@ export default function NutritionPage({
 
       {activeSection === "estado" && (
         <Box sx={sectionStackSx}>
+          <NutritionInsights
+            nutritionScore={dailyNutritionScore}
+            macroAnalysis={macroAnalysis}
+            proteinAnalysis={proteinAnalysis}
+            vegetableAnalysis={vegetableAnalysis}
+          />
           <Box sx={tabsContainerSx}>
             <Tabs
               value={dailyStatusTab}
@@ -719,6 +790,7 @@ export default function NutritionPage({
                   )}
                 </CardContent>
               </Card>
+              <NutritionAlerts alerts={dailyNutritionAlerts} />
               <NutritionSummary
                 profile={nutritionProfile}
                 meals={meals}

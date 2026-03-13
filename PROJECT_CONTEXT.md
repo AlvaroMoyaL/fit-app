@@ -225,6 +225,20 @@
   - selectores de sección de nutrición en sidebar con estilos dedicados para mejor legibilidad y estado activo,
   - TDEE nutricional ajustado de forma dinámica por actividad del día (`steps` y `activeKcal` de `Stats`),
   - regla de pasos aplicada: solo se consideran pasos del día actual; si no hay registro hoy, pasos considerados = `0`,
+  - Sprint 8 (inteligencia nutricional diaria) incorporado:
+    - utilidades nuevas:
+      - `src/utils/dailyNutritionScore.js`,
+      - `src/utils/macroAnalyzer.js`,
+      - `src/utils/proteinAnalyzer.js`,
+      - `src/utils/vegetableTracker.js`,
+      - `src/utils/nutritionAlerts.js`,
+    - componentes nuevos/extendidos:
+      - `NutritionInsights` muestra score diario, macros, proteína y vegetales,
+      - `NutritionAlerts` soporta alertas explícitas del día por prop `alerts` además del modo adaptativo legacy,
+    - visibilidad actual:
+      - `Insights nutricionales` y `Nutrition Alerts` se muestran en `Nutrición > Estado diario`,
+      - el KPI `Nutrition score` del hero usa el score diario del Sprint 8,
+      - el score previo de calidad promedio de comidas se mantiene como referencia secundaria,
   - sistema de nutrición adaptativa en `src/utils/adaptiveNutrition.js`:
     - análisis de progreso de peso,
     - eficiencia del déficit,
@@ -322,12 +336,7 @@
     - items checkeables por fila, ocultar/mostrar comprados y estado `Todo comprado`,
     - unidades visibles de compra (`unidad`, `paquete`, `lata`, `botella`),
     - recuperación automática: si la lista está vacía, se reconstruye desde el kit guardado.
-  - Nueva vista independiente `NutritionHomePage` (`src/components/nutrition/NutritionHomePage.jsx`):
-    - muestra dashboard nutricional superior + herramientas en tabs (`Registrar comida`, `Qué puedo cocinar`, `Casino / Restaurante`, `Lista de compras`),
-    - usa valores de ejemplo para visualizar `NutritionDashboard` sin alterar la lógica actual de `NutritionPage`.
-  - Integración de navegación para vista nueva:
-    - en `Sidebar > Nutrición` se agregó opción `Inicio`,
-    - `App.jsx` renderiza `NutritionHomePage` cuando `nutritionSection === "home"`, manteniendo `NutritionPage` para el resto de secciones.
+  - `NutritionHomePage` (`src/components/nutrition/NutritionHomePage.jsx`) quedó actualizado con integración del Sprint 8, pero hoy no es la vista principal visible del módulo; la entrada real sigue siendo `NutritionPage` con `Estado diario` como sección por defecto.
       - herramientas laborales reunidas en vista con tabs,
     - `CasinoMealEvaluator` actualizado:
       - entrada por línea/coma,

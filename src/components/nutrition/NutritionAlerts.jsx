@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Card, CardContent, Typography, Alert, Button } from "@mui/material";
+import { Box, Card, CardContent, Typography, Alert, Button, Stack } from "@mui/material";
 import {
   analizarProgresoPeso,
   detectarEstancamientoPeso,
@@ -7,11 +7,39 @@ import {
 } from "../../utils/adaptiveNutrition";
 
 export default function NutritionAlerts({
+  alerts,
   calorieHistory = [],
   weightHistory = [],
   currentTargetCalories,
   onOpenDetail,
 }) {
+  const explicitAlerts = Array.isArray(alerts) ? alerts : null;
+
+  if (explicitAlerts) {
+    return (
+      <Card variant="outlined">
+        <CardContent>
+          <Stack spacing={1.2}>
+            <Typography variant="h6">Nutrition Alerts</Typography>
+            {explicitAlerts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                Buen trabajo, no hay alertas nutricionales hoy.
+              </Typography>
+            ) : (
+              <Stack spacing={0.9}>
+                {explicitAlerts.map((alert, index) => (
+                  <Typography key={`${alert?.type || "alert"}-${index}`} variant="body2">
+                    {`⚠ ${alert?.message || ""}`}
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const progress = analizarProgresoPeso({
     calorieHistory,
     weightHistory,

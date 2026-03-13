@@ -12,6 +12,13 @@ body {
   margin: 0;
 }
 
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body.hc {
   font-size: 17px;
 }
@@ -1631,11 +1638,40 @@ select:focus {
 
 @media (max-width: 640px) {
   .stats-hero {
-    padding: 18px;
+    gap: 12px;
+    padding: 16px 14px;
+    border-radius: 18px;
+  }
+
+  .stats-hero-main {
+    gap: 6px;
+  }
+
+  .stats-hero-main h2 {
+    font-size: 28px;
+  }
+
+  .stats-hero-lead {
+    font-size: 14px;
+    line-height: 1.4;
   }
 
   .stats-hero-kpis {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .stats-hero-kpis > div {
+    padding: 11px 12px;
+    border-radius: 14px;
+  }
+
+  .stats-hero-kpis span {
+    font-size: 10px;
+  }
+
+  .stats-hero-kpis strong {
+    font-size: 19px;
   }
 }
 
@@ -2679,6 +2715,116 @@ select:focus {
 
   .plan-mobile-controls {
     display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin: 10px 0 14px;
+    padding: 12px 12px;
+    border-radius: 14px;
+  }
+
+  .plan-day-select {
+    flex: 1 1 auto;
+  }
+
+  .plan-day-select select {
+    min-width: 0;
+  }
+
+  .plan-head {
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 16px 14px;
+    border-radius: 18px;
+  }
+
+  .plan-head-main {
+    gap: 6px;
+  }
+
+  .plan-title {
+    font-size: 28px;
+  }
+
+  .plan-subtitle {
+    font-size: 15px;
+  }
+
+  .plan-version {
+    font-size: 11px;
+  }
+
+  .plan-head-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .plan-head-meta span {
+    min-width: 0;
+    padding: 10px 11px;
+    border-radius: 14px;
+  }
+
+  .plan-head-meta strong {
+    font-size: 18px;
+  }
+
+  .plan-head-meta em {
+    font-size: 10px;
+  }
+
+  .plan-xp-summary {
+    min-width: 0;
+    width: 100%;
+    padding: 14px 14px;
+    border-radius: 16px;
+  }
+
+  .plan-xp-summary strong {
+    font-size: 21px;
+  }
+
+  .day-card {
+    padding: 14px 12px;
+    border-radius: 18px;
+    gap: 12px;
+  }
+
+  .day-head {
+    gap: 10px;
+  }
+
+  .day-title strong {
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  .day-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .day-summary-card {
+    padding: 10px 11px;
+  }
+
+  .day-summary-card strong {
+    font-size: 18px;
+  }
+
+  .check {
+    width: 100%;
+    white-space: normal;
+    align-items: flex-start;
+  }
+
+  .equipment-selected {
+    gap: 8px;
+  }
+
+  .ex-section-head {
+    gap: 8px;
+    flex-wrap: wrap;
   }
 }
 
@@ -3370,7 +3516,7 @@ select:focus {
 
 @media (max-width: 900px) {
   .page {
-    padding-bottom: 84px;
+    padding-bottom: 112px;
   }
 
   .mobile-nav {
@@ -3379,9 +3525,9 @@ select:focus {
     right: 0;
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-    padding: 10px 12px 14px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+    padding: 10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background: rgba(255, 255, 255, 0.84);
     backdrop-filter: blur(18px);
     border-top: 1px solid var(--fit-strong-border, #d9d1c8);
@@ -3392,22 +3538,22 @@ select:focus {
   .mobile-nav button {
     border: 1px solid var(--fit-soft-border, #d9d1c8);
     background: rgba(255, 255, 255, 0.56);
-    padding: 9px 6px;
-    border-radius: 14px;
-    font-size: 11px;
+    padding: 8px 4px;
+    border-radius: 13px;
+    font-size: 10px;
     font-weight: 700;
-    line-height: 1;
+    line-height: 1.1;
     color: #3f352f;
     width: 100%;
-    min-height: 44px;
+    min-height: 46px;
     text-align: center;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: initial;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 3px;
     transition:
       transform 140ms ease,
       background-color 160ms ease,
@@ -3421,7 +3567,7 @@ select:focus {
 
   .mobile-nav .menu-btn::before {
     content: "☰";
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .mobile-nav button.active {
@@ -3437,6 +3583,20 @@ select:focus {
 
   .sidebar {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .mobile-nav {
+    gap: 5px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .mobile-nav button {
+    font-size: 9px;
+    min-height: 44px;
+    padding: 7px 3px;
   }
 }
 

@@ -1,4 +1,4 @@
-import { Card, CardContent, Typography, Stack, Grid } from "@mui/material";
+import { Card, CardContent, Typography, Stack, Grid, Box } from "@mui/material";
 
 function toNumber(value) {
   const n = Number(value);
@@ -7,12 +7,20 @@ function toNumber(value) {
 
 function InsightSection({ title, children }) {
   return (
-    <Card variant="outlined">
-      <CardContent sx={{ display: "grid", gap: 1 }}>
+    <Box
+      sx={{
+        display: "grid",
+        gap: 1,
+        p: 1.5,
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 3,
+        bgcolor: "rgba(255,255,255,0.62)",
+      }}
+    >
         <Typography variant="subtitle2">{title}</Typography>
         {children}
-      </CardContent>
-    </Card>
+    </Box>
   );
 }
 
@@ -44,29 +52,29 @@ export default function NutritionInsights({
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <InsightSection title="Macro Balance">
+            <InsightSection title="Balance de macros">
               <Stack spacing={0.6}>
-                <Typography variant="body2">{`Protein: ${proteinPercent} %`}</Typography>
-                <Typography variant="body2">{`Carbs: ${carbPercent} %`}</Typography>
-                <Typography variant="body2">{`Fat: ${fatPercent} %`}</Typography>
+                <Typography variant="body2">{`Proteínas: ${proteinPercent} %`}</Typography>
+                <Typography variant="body2">{`Carbohidratos: ${carbPercent} %`}</Typography>
+                <Typography variant="body2">{`Grasas: ${fatPercent} %`}</Typography>
               </Stack>
             </InsightSection>
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <InsightSection title="Protein Intake">
+            <InsightSection title="Proteína">
               <Stack spacing={0.6}>
-                <Typography variant="body2">{`Protein consumed: ${proteinConsumed} g`}</Typography>
-                <Typography variant="body2">{`Target: ${proteinTarget} g`}</Typography>
-                <Typography variant="body2">{`Missing: ${missingProtein} g`}</Typography>
+                <Typography variant="body2">{`Consumidas: ${proteinConsumed} g`}</Typography>
+                <Typography variant="body2">{`Objetivo: ${proteinTarget} g`}</Typography>
+                <Typography variant="body2">{`Faltan: ${missingProtein} g`}</Typography>
               </Stack>
             </InsightSection>
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <InsightSection title="Vegetables">
+            <InsightSection title="Vegetales">
               <Stack spacing={0.6}>
-                <Typography variant="body2">Vegetable servings today:</Typography>
+                <Typography variant="body2">Porciones hoy:</Typography>
                 <Typography variant="body2">{vegetableServings}</Typography>
               </Stack>
             </InsightSection>

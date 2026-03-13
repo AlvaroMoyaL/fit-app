@@ -187,32 +187,32 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
   return (
     <Box
       sx={{
-        p: 1.5,
-        borderRadius: 3,
+        p: { xs: 1.2, sm: 1.5 },
+        borderRadius: { xs: 2.4, sm: 3 },
         bgcolor: state.background,
         border: `1px solid ${state.border}`,
         display: "grid",
-        gap: 0.7,
+        gap: { xs: 0.55, sm: 0.7 },
       }}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}
+          sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, fontSize: { xs: "0.64rem", sm: "0.72rem" } }}
         >
           {label}
         </Typography>
-        <Typography variant="caption" sx={{ color: state.accent, fontWeight: 800 }}>
+        <Typography variant="caption" sx={{ color: state.accent, fontWeight: 800, fontSize: { xs: "0.64rem", sm: "0.72rem" } }}>
           {state.label}
         </Typography>
       </Box>
-      <Typography variant="h6" sx={{ lineHeight: 1 }}>
+      <Typography variant="h6" sx={{ lineHeight: 1, fontSize: { xs: "1.05rem", sm: "1.25rem" } }}>
         {valueText}
       </Typography>
       <Box
         sx={{
-          height: 7,
+          height: { xs: 6, sm: 7 },
           borderRadius: 999,
           bgcolor: "rgba(15,23,42,0.08)",
           overflow: "hidden",
@@ -228,7 +228,7 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
           }}
         />
       </Box>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: "0.66rem", sm: "0.72rem" } }}>
         {helperText}
       </Typography>
     </Box>
@@ -330,7 +330,7 @@ export default function NutritionPage({
   const sectionHeaderSx = {
     display: "grid",
     gap: 1.4,
-    p: { xs: 1.9, md: 2.3 },
+    p: { xs: 1.5, sm: 1.9, md: 2.3 },
     border: "1px solid",
     borderColor: "divider",
     borderRadius: 4,
@@ -527,6 +527,24 @@ export default function NutritionPage({
     () => calculateMacroTargets(nutritionProfile, tdee),
     [nutritionProfile, tdee]
   );
+  const microTargets = useMemo(
+    () => ({
+      fiber: 28,
+      sodium: 2300,
+      cholesterol: 300,
+    }),
+    []
+  );
+  const sugarReference = useMemo(() => {
+    const dailyCalories = Math.max(0, Number(tdee || 0));
+    if (!dailyCalories) return 0;
+    return (dailyCalories * 0.15) / 4;
+  }, [tdee]);
+  const saturatedFatReference = useMemo(() => {
+    const dailyCalories = Math.max(0, Number(tdee || 0));
+    if (!dailyCalories) return 0;
+    return (dailyCalories * 0.1) / 9;
+  }, [tdee]);
   const mealQualityScore = useMemo(() => {
     if (!Array.isArray(mealsToday) || mealsToday.length === 0) return 0;
     const scores = mealsToday
@@ -618,6 +636,39 @@ export default function NutritionPage({
     () => getHeroMetricState(totalsToday.fat, macroTargets.fat, { overWarnRatio: 1.15 }),
     [macroTargets.fat, totalsToday.fat]
   );
+  const mealsState = useMemo(
+    () => getHeroMetricState(totalsToday.mealsCount, 4, { lowWarnRatio: 0.5, overWarnRatio: 1.5 }),
+    [totalsToday.mealsCount]
+  );
+  const fiberState = useMemo(
+    () => getHeroMetricState(totalsToday.fiber, microTargets.fiber, { lowWarnRatio: 0.5, overWarnRatio: 1.35 }),
+    [microTargets.fiber, totalsToday.fiber]
+  );
+  const sodiumState = useMemo(
+    () => getHeroMetricState(totalsToday.sodium, microTargets.sodium, { lowWarnRatio: 0.35, overWarnRatio: 1 }),
+    [microTargets.sodium, totalsToday.sodium]
+  );
+  const sugarsState = useMemo(
+    () => getHeroMetricState(totalsToday.sugars, sugarReference, { lowWarnRatio: 0.35, overWarnRatio: 1.35 }),
+    [sugarReference, totalsToday.sugars]
+  );
+  const saturatedFatState = useMemo(
+    () => getHeroMetricState(totalsToday.saturatedFat, saturatedFatReference, { lowWarnRatio: 0.25, overWarnRatio: 1 }),
+    [saturatedFatReference, totalsToday.saturatedFat]
+  );
+  const cholesterolState = useMemo(
+    () => ({
+      progress: microTargets.cholesterol > 0
+        ? Math.max(0, Math.min(1, Number(totalsToday.cholesterol || 0) / microTargets.cholesterol))
+        : 0,
+      tone: "info",
+      accent: "rgba(71, 85, 105, 0.78)",
+      background: "rgba(248, 250, 252, 0.92)",
+      border: "rgba(148, 163, 184, 0.24)",
+      label: "Informativo",
+    }),
+    [microTargets.cholesterol, totalsToday.cholesterol]
+  );
   const scoreState = useMemo(
     () => getHeroMetricState(dailyNutritionScore.score, 100, { lowWarnRatio: 0.55, overWarnRatio: 1 }),
     [dailyNutritionScore.score]
@@ -632,14 +683,18 @@ export default function NutritionPage({
       <Box sx={sectionHeaderSx}>
         <Typography
           variant="overline"
-          sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.14em" }}
+          sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.14em", fontSize: { xs: "0.62rem", sm: "0.72rem" } }}
         >
           Estado diario y planificación
         </Typography>
-        <Typography variant="h4" sx={{ lineHeight: 1 }}>
+        <Typography variant="h4" sx={{ lineHeight: 1, fontSize: { xs: "1.9rem", sm: "2.125rem" } }}>
           Nutrición
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720, lineHeight: 1.5 }}>
+        <Typography
+          variant="body1"
+          color="text.secondary"
+          sx={{ maxWidth: 720, lineHeight: 1.5, fontSize: { xs: "0.95rem", sm: "1rem" }, display: { xs: "none", sm: "block" } }}
+        >
           Estado diario, registro, planificación y herramientas prácticas en un solo flujo.
         </Typography>
         <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
@@ -655,6 +710,7 @@ export default function NutritionPage({
                 : "warning"
             }
             variant="outlined"
+            sx={{ display: { xs: "none", sm: "inline-flex" } }}
           />
           <Chip
             size="small"
@@ -665,13 +721,15 @@ export default function NutritionPage({
             size="small"
             label={`Objetivo prot. ${Math.round(macroTargets.protein || 0)} g`}
             variant="outlined"
+            sx={{ display: { xs: "none", sm: "inline-flex" } }}
           />
         </Box>
         <Box
           sx={{
             display: "grid",
             gridTemplateColumns: {
-              xs: "repeat(2, minmax(0, 1fr))",
+              xs: "1fr",
+              sm: "repeat(2, minmax(0, 1fr))",
               md: "repeat(3, minmax(0, 1fr))",
               xl: "repeat(5, minmax(0, 1fr))",
             },
@@ -708,6 +766,51 @@ export default function NutritionPage({
             helperText={`calidad diaria · comidas ${mealQualityScore || 0}/100`}
             state={scoreState}
           />
+        </Box>
+        <Box
+          component="details"
+          sx={{
+            display: { xs: "grid", lg: "none" },
+            mt: 0.2,
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 3,
+            bgcolor: "rgba(255,255,255,0.62)",
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            component="summary"
+            sx={{
+              listStyle: "none",
+              cursor: "pointer",
+              p: 1.2,
+              display: "grid",
+              gap: 0.35,
+              "&::-webkit-details-marker": { display: "none" },
+            }}
+          >
+            <Typography variant="subtitle2">KPIs de apoyo</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Comidas, fibra, sodio, azúcares, grasa saturada y colesterol.
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              p: 1.2,
+              pt: 0,
+              display: "grid",
+              gap: 1,
+              gridTemplateColumns: "1fr",
+            }}
+          >
+            <HeroMetricCard label="Comidas" valueText={`${Math.round(totalsToday.mealsCount || 0)}`} helperText="bloques lógicos del día" state={mealsState} />
+            <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} helperText={`objetivo: ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} />
+            <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} helperText={`límite: ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} />
+            <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} helperText={`referencia flexible: ${Math.round(sugarReference || 0)} g`} state={sugarsState} />
+            <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} helperText={`límite aprox.: ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} />
+            <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg`} state={cholesterolState} />
+          </Box>
         </Box>
       </Box>
       <NutritionSectionNav activeSection={activeSection} onChangeSection={onChangeActiveSection} />

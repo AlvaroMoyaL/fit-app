@@ -282,6 +282,13 @@
   - KPIs de nutrición actualizados:
     - hero principal: `Calorías`, `Proteínas`, `Carbohidratos`, `Grasas`, `Nutrition score` y chips de contexto diario (`TDEE`, `Balance`, `Peso`, `Objetivo prot.`),
     - panel lateral: `Comidas`, `Fibra`, `Sodio`, `Azúcares totales`, `Grasa saturada`, `Colesterol`.
+  - Pasada mobile-first reciente:
+    - revisión y ajuste visual exclusivamente para teléfono en `Nutrición`, `Plan` y `Stats`,
+    - `mobile-nav` corregida para 6 acciones reales sin forzar zoom out,
+    - `Comidas de hoy` en `NutritionLog` usa tarjetas en móvil en vez de tabla ancha,
+    - `NutritionSectionNav` se compacta en móvil con labels cortos,
+    - hero de `Nutrición` se compacta en `xs` y recupera KPIs secundarios en un bloque plegable `KPIs de apoyo`,
+    - `Plan` y `Stats` reducen densidad vertical en móvil (heroes, KPIs y cards más compactos).
   - Peso efectivo en nutrición y métricas:
     - el peso actual usado por KPI/cálculos ya no depende solo del perfil base; toma el último `weight` válido desde `metricsLog` cuando existe.
   - Catálogo nutricional enriquecido:

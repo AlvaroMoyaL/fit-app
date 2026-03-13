@@ -1,10 +1,10 @@
 import { Box, Button, Typography } from "@mui/material";
 
 const SECTION_ITEMS = [
-  { key: "registro", label: "Registro" },
-  { key: "estado", label: "Estado diario" },
-  { key: "plan", label: "Planificación" },
-  { key: "work", label: "Nutrición en el trabajo" },
+  { key: "registro", label: "Registro", shortLabel: "Registro" },
+  { key: "estado", label: "Estado diario", shortLabel: "Estado" },
+  { key: "plan", label: "Planificación", shortLabel: "Plan" },
+  { key: "work", label: "Nutrición en el trabajo", shortLabel: "Trabajo" },
 ];
 
 export default function NutritionSectionNav({
@@ -41,7 +41,7 @@ export default function NutritionSectionNav({
         >
           Navegación nutricional
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
           Cambia de sección sin volver al panel lateral.
         </Typography>
       </Box>
@@ -49,7 +49,8 @@ export default function NutritionSectionNav({
         sx={{
           display: "grid",
           gridTemplateColumns: {
-            xs: "repeat(2, minmax(0, 1fr))",
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
             md: "repeat(4, minmax(0, 1fr))",
           },
           gap: 1,
@@ -74,6 +75,7 @@ export default function NutritionSectionNav({
                 textTransform: "none",
                 fontWeight: 700,
                 lineHeight: 1.2,
+                fontSize: { xs: "0.92rem", sm: "0.95rem" },
                 border: isActive ? "1px solid transparent" : "1px solid rgba(15,23,42,0.08)",
                 bgcolor: isActive ? "primary.main" : "rgba(255,255,255,0.72)",
                 color: isActive ? "primary.contrastText" : "text.primary",
@@ -86,12 +88,17 @@ export default function NutritionSectionNav({
                 },
               }}
             >
-              {item.label}
+              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                {item.label}
+              </Box>
+              <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
+                {item.shortLabel}
+              </Box>
             </Button>
           );
         })}
       </Box>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
         {note}
       </Typography>
     </Box>

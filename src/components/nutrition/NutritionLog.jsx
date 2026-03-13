@@ -1500,7 +1500,93 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                 <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.6 }}>
                   {block.label}
                 </Typography>
-                <Box sx={{ overflowX: "auto" }}>
+                <Box sx={{ display: { xs: "grid", sm: "none" }, gap: 1 }}>
+                  {block.items.map((meal) => {
+                    const contribution = getMealContributionValues(meal);
+                    const isEditing = String(editingMealId) === String(meal.id);
+                    return (
+                      <Box
+                        key={`${meal.id}-mobile`}
+                        sx={{
+                          p: 1.2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          borderRadius: 2,
+                          bgcolor: "rgba(255,255,255,0.72)",
+                          display: "grid",
+                          gap: 1,
+                        }}
+                      >
+                        <Box sx={{ display: "grid", gap: 0.35 }}>
+                          <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.25 }}>
+                            {meal.name}
+                            {meal?.brand ? ` · ${meal.brand}` : ""}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {meal?.mealType === "bebida" && meal?.beverageType
+                              ? beverageTypeLabel(meal.beverageType)
+                              : mealTypeLabel(meal?.mealType)}
+                            {meal?.quantity && meal?.unit ? ` · ${meal.quantity} ${meal.unit}` : ""}
+                          </Typography>
+                        </Box>
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 0.8,
+                          }}
+                        >
+                          <Chip size="small" label={`${contribution.calories} kcal`} />
+                          <Chip size="small" label={`${contribution.protein} g prot.`} />
+                          <Chip size="small" label={`${contribution.carbs} g carb.`} />
+                          <Chip size="small" label={`${contribution.fat} g grasa`} />
+                        </Box>
+                        {isEditing ? (
+                          <Stack spacing={0.8}>
+                            <TextField
+                              type="number"
+                              label={meal?.unit === "ml" ? "ml" : "Cantidad"}
+                              size="small"
+                              value={editingQuantity}
+                              onChange={(event) => setEditingQuantity(event.target.value)}
+                              inputProps={{
+                                min: meal?.unit === "ml" ? 10 : 0.1,
+                                step: meal?.unit === "ml" ? 10 : 0.1,
+                              }}
+                            />
+                            <Stack direction="row" spacing={0.7} flexWrap="wrap">
+                              <Button type="button" size="small" variant="contained" onClick={() => onSaveMealEdit(meal)}>
+                                Guardar
+                              </Button>
+                              <Button type="button" size="small" variant="text" onClick={cancelEditMeal}>
+                                Cancelar
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Stack direction="row" spacing={0.6} flexWrap="wrap">
+                            <Button type="button" size="small" variant="text" onClick={() => setDetailMeal(meal)}>
+                              Detalle
+                            </Button>
+                            <Button type="button" size="small" variant="text" onClick={() => startEditMeal(meal)}>
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="small"
+                              color="error"
+                              variant="text"
+                              onClick={() => onDeleteMeal(meal.id)}
+                            >
+                              Eliminar
+                            </Button>
+                          </Stack>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                <Box sx={{ overflowX: "auto", display: { xs: "none", sm: "block" } }}>
                   <Table size="small" sx={{ minWidth: 760, tableLayout: "fixed" }}>
                     <colgroup>
                       <col style={{ width: "34%" }} />

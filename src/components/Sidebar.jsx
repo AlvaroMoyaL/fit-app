@@ -245,6 +245,23 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-brand-mark">FA</div>
+        <div className="sidebar-brand-copy">
+          <span>Fit App</span>
+          <strong>
+            {activeTab === "nutrition"
+              ? "Fuel and planning"
+              : activeTab === "stats"
+              ? "Performance lab"
+              : activeTab === "history"
+              ? "Training archive"
+              : activeTab === "plan"
+              ? "Weekly control room"
+              : "Profile and setup"}
+          </strong>
+        </div>
+      </div>
       <div className="sidebar-section">
         <div className="sidebar-tabs">
           <button
@@ -291,7 +308,12 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-section">
-        <h3>{activeTab === "nutrition" ? "Estado nutricional" : "Estado actual"}</h3>
+        <div className="sidebar-section-head">
+          <h3>{activeTab === "nutrition" ? "Estado nutricional" : "Estado actual"}</h3>
+          <span className="sidebar-section-kicker">
+            {activeTab === "nutrition" ? "Hoy" : "Resumen"}
+          </span>
+        </div>
         {activeTab === "nutrition" ? (
           <>
             <div className="sidebar-progress">
@@ -382,7 +404,10 @@ export default function Sidebar({
       {activeTab === "profile" && (
         <>
           <div className="sidebar-section">
-            <h3>Tu perfil</h3>
+            <div className="sidebar-section-head">
+              <h3>Tu perfil</h3>
+              <span className="sidebar-section-kicker">Base</span>
+            </div>
             <div className="sidebar-kv">
               <div>
                 <span>Nombre</span>
@@ -404,7 +429,10 @@ export default function Sidebar({
           </div>
 
           <div className="sidebar-section">
-            <h3>Últimas métricas</h3>
+            <div className="sidebar-section-head">
+              <h3>Últimas métricas</h3>
+              <span className="sidebar-section-kicker">Reciente</span>
+            </div>
             {metricsLog && metricsLog.length > 0 ? (
               <div className="sidebar-metrics">
                 <div>
@@ -438,7 +466,10 @@ export default function Sidebar({
           </div>
 
           <div className="sidebar-section">
-            <h3>Progreso</h3>
+            <div className="sidebar-section-head">
+              <h3>Progreso</h3>
+              <span className="sidebar-section-kicker">Plan</span>
+            </div>
             <div className="sidebar-kv">
               <div>
                 <span>Ejercicios</span>
@@ -457,7 +488,10 @@ export default function Sidebar({
 
       {activeTab === "plan" && (
         <div className="sidebar-section">
-          <h3>Plan</h3>
+          <div className="sidebar-section-head">
+            <h3>Plan</h3>
+            <span className="sidebar-section-kicker">Acciones</span>
+          </div>
           <div className="sidebar-actions">
             <button type="button" className="tiny" onClick={onAddExtraDay}>
               Entreno adicional
@@ -484,15 +518,22 @@ export default function Sidebar({
                     } ${dayDone ? "done" : ""}`}
                     onClick={() => onGoToPlanDay && onGoToPlanDay(index)}
                   >
-                    <strong>{d.title}</strong>
-                    <span>{getPlanDateLabel(index)}</span>
+                    <span className="sidebar-day-kicker">
+                      {lang === "en" ? `Day ${index + 1}` : `Día ${index + 1}`}
+                    </span>
+                    <div className="sidebar-day-topline">
+                      <strong>{d.title}</strong>
+                      <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
+                        {getPlanDayTypeLabel(index)}
+                      </span>
+                    </div>
+                    <div className="sidebar-day-meta-row">
+                      <span>{getPlanDateLabel(index)}</span>
+                      <span>{d.exercises.length} ejercicios</span>
+                    </div>
                     <span className="sidebar-day-focus">
                       {buildDayFocusLabel(d, lang, d.focus || "")}
                     </span>
-                    <span className={`sidebar-day-type ${getPlanDayType(index)}`}>
-                      {getPlanDayTypeLabel(index)}
-                    </span>
-                    <span>{d.exercises.length} ejercicios</span>
                     {dayDone && <span className="sidebar-day-done">Completado ✓</span>}
                   </button>
                 </li>
@@ -504,7 +545,10 @@ export default function Sidebar({
 
       {activeTab === "stats" && (
         <div className="sidebar-section">
-          <h3>Estadísticas</h3>
+          <div className="sidebar-section-head">
+            <h3>Estadísticas</h3>
+            <span className="sidebar-section-kicker">Salud</span>
+          </div>
           <div className="sidebar-metric-cards">
             <div className={`sidebar-metric-card ${healthClass(bmiStatus)}`}>
               <span>IMC</span>
@@ -529,56 +573,6 @@ export default function Sidebar({
           </div>
           <p className="note">
             Verde: bien, ámbar: revisar, rojo: prioridad de mejora.
-          </p>
-        </div>
-      )}
-
-      {activeTab === "nutrition" && (
-        <div className="sidebar-section">
-          <h3>Nutrición</h3>
-          <div className="sidebar-nutrition-nav">
-            <button
-              type="button"
-              className={`sidebar-nutrition-btn ${nutritionSection === "home" ? "active" : ""}`}
-              onClick={() => onChangeNutritionSection && onChangeNutritionSection("home")}
-            >
-              Inicio
-            </button>
-            <button
-              type="button"
-              className={`sidebar-nutrition-btn ${
-                nutritionSection === "registro" ? "active" : ""
-              }`}
-              onClick={() => onChangeNutritionSection && onChangeNutritionSection("registro")}
-            >
-              Registro
-            </button>
-            <button
-              type="button"
-              className={`sidebar-nutrition-btn ${
-                nutritionSection === "estado" ? "active" : ""
-              }`}
-              onClick={() => onChangeNutritionSection && onChangeNutritionSection("estado")}
-            >
-              Estado diario
-            </button>
-            <button
-              type="button"
-              className={`sidebar-nutrition-btn ${nutritionSection === "plan" ? "active" : ""}`}
-              onClick={() => onChangeNutritionSection && onChangeNutritionSection("plan")}
-            >
-              Planificación
-            </button>
-            <button
-              type="button"
-              className={`sidebar-nutrition-btn ${nutritionSection === "work" ? "active" : ""}`}
-              onClick={() => onChangeNutritionSection && onChangeNutritionSection("work")}
-            >
-              Nutrición en el trabajo
-            </button>
-          </div>
-          <p className="note">
-            Orden sugerido: 1) Registro rápido, 2) Revisar balance, 3) Ver plan semanal y compras.
           </p>
         </div>
       )}

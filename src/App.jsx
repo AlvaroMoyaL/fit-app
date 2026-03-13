@@ -1,5 +1,5 @@
 import "./index.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import {
   actividad,
   buildExercises,
@@ -11,19 +11,10 @@ import {
   PLAN_TEMPLATES,
 } from "./utils/plan";
 import ProfileForm from "./components/ProfileForm";
-import MetricsInfoModal from "./components/MetricsInfoModal";
 import Plan from "./components/Plan";
-import ExerciseDrawer from "./components/ExerciseDrawer";
 import Sidebar from "./components/Sidebar";
-import HistoryWeek from "./components/HistoryWeek";
 import SessionRunner from "./components/SessionRunner";
-import MuscleSummary from "./components/MuscleSummary";
-import WeeklyCharts from "./components/WeeklyCharts";
 import MetricsLogForm from "./components/MetricsLogForm";
-import MetricsCharts from "./components/MetricsCharts";
-import StatsMetricDrawer from "./components/StatsMetricDrawer";
-import NutritionPage from "./components/nutrition/NutritionPage";
-import NutritionHomePage from "./components/nutrition/NutritionHomePage";
 import { getLevelProgress } from "./utils/levelProgress";
 import {
   countExercises,
@@ -39,6 +30,17 @@ import {
 import { supabase } from "./utils/supabaseClient";
 import { applyCloudPayload, downloadCloud, uploadCloud } from "./utils/cloudSync";
 
+const MetricsInfoModal = lazy(() => import("./components/MetricsInfoModal"));
+const ExerciseDrawer = lazy(() => import("./components/ExerciseDrawer"));
+const MuiThemeBoundary = lazy(() => import("./components/MuiThemeBoundary"));
+const HistoryWeek = lazy(() => import("./components/HistoryWeek"));
+const MuscleSummary = lazy(() => import("./components/MuscleSummary"));
+const WeeklyCharts = lazy(() => import("./components/WeeklyCharts"));
+const MetricsCharts = lazy(() => import("./components/MetricsCharts"));
+const StatsMetricDrawer = lazy(() => import("./components/StatsMetricDrawer"));
+const NutritionPage = lazy(() => import("./components/nutrition/NutritionPage"));
+const NutritionSidePanel = lazy(() => import("./components/nutrition/NutritionSidePanel"));
+
 const PROFILE_LIST_KEY = "fit_profiles";
 const ACTIVE_PROFILE_KEY = "fit_active_profile";
 const DB_COMPLETE_KEY = "exercises_complete";
@@ -48,6 +50,10 @@ const AUTO_BACKUP_KEY = "fit_backup_auto";
 const AUTO_BACKUP_PREV_KEY = "fit_backup_auto_prev";
 const SYNC_RELOAD_GUARD_KEY = "fit_sync_reload_guard";
 const LAST_SYNC_RESTORE_KEY = "fit_last_sync_restore_summary";
+
+function LazyBlockFallback({ message = "Cargando..." }) {
+  return <p className="note">{message}</p>;
+}
 
 function toNum(v) {
   const n = Number(v);
@@ -676,7 +682,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   const [newProfileName, setNewProfileName] = useState("");
   const [renameProfileName, setRenameProfileName] = useState("");
   const [sidebarTab, setSidebarTab] = useState("profile");
-  const [nutritionSection, setNutritionSection] = useState("registro");
+  const [nutritionSection, setNutritionSection] = useState("estado");
   const [lang, setLang] = useState("es");
   const [sessionDayIndex, setSessionDayIndex] = useState(null);
   const [sessionExIndex, setSessionExIndex] = useState(0);
@@ -766,7 +772,6 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "") || "";
   const supabaseGifBucket = import.meta.env.VITE_SUPABASE_GIF_BUCKET || "gifs";
 
-  const metrics = useMemo(() => calculateMetrics(form), [form]);
   const activeProfileName = useMemo(() => {
     return profiles.find((p) => p.id === activeProfileId)?.name || form.nombre || "";
   }, [profiles, activeProfileId, form.nombre]);
@@ -788,6 +793,23 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     }
     return undefined;
   };
+  const effectiveProfile = useMemo(() => {
+    const latestWeight = getLatestMetricValue("weight");
+    const latestWaist = getLatestMetricValue("waist");
+    const latestHip = getLatestMetricValue("hip");
+    const latestNeck = getLatestMetricValue("neck");
+    const latestBodyFat = getLatestMetricValue("bodyFat");
+
+    return {
+      ...form,
+      ...(latestWeight ? { peso: latestWeight, weight: latestWeight } : {}),
+      ...(latestWaist ? { cintura: latestWaist, waist: latestWaist } : {}),
+      ...(latestHip ? { cadera: latestHip, hip: latestHip } : {}),
+      ...(latestNeck ? { cuello: latestNeck, neck: latestNeck } : {}),
+      ...(latestBodyFat ? { bodyFat: latestBodyFat } : {}),
+    };
+  }, [form, metricsLog]);
+  const metrics = useMemo(() => calculateMetrics(effectiveProfile), [effectiveProfile]);
   const trendSymbol = (key) => {
     const a = Number(getLatestMetricValue(key, 0, key === "loadRatio") || 0);
     const b = Number(getLatestMetricValue(key, 1, key === "loadRatio") || 0);
@@ -3360,9 +3382,10 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   };
   const backupLastLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_KEY));
   const backupPrevLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_PREV_KEY));
+  const showNutritionSidePanel = sidebarTab === "nutrition" && isDesktop;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${showNutritionSidePanel ? "nutrition-layout" : ""}`}>
       <Sidebar
         profiles={profiles}
         activeProfileId={activeProfileId}
@@ -3378,7 +3401,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
         onChangeTab={setSidebarTab}
         nutritionSection={nutritionSection}
         onChangeNutritionSection={setNutritionSection}
-        profile={form}
+        profile={effectiveProfile}
         metrics={metrics}
         level={level}
         earnedXp={earnedXpTotal}
@@ -3433,7 +3456,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
         onToggleTheme={onToggleTheme}
       />
 
-      <div className="page">
+      <div className={`page ${showNutritionSidePanel ? "nutrition-page" : ""}`}>
         <div className="card">
           {reminderPrompt && (
             <div className="reminder-banner">
@@ -3574,45 +3597,76 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           )}
 
           {sidebarTab === "history" && (
-            <>
-              {renderCollapsible(
-                "Resumen muscular",
-                <MuscleSummary history={history} lang={lang} />,
-                false
-              )}
-              {renderCollapsible(
-                "Resumen semanal",
-                <WeeklyCharts
-                  history={history}
-                  lang={lang}
-                  goals={form}
-                  onGoToPlanDay={(dayIndex) => {
-                    setSidebarTab("plan");
-                    setSelectedPlanDayIndex(dayIndex);
-                  }}
-                />,
-                false
-              )}
-              {renderCollapsible(
-                "Historial de entrenamientos",
-                <HistoryWeek
-                  history={history}
-                  lang={lang}
-                  plan={plan}
-                  onRegisterPastExercise={onRegisterPastExercise}
-                  onPreviewExercise={onSelectExercise}
-                />,
-                false
-              )}
-            </>
+            <Suspense fallback={<LazyBlockFallback message="Cargando historial..." />}>
+              <>
+                {renderCollapsible(
+                  "Resumen muscular",
+                  <MuscleSummary history={history} lang={lang} />,
+                  false
+                )}
+                {renderCollapsible(
+                  "Resumen semanal",
+                  <WeeklyCharts
+                    history={history}
+                    lang={lang}
+                    goals={form}
+                    onGoToPlanDay={(dayIndex) => {
+                      setSidebarTab("plan");
+                      setSelectedPlanDayIndex(dayIndex);
+                    }}
+                  />,
+                  false
+                )}
+                {renderCollapsible(
+                  "Historial de entrenamientos",
+                  <HistoryWeek
+                    history={history}
+                    lang={lang}
+                    plan={plan}
+                    onRegisterPastExercise={onRegisterPastExercise}
+                    onPreviewExercise={onSelectExercise}
+                  />,
+                  false
+                )}
+              </>
+            </Suspense>
           )}
 
           {sidebarTab === "stats" && (
             <>
-              <h2>Vista Stats</h2>
-              <p className="note">
-                Panel orientado a métricas de salud, tendencias y carga de datos Garmin.
-              </p>
+              <div className="stats-hero">
+                <div className="stats-hero-main">
+                  <p className="section-eyebrow">Rendimiento y salud</p>
+                  <h2>Vista Stats</h2>
+                  <p className="stats-hero-lead">
+                    Panel orientado a métricas de salud, tendencias y carga de datos Garmin.
+                  </p>
+                </div>
+                <div className="stats-hero-kpis">
+                  <div>
+                    <span>Peso</span>
+                    <strong>
+                      {lastMetric?.weight ? `${lastMetric.weight} kg` : "—"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>FC reposo</span>
+                    <strong>
+                      {getLatestMetricValue("restHr")
+                        ? `${getLatestMetricValue("restHr")} bpm`
+                        : "—"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Pasos</span>
+                    <strong>{getLatestMetricValue("steps") || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Readiness</span>
+                    <strong>{getLatestMetricValue("readiness") || "—"}</strong>
+                  </div>
+                </div>
+              </div>
               <div className="sidebar-actions" style={{ marginBottom: 10 }}>
                 <button
                   type="button"
@@ -3921,7 +3975,9 @@ export default function App({ themeMode = "light", onToggleTheme }) {
               )}
               {renderCollapsible(
                 "Tendencia de métricas",
-                <MetricsCharts metricsLog={metricsLog} lang={lang} />,
+                <Suspense fallback={<LazyBlockFallback message="Cargando tendencias..." />}>
+                  <MetricsCharts metricsLog={metricsLog} lang={lang} />
+                </Suspense>,
                 false
               )}
               {renderCollapsible(
@@ -3940,57 +3996,81 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           )}
 
           {sidebarTab === "nutrition" && (
-            nutritionSection === "home" ? (
-              <NutritionHomePage />
-            ) : (
-              <NutritionPage
-                profileId={activeProfileId}
-                profile={form}
-                metricsLog={metricsLog}
-                activeSection={nutritionSection}
-                onNutritionDataChange={touchLocalChange}
-              />
-            )
+            <Suspense fallback={<LazyBlockFallback message="Cargando nutrición..." />}>
+              <MuiThemeBoundary mode={themeMode}>
+                <div className="nutrition-main-shell">
+                  <NutritionPage
+                    profileId={activeProfileId}
+                    profile={effectiveProfile}
+                    metricsLog={metricsLog}
+                    activeSection={nutritionSection}
+                    onChangeActiveSection={setNutritionSection}
+                    onNutritionDataChange={touchLocalChange}
+                  />
+                </div>
+              </MuiThemeBoundary>
+            </Suspense>
           )}
         </div>
+      </div>
 
+      {showNutritionSidePanel ? (
+        <div className="nutrition-side-rail">
+          <Suspense fallback={null}>
+            <MuiThemeBoundary mode={themeMode}>
+              <NutritionSidePanel
+                profileId={activeProfileId}
+                profile={effectiveProfile}
+                metricsLog={metricsLog}
+              />
+            </MuiThemeBoundary>
+          </Suspense>
+        </div>
+      ) : null}
+
+      <Suspense fallback={null}>
         <MetricsInfoModal
           open={showInfo}
           onClose={() => setShowInfo(false)}
         />
+      </Suspense>
 
-      <StatsMetricDrawer
-        open={statsDrawer.open}
-        metricKey={statsDrawer.metricKey}
-        compareKey={statsDrawer.compareKey}
-        metricsLog={metricsLog}
-        onAddEntry={onAddMetricsEntry}
-        onClose={() => setStatsDrawer((prev) => ({ ...prev, open: false }))}
-        onChangeCompareKey={(nextKey) =>
-          setStatsDrawer((prev) => ({ ...prev, compareKey: nextKey }))
-        }
-      />
+      <Suspense fallback={null}>
+        <StatsMetricDrawer
+          open={statsDrawer.open}
+          metricKey={statsDrawer.metricKey}
+          compareKey={statsDrawer.compareKey}
+          metricsLog={metricsLog}
+          onAddEntry={onAddMetricsEntry}
+          onClose={() => setStatsDrawer((prev) => ({ ...prev, open: false }))}
+          onChangeCompareKey={(nextKey) =>
+            setStatsDrawer((prev) => ({ ...prev, compareKey: nextKey }))
+          }
+        />
+      </Suspense>
 
-      <ExerciseDrawer
-        exercise={detailEx?.ex}
-        dayTitle={detailEx?.dayTitle}
-        completedMap={completed}
-        completedDetails={completedDetails}
-        onUpdateDetail={onUpdateDetail}
-        onToggleComplete={onToggleComplete}
-        onCompleteAndNext={onCompleteAndNext}
-        getExerciseKey={getExerciseKey}
-        onReplaceExercise={onReplaceExercise}
-        replacementPool={
-          exercisePool.length ? exercisePool : plan?.pool?.length ? plan.pool : allExercises
-        }
-        onRequestGif={onRequestGif}
-        onClose={() => setDetailEx(null)}
-        onNext={onNextExercise}
-        onPrev={onPrevExercise}
-        isPersistent={isDesktop}
-        lang={lang}
-      />
+      <Suspense fallback={null}>
+        <ExerciseDrawer
+          exercise={detailEx?.ex}
+          dayTitle={detailEx?.dayTitle}
+          completedMap={completed}
+          completedDetails={completedDetails}
+          onUpdateDetail={onUpdateDetail}
+          onToggleComplete={onToggleComplete}
+          onCompleteAndNext={onCompleteAndNext}
+          getExerciseKey={getExerciseKey}
+          onReplaceExercise={onReplaceExercise}
+          replacementPool={
+            exercisePool.length ? exercisePool : plan?.pool?.length ? plan.pool : allExercises
+          }
+          onRequestGif={onRequestGif}
+          onClose={() => setDetailEx(null)}
+          onNext={onNextExercise}
+          onPrev={onPrevExercise}
+          isPersistent={isDesktop}
+          lang={lang}
+        />
+      </Suspense>
 
       <SessionRunner
         open={sessionDayIndex !== null || Boolean(sessionCustomDay)}
@@ -4139,7 +4219,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
               onChangeTab={setSidebarTab}
               nutritionSection={nutritionSection}
               onChangeNutritionSection={setNutritionSection}
-              profile={form}
+              profile={effectiveProfile}
               metrics={metrics}
               level={level}
               earnedXp={earnedXpTotal}
@@ -4202,7 +4282,6 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

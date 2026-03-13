@@ -1,6 +1,16 @@
 import { evaluateMealSatiety } from "./satietyFoods";
 
 function toTimestampFromMeal(meal) {
+  const consumedAt = Number(meal?.consumedAt || 0);
+  if (Number.isFinite(consumedAt) && consumedAt > 0) return consumedAt;
+
+  const mealDate = String(meal?.date || "").trim();
+  const mealTime = String(meal?.time || "").trim();
+  if (mealDate) {
+    const parsed = new Date(`${mealDate}T${mealTime || "12:00"}:00`).getTime();
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
   const rawId = String(meal?.id || "");
   if (!rawId) return 0;
   const base = rawId.includes("-") ? rawId.split("-")[0] : rawId;
@@ -59,4 +69,3 @@ export function estimateHungerFromMeals(meals = []) {
     lastMealTimeText: toHm(baseTimestamp),
   };
 }
-

@@ -1,24 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Box, Button, Card, CardContent, Chip, Divider, Skeleton, Tab, Tabs, TextField, Typography } from "@mui/material";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
 import MealSuggestions from "./MealSuggestions";
-import DailyMealPlan from "./DailyMealPlan";
-import WeeklyMealPlanner from "./WeeklyMealPlanner";
-import ShoppingListCard from "./ShoppingListCard";
-import NutritionLog from "./NutritionLog";
 import WeightProjection from "./WeightProjection";
 import NutritionEvaluation from "./NutritionEvaluation";
 import NutritionAlerts from "./NutritionAlerts";
 import AdaptiveCalorieAdjustment from "./AdaptiveCalorieAdjustment";
-import AdaptiveInsightDrawer from "./AdaptiveInsightDrawer";
-import NutritionTools from "./NutritionTools";
-import { getMeals } from "../../utils/nutritionStorage";
+import NutritionSectionNav from "./NutritionSectionNav";
+import { getMealNutritionScore } from "../../utils/nutritionScore";
+import { getMeals, saveMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
 import { recipes } from "../../data/recipes";
 import { foodCatalog } from "../../data/foodCatalog";
+import { getCustomFoods } from "../../utils/customFoodsStorage";
+
+const DailyMealPlan = lazy(() => import("./DailyMealPlan"));
+const WeeklyMealPlanner = lazy(() => import("./WeeklyMealPlanner"));
+const ShoppingListCard = lazy(() => import("./ShoppingListCard"));
+const NutritionLog = lazy(() => import("./NutritionLog"));
+const AdaptiveInsightDrawer = lazy(() => import("./AdaptiveInsightDrawer"));
+const NutritionTools = lazy(() => import("./NutritionTools"));
 
 function getTodayDateKey() {
   const now = new Date();
@@ -82,33 +86,257 @@ function tabLabelDot(color, text) {
   );
 }
 
+function NutritionSectionFallback({ rows = 3 }) {
+  return (
+    <Card variant="outlined">
+      <CardContent sx={{ display: "grid", gap: 1.2 }}>
+        <Skeleton variant="text" width={220} height={30} />
+        {Array.from({ length: rows }).map((_, index) => (
+          <Skeleton key={index} variant="rounded" height={index === 0 ? 56 : 110} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function calculateMacroTargets(profile, tdee) {
+  const weight = Number(profile?.weight ?? profile?.peso ?? 0);
+  const dailyCalories = Math.max(0, Number(tdee || 0));
+  const proteinTarget = weight > 0 ? weight * 1.6 : 0;
+  const fatTarget = weight > 0 ? weight * 0.8 : 0;
+  const remainingCalories = Math.max(0, dailyCalories - proteinTarget * 4 - fatTarget * 9);
+  const carbsTarget = remainingCalories / 4;
+
+  return {
+    calories: dailyCalories,
+    protein: proteinTarget,
+    carbs: carbsTarget,
+    fat: fatTarget,
+  };
+}
+
+function getHeroMetricState(value, target, options = {}) {
+  const current = Math.max(0, Number(value || 0));
+  const goal = Math.max(0, Number(target || 0));
+  const overWarnRatio = Number(options.overWarnRatio || 1.2);
+  const lowWarnRatio = Number(options.lowWarnRatio || 0.6);
+  const progress = goal > 0 ? Math.max(0, Math.min(1, current / goal)) : 0;
+  const ratio = goal > 0 ? current / goal : 0;
+
+  if (!goal) {
+    return {
+      progress,
+      tone: "neutral",
+      accent: "rgba(148, 163, 184, 0.75)",
+      background: "rgba(255,255,255,0.64)",
+      border: "rgba(15,23,42,0.08)",
+      label: "Sin referencia",
+    };
+  }
+
+  if (ratio > overWarnRatio) {
+    return {
+      progress,
+      tone: "high",
+      accent: "rgba(220, 38, 38, 0.82)",
+      background: "rgba(254, 242, 242, 0.92)",
+      border: "rgba(248, 113, 113, 0.32)",
+      label: "Sobre rango",
+    };
+  }
+
+  if (ratio >= 0.9) {
+    return {
+      progress,
+      tone: "good",
+      accent: "rgba(15, 118, 110, 0.9)",
+      background: "rgba(240, 253, 250, 0.92)",
+      border: "rgba(45, 212, 191, 0.22)",
+      label: "En rango",
+    };
+  }
+
+  if (ratio >= lowWarnRatio) {
+    return {
+      progress,
+      tone: "mid",
+      accent: "rgba(217, 119, 6, 0.84)",
+      background: "rgba(255, 251, 235, 0.92)",
+      border: "rgba(251, 191, 36, 0.28)",
+      label: "Avanzando",
+    };
+  }
+
+  return {
+    progress,
+    tone: "low",
+    accent: "rgba(59, 130, 246, 0.82)",
+    background: "rgba(239, 246, 255, 0.92)",
+    border: "rgba(96, 165, 250, 0.24)",
+    label: "Bajo objetivo",
+  };
+}
+
+function HeroMetricCard({ label, valueText, helperText, state }) {
+  return (
+    <Box
+      sx={{
+        p: 1.5,
+        borderRadius: 3,
+        bgcolor: state.background,
+        border: `1px solid ${state.border}`,
+        display: "grid",
+        gap: 0.7,
+      }}
+    >
+      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}
+        >
+          {label}
+        </Typography>
+        <Typography variant="caption" sx={{ color: state.accent, fontWeight: 800 }}>
+          {state.label}
+        </Typography>
+      </Box>
+      <Typography variant="h6" sx={{ lineHeight: 1 }}>
+        {valueText}
+      </Typography>
+      <Box
+        sx={{
+          height: 7,
+          borderRadius: 999,
+          bgcolor: "rgba(15,23,42,0.08)",
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            width: `${Math.max(6, Math.round((state.progress || 0) * 100))}%`,
+            height: "100%",
+            borderRadius: 999,
+            bgcolor: state.accent,
+            transition: "width 180ms ease-out",
+          }}
+        />
+      </Box>
+      <Typography variant="caption" color="text.secondary">
+        {helperText}
+      </Typography>
+    </Box>
+  );
+}
+
+function normalizeFoodKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function buildFoodLookup(items) {
+  const lookup = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const nameKey = normalizeFoodKey(item?.name);
+    const brandKey = normalizeFoodKey(item?.brand);
+    if (!nameKey) return;
+    lookup.set(`${nameKey}::${brandKey}`, item);
+    if (brandKey) return;
+    if (!lookup.has(`${nameKey}::`)) lookup.set(`${nameKey}::`, item);
+  });
+  return lookup;
+}
+
+function getMealRatio(meal) {
+  if (Number(meal?.grams) > 0) return Number(meal.grams) / 100;
+  const quantity = Number(meal?.quantity || 0);
+  if (quantity <= 0) return 0;
+  return meal?.unit === "ml" ? quantity / 100 : quantity;
+}
+
+function enrichMealsWithStoredNutrients(meals, foodLookup) {
+  let changed = false;
+  const nextMeals = (Array.isArray(meals) ? meals : []).map((meal) => {
+    const nameKey = normalizeFoodKey(meal?.name);
+    const brandKey = normalizeFoodKey(meal?.brand);
+    const source =
+      foodLookup.get(`${nameKey}::${brandKey}`) ||
+      foodLookup.get(`${nameKey}::`) ||
+      null;
+    if (!source) return meal;
+
+    const ratio = getMealRatio(meal);
+    if (!ratio) return meal;
+
+    const nextMeal = {
+      ...meal,
+      sodium:
+        meal?.sodium ?? Number((Number(source?.sodium || 0) * ratio).toFixed(2)),
+      sugars:
+        meal?.sugars ?? Number((Number(source?.sugars || 0) * ratio).toFixed(2)),
+      fiber:
+        meal?.fiber ?? Number((Number(source?.fiber || 0) * ratio).toFixed(2)),
+      saturatedFat:
+        meal?.saturatedFat ?? Number((Number(source?.saturatedFat || 0) * ratio).toFixed(2)),
+      transFat:
+        meal?.transFat ?? Number((Number(source?.transFat || 0) * ratio).toFixed(2)),
+      cholesterol:
+        meal?.cholesterol ?? Number((Number(source?.cholesterol || 0) * ratio).toFixed(2)),
+    };
+    if (
+      nextMeal.sodium !== meal?.sodium ||
+      nextMeal.sugars !== meal?.sugars ||
+      nextMeal.fiber !== meal?.fiber ||
+      nextMeal.saturatedFat !== meal?.saturatedFat ||
+      nextMeal.transFat !== meal?.transFat ||
+      nextMeal.cholesterol !== meal?.cholesterol
+    ) {
+      changed = true;
+    }
+    return nextMeal;
+  });
+
+  return { changed, meals: nextMeals };
+}
+
 export default function NutritionPage({
   profileId,
   profile,
   metricsLog = [],
-  activeSection = "registro",
+  activeSection = "estado",
+  onChangeActiveSection,
   onNutritionDataChange,
 }) {
+  const surfaceSx = {
+    border: "1px solid",
+    borderColor: "divider",
+    borderRadius: 3,
+    bgcolor: "background.paper",
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
+  };
   const sectionStackSx = {
     display: "grid",
-    gap: 2,
+    gap: 2.25,
   };
   const sectionHeaderSx = {
     display: "grid",
-    gap: 0.4,
-    p: 1.5,
+    gap: 1.4,
+    p: { xs: 1.9, md: 2.3 },
     border: "1px solid",
     borderColor: "divider",
-    borderRadius: 2,
+    borderRadius: 4,
     bgcolor: "background.paper",
+    backgroundImage:
+      "linear-gradient(140deg, rgba(15, 118, 110, 0.18) 0%, rgba(255,255,255,0) 42%), radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), rgba(255,255,255,0) 34%)",
+    boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
   };
   const tabsContainerSx = {
-    px: 0.6,
-    py: 0.4,
-    border: "1px solid",
-    borderColor: "divider",
-    borderRadius: 2,
-    bgcolor: "background.paper",
+    px: 0.55,
+    py: 0.7,
+    ...surfaceSx,
   };
   const [meals, setMeals] = useState([]);
   const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
@@ -127,6 +355,14 @@ export default function NutritionPage({
     setMeals(getMeals(profileId));
     setNutritionReady(true);
   }, [profileId]);
+  useEffect(() => {
+    if (!profileId || !nutritionReady) return;
+    const lookup = buildFoodLookup([...foodCatalog, ...getCustomFoods(profileId)]);
+    const enriched = enrichMealsWithStoredNutrients(meals, lookup);
+    if (!enriched.changed) return;
+    saveMeals(profileId, enriched.meals);
+    setMeals(enriched.meals);
+  }, [meals, nutritionReady, profileId]);
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const availableMealDates = useMemo(() => {
@@ -145,6 +381,23 @@ export default function NutritionPage({
 
   const totalsToday = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
   const hungerToday = useMemo(() => estimateHungerFromMeals(mealsToday), [mealsToday]);
+  const latestRecordedWeight = useMemo(() => {
+    const safeLog = Array.isArray(metricsLog) ? [...metricsLog] : [];
+    for (let i = safeLog.length - 1; i >= 0; i -= 1) {
+      const value = Number(safeLog[i]?.weight);
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    return 0;
+  }, [metricsLog]);
+  const nutritionProfile = useMemo(() => {
+    if (!profile) return profile;
+    if (!latestRecordedWeight) return profile;
+    return {
+      ...profile,
+      weight: latestRecordedWeight,
+      peso: latestRecordedWeight,
+    };
+  }, [profile, latestRecordedWeight]);
   const metricsForTdee = useMemo(() => {
     const safeLog = Array.isArray(metricsLog) ? metricsLog : [];
     if (!safeLog.length) return {};
@@ -156,8 +409,8 @@ export default function NutritionPage({
     };
   }, [metricsLog, todayKey]);
   const tdee = useMemo(
-    () => calculateTDEEDynamic(profile, metricsForTdee),
-    [profile, metricsForTdee]
+    () => calculateTDEEDynamic(nutritionProfile, metricsForTdee),
+    [nutritionProfile, metricsForTdee]
   );
   const calorieBalance = useMemo(
     () => calculateCalorieBalance(totalsToday.calories, tdee),
@@ -173,11 +426,11 @@ export default function NutritionPage({
   }, [historyDate, metricsLog, todayKey]);
   const historyTdee = useMemo(
     () =>
-      calculateTDEEDynamic(profile, {
+      calculateTDEEDynamic(nutritionProfile, {
         steps: Number(historyMetricEntry?.steps || 0),
         activeKcal: Number(historyMetricEntry?.activeKcal || 0),
       }),
-    [historyMetricEntry?.activeKcal, historyMetricEntry?.steps, profile]
+    [historyMetricEntry?.activeKcal, historyMetricEntry?.steps, nutritionProfile]
   );
   const historyBalance = useMemo(
     () => calculateCalorieBalance(historyTotals.calories, historyTdee),
@@ -193,7 +446,7 @@ export default function NutritionPage({
       const mealsForDate = getMealsForDate(meals, date);
       const totals = calculateDailyTotals(mealsForDate);
       const metric = metricsByDate.get(date) || {};
-      const tdeeForDate = calculateTDEEDynamic(profile, {
+      const tdeeForDate = calculateTDEEDynamic(nutritionProfile, {
         steps: Number(metric?.steps || 0),
         activeKcal: Number(metric?.activeKcal || 0),
       });
@@ -207,7 +460,7 @@ export default function NutritionPage({
         fat: Number(totals.fat || 0),
       };
     });
-  }, [meals, metricsLog, profile, todayKey]);
+  }, [meals, metricsLog, nutritionProfile, todayKey]);
   const chartCaloriesMax = useMemo(() => {
     const raw = Math.max(
       1,
@@ -223,7 +476,9 @@ export default function NutritionPage({
     return raw;
   }, [last7HistoryChart]);
   const suggestedMealType = useMemo(() => inferMealTypeByHour(), []);
-  const currentWeight = Number(profile?.weight ?? profile?.peso ?? 0);
+  const currentWeight = Number(
+    latestRecordedWeight || nutritionProfile?.weight || nutritionProfile?.peso || 0
+  );
   const calorieHistory = useMemo(() => {
     const byDate = new Map();
     (Array.isArray(meals) ? meals : []).forEach((meal) => {
@@ -240,7 +495,7 @@ export default function NutritionPage({
     return [...byDate.entries()]
       .map(([date, caloriesConsumed]) => {
         const metric = metricsByDate.get(date) || {};
-        const tdeeForDate = calculateTDEEDynamic(profile, {
+        const tdeeForDate = calculateTDEEDynamic(nutritionProfile, {
           steps: Number(metric?.steps || 0),
           activeKcal: Number(metric?.activeKcal || 0),
         });
@@ -251,7 +506,7 @@ export default function NutritionPage({
         };
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [meals, metricsLog, profile]);
+  }, [meals, metricsLog, nutritionProfile]);
   const weightHistory = useMemo(() => {
     return (Array.isArray(metricsLog) ? metricsLog : [])
       .filter((entry) => entry?.date && Number.isFinite(Number(entry?.weight)))
@@ -262,38 +517,149 @@ export default function NutritionPage({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [metricsLog]);
   const currentTargetCalories = Math.round(tdee || 0);
+  const macroTargets = useMemo(
+    () => calculateMacroTargets(nutritionProfile, tdee),
+    [nutritionProfile, tdee]
+  );
+  const nutritionScore = useMemo(() => {
+    if (!Array.isArray(mealsToday) || mealsToday.length === 0) return 0;
+    const scores = mealsToday
+      .map((meal) => {
+        const foods = Array.isArray(meal?.foods) && meal.foods.length
+          ? meal.foods.map((item) => item?.foodId || item).filter(Boolean)
+          : [meal?.foodId || meal?.name].filter(Boolean);
+        if (!foods.length) return 0;
+        return Number(getMealNutritionScore(foods).score || 0);
+      })
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (!scores.length) return 0;
+    const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+    return Math.round(average);
+  }, [mealsToday]);
+  const calorieState = useMemo(
+    () => getHeroMetricState(totalsToday.calories, macroTargets.calories, { lowWarnRatio: 0.5 }),
+    [macroTargets.calories, totalsToday.calories]
+  );
+  const proteinState = useMemo(
+    () => getHeroMetricState(totalsToday.protein, macroTargets.protein),
+    [macroTargets.protein, totalsToday.protein]
+  );
+  const carbsState = useMemo(
+    () => getHeroMetricState(totalsToday.carbs, macroTargets.carbs, { overWarnRatio: 1.3 }),
+    [macroTargets.carbs, totalsToday.carbs]
+  );
+  const fatState = useMemo(
+    () => getHeroMetricState(totalsToday.fat, macroTargets.fat, { overWarnRatio: 1.15 }),
+    [macroTargets.fat, totalsToday.fat]
+  );
+  const scoreState = useMemo(
+    () => getHeroMetricState(nutritionScore, 100, { lowWarnRatio: 0.55, overWarnRatio: 1 }),
+    [nutritionScore]
+  );
   const openAdaptiveDrawer = (section = "progreso") => {
     setAdaptiveDrawerSection(section);
     setShowAdaptiveDrawer(true);
   };
 
   return (
-    <Box sx={{ ...sectionStackSx, pb: 1 }}>
+    <Box className="nutrition-page-content" sx={{ ...sectionStackSx, pb: 1 }}>
       <Box sx={sectionHeaderSx}>
-        <Typography variant="h4">Nutrición</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Registro, estado diario, planificación y herramientas prácticas.
+        <Typography
+          variant="overline"
+          sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.14em" }}
+        >
+          Estado diario y planificación
         </Typography>
+        <Typography variant="h4" sx={{ lineHeight: 1 }}>
+          Nutrición
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720, lineHeight: 1.5 }}>
+          Estado diario, registro, planificación y herramientas prácticas en un solo flujo.
+        </Typography>
+        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+          <Chip size="small" label={`TDEE ${Math.round(tdee || 0)} kcal`} variant="outlined" />
+          <Chip
+            size="small"
+            label={`Balance ${Math.round(calorieBalance.balance)} kcal`}
+            color={
+              calorieBalance.status === "deficit"
+                ? "success"
+                : calorieBalance.status === "surplus"
+                ? "error"
+                : "warning"
+            }
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={currentWeight ? `Peso ${currentWeight.toFixed(1)} kg` : "Peso sin registro"}
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={`Objetivo prot. ${Math.round(macroTargets.protein || 0)} g`}
+            variant="outlined"
+          />
+        </Box>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "repeat(2, minmax(0, 1fr))",
+              md: "repeat(3, minmax(0, 1fr))",
+              xl: "repeat(5, minmax(0, 1fr))",
+            },
+            gap: 1.5,
+          }}
+        >
+          <HeroMetricCard
+            label="Calorías"
+            valueText={`${Math.round(totalsToday.calories)} / ${Math.round(macroTargets.calories || 0)}`}
+            helperText={`objetivo: ${Math.round(macroTargets.calories || 0)} kcal`}
+            state={calorieState}
+          />
+          <HeroMetricCard
+            label="Proteínas"
+            valueText={`${Math.round(totalsToday.protein || 0)} / ${Math.round(macroTargets.protein || 0)} g`}
+            helperText={`recomendado: ${Math.round(macroTargets.protein || 0)} g`}
+            state={proteinState}
+          />
+          <HeroMetricCard
+            label="Carbohidratos"
+            valueText={`${Math.round(totalsToday.carbs || 0)} / ${Math.round(macroTargets.carbs || 0)} g`}
+            helperText={`recomendado: ${Math.round(macroTargets.carbs || 0)} g`}
+            state={carbsState}
+          />
+          <HeroMetricCard
+            label="Grasas"
+            valueText={`${Math.round(totalsToday.fat || 0)} / ${Math.round(macroTargets.fat || 0)} g`}
+            helperText={`recomendado: ${Math.round(macroTargets.fat || 0)} g`}
+            state={fatState}
+          />
+          <HeroMetricCard
+            label="Nutrition score"
+            valueText={nutritionScore ? `${nutritionScore}/100` : "—"}
+            helperText="calidad promedio del día"
+            state={scoreState}
+          />
+        </Box>
       </Box>
+      <NutritionSectionNav activeSection={activeSection} onChangeSection={onChangeActiveSection} />
       <Divider />
-
       {activeSection === "registro" && (
         <Box sx={sectionStackSx}>
           {!nutritionReady ? (
-            <Card variant="outlined">
-              <CardContent sx={{ display: "grid", gap: 1 }}>
-                <Skeleton variant="text" width={220} height={34} />
-                <Skeleton variant="rounded" height={56} />
-                <Skeleton variant="rounded" height={120} />
-              </CardContent>
-            </Card>
+            <NutritionSectionFallback rows={2} />
           ) : (
-          <NutritionLog
-            profileId={profileId}
-            meals={meals}
-            onMealsChange={setMeals}
-            onDataChange={onNutritionDataChange}
-          />
+            <Suspense fallback={<NutritionSectionFallback rows={2} />}>
+              <NutritionLog
+                profileId={profileId}
+                meals={meals}
+                onMealsChange={setMeals}
+                onDataChange={onNutritionDataChange}
+              />
+            </Suspense>
           )}
         </Box>
       )}
@@ -317,7 +683,7 @@ export default function NutritionPage({
           {dailyStatusTab === 0 && (
             <Box sx={sectionStackSx}>
               <Card variant="outlined">
-                <CardContent sx={{ display: "grid", gap: 1 }}>
+                <CardContent sx={{ display: "grid", gap: 1.25 }}>
                   <Typography variant="h6">Índice de saciedad del día</Typography>
                   {hungerToday.hasData ? (
                     <>
@@ -354,7 +720,7 @@ export default function NutritionPage({
                 </CardContent>
               </Card>
               <NutritionSummary
-                profile={profile}
+                profile={nutritionProfile}
                 meals={meals}
                 tdeeOverride={tdee}
                 activityMetrics={metricsForTdee}
@@ -366,7 +732,7 @@ export default function NutritionPage({
                 foodCatalog={foodCatalog}
                 mealType={suggestedMealType}
               />
-              <NutritionEvaluation totals={totalsToday} profile={profile} tdee={tdee} />
+              <NutritionEvaluation totals={totalsToday} profile={nutritionProfile} tdee={tdee} />
             </Box>
           )}
 
@@ -392,7 +758,7 @@ export default function NutritionPage({
                 onOpenDetail={openAdaptiveDrawer}
               />
               <Box>
-                <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
+                <Button variant="outlined" size="large" onClick={() => openAdaptiveDrawer("progreso")}>
                   Ver análisis adaptativo
                 </Button>
               </Box>
@@ -562,38 +928,44 @@ export default function NutritionPage({
 
       {activeSection === "plan" && (
         <Box sx={sectionStackSx}>
-          <DailyMealPlan
-            dailyCaloriesTarget={tdee}
-            recipes={recipes}
-            foodCatalog={foodCatalog}
-          />
-          <WeeklyMealPlanner
-            dailyCaloriesTarget={tdee}
-            recipes={recipes}
-            foodCatalog={foodCatalog}
-          />
-          <ShoppingListCard
-            dailyCaloriesTarget={tdee}
-            recipes={recipes}
-            foodCatalog={foodCatalog}
-          />
+          <Suspense fallback={<NutritionSectionFallback rows={3} />}>
+            <DailyMealPlan
+              dailyCaloriesTarget={tdee}
+              recipes={recipes}
+              foodCatalog={foodCatalog}
+            />
+            <WeeklyMealPlanner
+              dailyCaloriesTarget={tdee}
+              recipes={recipes}
+              foodCatalog={foodCatalog}
+            />
+            <ShoppingListCard
+              dailyCaloriesTarget={tdee}
+              recipes={recipes}
+              foodCatalog={foodCatalog}
+            />
+          </Suspense>
         </Box>
       )}
 
       {activeSection === "work" && (
         <Box sx={sectionStackSx}>
-          <NutritionTools profileId={profileId} />
+          <Suspense fallback={<NutritionSectionFallback rows={2} />}>
+            <NutritionTools profileId={profileId} />
+          </Suspense>
         </Box>
       )}
 
-      <AdaptiveInsightDrawer
-        open={showAdaptiveDrawer}
-        onClose={() => setShowAdaptiveDrawer(false)}
-        calorieHistory={calorieHistory}
-        weightHistory={weightHistory}
-        currentTargetCalories={currentTargetCalories}
-        focusSection={adaptiveDrawerSection}
-      />
+      <Suspense fallback={null}>
+        <AdaptiveInsightDrawer
+          open={showAdaptiveDrawer}
+          onClose={() => setShowAdaptiveDrawer(false)}
+          calorieHistory={calorieHistory}
+          weightHistory={weightHistory}
+          currentTargetCalories={currentTargetCalories}
+          focusSection={adaptiveDrawerSection}
+        />
+      </Suspense>
     </Box>
   );
 }

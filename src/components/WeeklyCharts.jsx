@@ -214,6 +214,7 @@ export default function WeeklyCharts({ history, lang, goals, onGoToPlanDay }) {
     <>
       <div className="charts">
         <div className="chart chart-highlight">
+          <p className="section-eyebrow">{lang === "en" ? "Weekly review" : "Revisión semanal"}</p>
           <h3>{lang === "en" ? "Weekly focus" : "Resumen semanal"}</h3>
           {!latest ? (
             <p className="note">Sin datos de semanas recientes.</p>

@@ -31,12 +31,30 @@ import QuickFoodInput from "./QuickFoodInput";
 import FoodDetailDrawer from "./FoodDetailDrawer";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
 
-const DEFAULT_FORM = {
-  mealType: "desayuno",
-  beverageType: "agua",
-  food: null,
-  quantity: "1",
-};
+function getTodayDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentTimeValue() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function createDefaultForm() {
+  return {
+    mealType: "desayuno",
+    beverageType: "agua",
+    food: null,
+    quantity: "1",
+    quantityMode: "x100g",
+    date: getTodayDateKey(),
+    time: getCurrentTimeValue(),
+  };
+}
 const DEFAULT_CUSTOM_FOOD_FORM = {
   name: "",
   brand: "",
@@ -70,13 +88,125 @@ const FOOD_CATEGORIES = [
 ];
 const MEAL_TYPE_ORDER = ["desayuno", "almuerzo", "cena", "snack", "bebida"];
 const BEVERAGE_TYPES = ["agua", "cafe_te", "sin_calorias", "calorica", "alcohol"];
+const FOOD_PORTION_EQUIVALENTS = {
+  platano: { label: "unidad", grams: 120 },
+  manzana: { label: "unidad", grams: 180 },
+  pera: { label: "unidad", grams: 180 },
+  naranja: { label: "unidad", grams: 130 },
+  mandarina: { label: "unidad", grams: 90 },
+  kiwi: { label: "unidad", grams: 75 },
+  huevo: { label: "unidad", grams: 50 },
+};
 
-function getTodayDateKey() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function buildMealTimestamp(dateKey, timeValue) {
+  const safeDate = String(dateKey || "").trim();
+  const safeTime = String(timeValue || "").trim();
+  if (!safeDate) return Date.now();
+  const ts = new Date(`${safeDate}T${safeTime || "12:00"}:00`).getTime();
+  return Number.isFinite(ts) ? ts : Date.now();
+}
+
+function scaleNutrient(base, quantity) {
+  return Number((Number(base || 0) * quantity).toFixed(2));
+}
+
+function parseServingSizeGrams(servingSize) {
+  const match = String(servingSize || "").match(/(\d+(?:[.,]\d+)?)\s*g/i);
+  if (!match) return 0;
+  return Number(String(match[1]).replace(",", "."));
+}
+
+function getFoodPortionOption(food, mealType) {
+  if (!food || mealType === "bebida") return null;
+  const fromServing = parseServingSizeGrams(food?.servingSize);
+  if (fromServing > 0) return { label: "porción", grams: fromServing };
+  return FOOD_PORTION_EQUIVALENTS[normalizeFoodIdentityPart(food?.name)] || null;
+}
+
+function resolveEntryConfig(food, mealType, quantity, quantityMode) {
+  const numericQuantity = Number(quantity || 0);
+  if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) return null;
+
+  if (mealType === "bebida") {
+    return {
+      quantity: numericQuantity,
+      unit: "ml",
+      grams: numericQuantity,
+      ratio: numericQuantity / 100,
+    };
+  }
+
+  if (quantityMode === "portion") {
+    const portion = getFoodPortionOption(food, mealType);
+    if (portion?.grams) {
+      const grams = Number((numericQuantity * portion.grams).toFixed(2));
+      return {
+        quantity: numericQuantity,
+        unit: portion.label,
+        grams,
+        ratio: grams / 100,
+      };
+    }
+  }
+
+  return {
+    quantity: numericQuantity,
+    unit: "x100g",
+    grams: Number((numericQuantity * 100).toFixed(2)),
+    ratio: numericQuantity,
+  };
+}
+
+function createMealFromFood({ food, mealType, beverageType, quantity, date, time, id, mealGroupId }) {
+  const entry = resolveEntryConfig(food, mealType, quantity?.value ?? quantity, quantity?.quantityMode || "x100g");
+  const ratio = entry?.ratio || 0;
+  const unit = entry?.unit || (mealType === "bebida" ? "ml" : "x100g");
+  const timestamp = buildMealTimestamp(date, time);
+
+  return {
+    id,
+    mealGroupId,
+    date,
+    time,
+    consumedAt: timestamp,
+    mealType,
+    beverageType: mealType === "bebida" ? beverageType : "",
+    name: food.name,
+    brand: food.brand || "",
+    quantity: Number(entry?.quantity ?? quantity ?? 0),
+    unit,
+    grams: Number(entry?.grams || 0),
+    calories: scaleNutrient(food.calories, ratio),
+    protein: scaleNutrient(food.protein, ratio),
+    carbs: scaleNutrient(food.carbs, ratio),
+    fat: scaleNutrient(food.fat, ratio),
+    sodium: scaleNutrient(food.sodium, ratio),
+    sugars: scaleNutrient(food.sugars, ratio),
+    fiber: scaleNutrient(food.fiber, ratio),
+    saturatedFat: scaleNutrient(food.saturatedFat, ratio),
+    transFat: scaleNutrient(food.transFat, ratio),
+    cholesterol: scaleNutrient(food.cholesterol, ratio),
+  };
+}
+
+function getDraftPreview(food, mealType, quantity) {
+  if (!food) return null;
+  const entry = resolveEntryConfig(food, mealType, quantity?.value ?? quantity, quantity?.quantityMode || "x100g");
+  if (!entry) return null;
+  const ratio = entry.ratio;
+  return {
+    unit: entry.unit,
+    calories: scaleNutrient(food.calories, ratio),
+    protein: scaleNutrient(food.protein, ratio),
+    carbs: scaleNutrient(food.carbs, ratio),
+    fat: scaleNutrient(food.fat, ratio),
+    sodium: scaleNutrient(food.sodium, ratio),
+    sugars: scaleNutrient(food.sugars, ratio),
+    fiber: scaleNutrient(food.fiber, ratio),
+    saturatedFat: scaleNutrient(food.saturatedFat, ratio),
+    transFat: scaleNutrient(food.transFat, ratio),
+    cholesterol: scaleNutrient(food.cholesterol, ratio),
+  };
 }
 
 function mealTypeLabel(type) {
@@ -174,7 +304,8 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
     maxWidth: "100%",
     mx: 0,
   };
-  const [formData, setFormData] = useState(DEFAULT_FORM);
+  const [formData, setFormData] = useState(() => createDefaultForm());
+  const [draftMealItems, setDraftMealItems] = useState([]);
   const [customFoods, setCustomFoods] = useState([]);
   const [customRecipes, setCustomRecipes] = useState([]);
   const [showCustomFoodForm, setShowCustomFoodForm] = useState(false);
@@ -205,6 +336,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
   }, [mealsToday]);
   const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
   const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
+  const portionOption = useMemo(
+    () => getFoodPortionOption(formData.food, formData.mealType),
+    [formData.food, formData.mealType]
+  );
 
   useEffect(() => {
     if (!profileId) {
@@ -222,6 +357,12 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       ...prev,
       mealType: nextMealType,
       quantity: nextMealType === "bebida" ? "200" : "1",
+      quantityMode:
+        nextMealType === "bebida"
+          ? "ml"
+          : getFoodPortionOption(prev.food, nextMealType)
+          ? "portion"
+          : "x100g",
     }));
   };
 
@@ -233,59 +374,145 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
     setFormData((prev) => ({ ...prev, quantity: event.target.value }));
   };
 
+  const onChangeQuantityMode = (event) => {
+    setFormData((prev) => ({ ...prev, quantityMode: event.target.value }));
+  };
+
+  const onChangeDate = (event) => {
+    setFormData((prev) => ({ ...prev, date: event.target.value }));
+  };
+
+  const onChangeTime = (event) => {
+    setFormData((prev) => ({ ...prev, time: event.target.value }));
+  };
+
   const onChangeFood = (_, value) => {
-    setFormData((prev) => ({ ...prev, food: value }));
+    setFormData((prev) => ({
+      ...prev,
+      food: value,
+      quantityMode:
+        prev.mealType === "bebida"
+          ? "ml"
+          : getFoodPortionOption(value, prev.mealType)
+          ? "portion"
+          : "x100g",
+    }));
   };
   const onChangeCustomFoodField = (field) => (event) => {
     setCustomFoodForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const scaleNutrient = (base, quantity) => Number((Number(base || 0) * quantity).toFixed(2));
   const quantityNumber = Number(formData.quantity || 0);
-  const preview = useMemo(() => {
-    if (!formData.food || !Number.isFinite(quantityNumber) || quantityNumber <= 0) {
-      return null;
-    }
-    const ratio = formData.mealType === "bebida" ? quantityNumber / 100 : quantityNumber;
-    return {
-      calories: scaleNutrient(formData.food.calories, ratio),
-      protein: scaleNutrient(formData.food.protein, ratio),
-      carbs: scaleNutrient(formData.food.carbs, ratio),
-      fat: scaleNutrient(formData.food.fat, ratio),
-    };
-  }, [formData.food, formData.mealType, quantityNumber]);
+  const preview = useMemo(
+    () =>
+      getDraftPreview(formData.food, formData.mealType, {
+        value: quantityNumber,
+        quantityMode: formData.quantityMode,
+      }),
+    [formData.food, formData.mealType, quantityNumber, formData.quantityMode]
+  );
+  const draftMealSummary = useMemo(() => {
+    const items = draftMealItems.map((item, index) => ({
+      id: `draft-${index}`,
+      food: item.food,
+      quantity: item.quantity,
+      quantityMode: item.quantityMode || "x100g",
+      preview: getDraftPreview(item.food, formData.mealType, {
+        value: item.quantity,
+        quantityMode: item.quantityMode || "x100g",
+      }),
+    }));
+    const totals = items.reduce(
+      (acc, item) => {
+        const next = item.preview || {};
+        acc.calories += Number(next.calories || 0);
+        acc.protein += Number(next.protein || 0);
+        acc.carbs += Number(next.carbs || 0);
+        acc.fat += Number(next.fat || 0);
+        acc.fiber += Number(next.fiber || 0);
+        acc.sodium += Number(next.sodium || 0);
+        acc.sugars += Number(next.sugars || 0);
+        acc.saturatedFat += Number(next.saturatedFat || 0);
+        acc.transFat += Number(next.transFat || 0);
+        acc.cholesterol += Number(next.cholesterol || 0);
+        return acc;
+      },
+      {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fiber: 0,
+        sodium: 0,
+        sugars: 0,
+        saturatedFat: 0,
+        transFat: 0,
+        cholesterol: 0,
+      }
+    );
+    return { items, totals };
+  }, [draftMealItems, formData.mealType]);
 
-  const onSubmit = (event) => {
-    event.preventDefault();
-    if (!profileId) return;
+  const clearEntrySelection = () => {
+    setFormData((prev) => ({
+      ...prev,
+      food: null,
+      quantity: prev.mealType === "bebida" ? "200" : "1",
+      quantityMode: prev.mealType === "bebida" ? "ml" : "x100g",
+    }));
+  };
+
+  const addCurrentFoodToDraft = () => {
     if (!formData.food) return;
-
     const quantity = Number(formData.quantity || 0);
     if (!Number.isFinite(quantity) || quantity <= 0) return;
-    const ratio = formData.mealType === "bebida" ? quantity / 100 : quantity;
-    const unit = formData.mealType === "bebida" ? "ml" : "x100g";
+    setDraftMealItems((prev) => [
+      ...prev,
+      {
+        food: formData.food,
+        quantity,
+        quantityMode: formData.quantityMode,
+      },
+    ]);
+    clearEntrySelection();
+  };
 
-    const meal = {
-      id: String(Date.now()),
-      date: getTodayDateKey(),
-      mealType: formData.mealType,
-      beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
-      name: formData.food.name,
-      brand: formData.food.brand || "",
-      quantity,
-      unit,
-      calories: scaleNutrient(formData.food.calories, ratio),
-      protein: scaleNutrient(formData.food.protein, ratio),
-      carbs: scaleNutrient(formData.food.carbs, ratio),
-      fat: scaleNutrient(formData.food.fat, ratio),
-    };
+  const saveDraftMeal = (event) => {
+    if (event) event.preventDefault();
+    if (!profileId) return;
 
-    addMeal(profileId, meal);
+    const stagedItems = [...draftMealItems];
+    const quantity = Number(formData.quantity || 0);
+    if (formData.food && Number.isFinite(quantity) && quantity > 0) {
+      stagedItems.push({ food: formData.food, quantity, quantityMode: formData.quantityMode });
+    }
+    if (!stagedItems.length) return;
+
+    const baseId = buildMealTimestamp(formData.date, formData.time);
+    const mealGroupId = `meal-${baseId}`;
+    const createdMeals = stagedItems.map((item, index) =>
+      createMealFromFood({
+        food: item.food,
+        mealType: formData.mealType,
+        beverageType: formData.beverageType,
+        quantity: {
+          value: item.quantity,
+          quantityMode: item.quantityMode || "x100g",
+        },
+        date: formData.date || todayKey,
+        time: formData.time || getCurrentTimeValue(),
+        id: `${baseId}-${index}`,
+        mealGroupId,
+      })
+    );
+
+    createdMeals.forEach((meal) => addMeal(profileId, meal));
     if (typeof onMealsChange === "function") {
-      onMealsChange([...(Array.isArray(meals) ? meals : []), meal]);
+      onMealsChange([...(Array.isArray(meals) ? meals : []), ...createdMeals]);
     }
     if (typeof onDataChange === "function") onDataChange();
-    setFormData(DEFAULT_FORM);
+    setDraftMealItems([]);
+    setFormData(createDefaultForm());
   };
 
   const onSaveCustomFood = () => {
@@ -417,7 +644,8 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
     if (!safeItems.length) return;
 
     const createdMeals = [];
-    const baseId = Date.now();
+    const baseId = buildMealTimestamp(formData.date, formData.time);
+    const mealGroupId = `meal-${baseId}`;
 
     safeItems.forEach((item, index) => {
       const food = foodIndex.get(normalizeId(item?.foodId));
@@ -426,19 +654,20 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
 
       const ratio = grams / 100;
       const meal = {
-        id: `${baseId}-${index}`,
-        date: getTodayDateKey(),
-        mealType: formData.mealType,
-        beverageType: formData.mealType === "bebida" ? formData.beverageType : "",
-        name: food.name,
-        brand: food.brand || "",
-        quantity: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
-        unit: formData.mealType === "bebida" ? "ml" : "x100g",
+        ...createMealFromFood({
+          food,
+          mealType: formData.mealType,
+          beverageType: formData.beverageType,
+          quantity: {
+            value: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
+            quantityMode: formData.mealType === "bebida" ? "ml" : "x100g",
+          },
+          date: formData.date || todayKey,
+          time: formData.time || getCurrentTimeValue(),
+          id: `${baseId}-${index}`,
+          mealGroupId,
+        }),
         grams: Number(grams.toFixed(2)),
-        calories: scaleNutrient(food.calories, ratio),
-        protein: scaleNutrient(food.protein, ratio),
-        carbs: scaleNutrient(food.carbs, ratio),
-        fat: scaleNutrient(food.fat, ratio),
       };
       addMeal(profileId, meal);
       createdMeals.push(meal);
@@ -486,6 +715,12 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         protein: round2(item.protein),
         carbs: round2(item.carbs),
         fat: round2(item.fat),
+        sodium: round2(item.sodium),
+        sugars: round2(item.sugars),
+        fiber: round2(item.fiber),
+        saturatedFat: round2(item.saturatedFat),
+        transFat: round2(item.transFat),
+        cholesterol: round2(item.cholesterol),
       };
     });
 
@@ -633,7 +868,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         </Box>
       )}
       {(registerTab === 0 || registerTab === 2) && (
-      <Box component="form" onSubmit={onSubmit} sx={{ ...panelSx, ...contentFrameSx, display: "grid", gap: 2 }}>
+      <Box component="form" onSubmit={saveDraftMeal} sx={{ ...panelSx, ...contentFrameSx, display: "grid", gap: 2 }}>
         {registerTab === 0 && (
         <>
         <FormControl fullWidth>
@@ -691,6 +926,24 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
           )}
           renderInput={(params) => <TextField {...params} label="Alimento" fullWidth />}
         />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+          <TextField
+            type="date"
+            label="Fecha de ingesta"
+            value={formData.date}
+            onChange={onChangeDate}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            type="time"
+            label="Hora de ingesta"
+            value={formData.time}
+            onChange={onChangeTime}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+        </Stack>
         </>
         )}
 
@@ -885,36 +1138,286 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         <>
         <TextField
           type="number"
-          label={formData.mealType === "bebida" ? "Cantidad" : "Cantidad (x100 g)"}
+          label={
+            formData.mealType === "bebida"
+              ? "Cantidad"
+              : formData.quantityMode === "portion"
+              ? `Cantidad (${portionOption?.label || "porción"})`
+              : "Cantidad (x100 g)"
+          }
           value={formData.quantity}
           onChange={onChangeQuantity}
           inputProps={{
-            min: formData.mealType === "bebida" ? 10 : 0,
+            min: formData.mealType === "bebida" ? 10 : 0.1,
             step: formData.mealType === "bebida" ? 10 : 0.1,
           }}
           InputProps={{
             endAdornment: (
               <InputAdornment position="end">
-                {formData.mealType === "bebida" ? "ml" : "x100 g"}
+                {formData.mealType === "bebida"
+                  ? "ml"
+                  : formData.quantityMode === "portion"
+                  ? portionOption?.label || "porción"
+                  : "x100 g"}
               </InputAdornment>
             ),
           }}
           fullWidth
         />
+        {formData.mealType !== "bebida" && portionOption && (
+          <FormControl fullWidth>
+            <InputLabel id="quantity-mode-label">Modo de cantidad</InputLabel>
+            <Select
+              labelId="quantity-mode-label"
+              label="Modo de cantidad"
+              value={formData.quantityMode}
+              onChange={onChangeQuantityMode}
+            >
+              <MenuItem value="portion">{portionOption.label}</MenuItem>
+              <MenuItem value="x100g">x100 g</MenuItem>
+            </Select>
+          </FormControl>
+        )}
+
+        {draftMealItems.length > 0 && (
+          <Box
+            sx={{
+              display: "grid",
+              gap: 1,
+              p: 1.2,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 2,
+              bgcolor: "background.paper",
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Plato en preparación
+            </Typography>
+            <Box sx={{ display: "grid", gap: 0.8 }}>
+              {draftMealSummary.items.map((item, index) => (
+                <Box
+                  key={`draft-item-${index}`}
+                  sx={{
+                    display: "grid",
+                    gap: 0.7,
+                    p: 1,
+                    borderRadius: 1.5,
+                    bgcolor: "rgba(15,23,42,0.04)",
+                    border: "1px solid rgba(148,163,184,0.14)",
+                  }}
+                >
+                  <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {item.food?.name}
+                      {item.food?.brand ? ` · ${item.food.brand}` : ""} ({item.quantity} {item.preview?.unit || (formData.mealType === "bebida" ? "ml" : "x100 g")})
+                    </Typography>
+                    <Stack direction="row" spacing={0.8} alignItems="center">
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={item.quantity}
+                        onChange={(event) =>
+                          setDraftMealItems((prev) =>
+                            prev.map((draftItem, itemIndex) =>
+                              itemIndex === index
+                                ? { ...draftItem, quantity: event.target.value }
+                                : draftItem
+                            )
+                          )
+                        }
+                        inputProps={{ min: 0.1, step: 0.1 }}
+                        sx={{ width: 88 }}
+                      />
+                      <Button
+                        type="button"
+                        size="small"
+                        color="error"
+                        onClick={() =>
+                          setDraftMealItems((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+                        }
+                      >
+                        Quitar
+                      </Button>
+                    </Stack>
+                  </Box>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                      gap: 0.8,
+                    }}
+                  >
+                    <Box sx={{ p: 0.8, borderRadius: 1.2, bgcolor: "rgba(15,118,110,0.08)" }}>
+                      <Typography variant="caption" color="text.secondary">Calorías</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{Math.round(item.preview?.calories || 0)} kcal</Typography>
+                    </Box>
+                    <Box sx={{ p: 0.8, borderRadius: 1.2, bgcolor: "rgba(15,23,42,0.04)" }}>
+                      <Typography variant="caption" color="text.secondary">Proteína</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{Number(item.preview?.protein || 0).toFixed(1)} g</Typography>
+                    </Box>
+                    <Box sx={{ p: 0.8, borderRadius: 1.2, bgcolor: "rgba(15,23,42,0.04)" }}>
+                      <Typography variant="caption" color="text.secondary">Carbs</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{Number(item.preview?.carbs || 0).toFixed(1)} g</Typography>
+                    </Box>
+                    <Box sx={{ p: 0.8, borderRadius: 1.2, bgcolor: "rgba(15,23,42,0.04)" }}>
+                      <Typography variant="caption" color="text.secondary">Grasas</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{Number(item.preview?.fat || 0).toFixed(1)} g</Typography>
+                    </Box>
+                    <Box sx={{ p: 0.8, borderRadius: 1.2, bgcolor: "rgba(15,23,42,0.04)" }}>
+                      <Typography variant="caption" color="text.secondary">Fibra</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{Number(item.preview?.fiber || 0).toFixed(1)} g</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 0.9,
+                p: 1.1,
+                borderRadius: 1.7,
+                bgcolor: "rgba(15,118,110,0.08)",
+                border: "1px solid rgba(45,212,191,0.2)",
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                Total del plato
+              </Typography>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                  gap: 0.8,
+                }}
+              >
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Calorías</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{Math.round(draftMealSummary.totals.calories)} kcal</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Proteína</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{draftMealSummary.totals.protein.toFixed(1)} g</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Carbohidratos</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{draftMealSummary.totals.carbs.toFixed(1)} g</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Grasas</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{draftMealSummary.totals.fat.toFixed(1)} g</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Fibra</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{draftMealSummary.totals.fiber.toFixed(1)} g</Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1.2, flexWrap: "wrap" }}>
+                <Typography variant="caption" color="text.secondary">Sodio {Math.round(draftMealSummary.totals.sodium)} mg</Typography>
+                <Typography variant="caption" color="text.secondary">Azúcares {draftMealSummary.totals.sugars.toFixed(1)} g</Typography>
+                <Typography variant="caption" color="text.secondary">Sat. {draftMealSummary.totals.saturatedFat.toFixed(1)} g</Typography>
+                <Typography variant="caption" color="text.secondary">Col. {Math.round(draftMealSummary.totals.cholesterol)} mg</Typography>
+              </Box>
+            </Box>
+          </Box>
+        )}
 
         {preview && (
-          <Box sx={{ display: "grid", gap: 0.5 }}>
-            <Typography variant="body2">Calorías: {preview.calories} kcal</Typography>
-            <Typography variant="body2">Proteína: {preview.protein} g</Typography>
-            <Typography variant="body2">Carbohidratos: {preview.carbs} g</Typography>
-            <Typography variant="body2">Grasas: {preview.fat} g</Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 1.1,
+              p: 1.3,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 2,
+              bgcolor: "background.paper",
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Vista previa nutricional
+            </Typography>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                gap: 1,
+              }}
+            >
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,118,110,0.08)" }}>
+                <Typography variant="caption" color="text.secondary">Calorías</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.calories} kcal</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Proteína</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.protein} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Carbohidratos</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.carbs} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Grasas</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.fat} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Fibra</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.fiber} g</Typography>
+              </Box>
+            </Box>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                gap: 1,
+              }}
+            >
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Sodio</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.sodium} mg</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Azúcares</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.sugars} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Grasa saturada</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.saturatedFat} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Grasa trans</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.transFat} g</Typography>
+              </Box>
+              <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: "rgba(15,23,42,0.04)" }}>
+                <Typography variant="caption" color="text.secondary">Colesterol</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{preview.cholesterol} mg</Typography>
+              </Box>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              Esta vista previa usa la cantidad seleccionada y es exactamente lo que se guardará para sumar en los KPIs diarios.
+            </Typography>
           </Box>
         )}
 
         <Box>
-          <Button type="submit" variant="contained" disabled={!profileId || !formData.food}>
-            Agregar comida
-          </Button>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+            <Button
+              type="button"
+              variant="outlined"
+              disabled={!profileId || !formData.food}
+              onClick={addCurrentFoodToDraft}
+            >
+              Agregar alimento al plato
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!profileId || (!formData.food && !draftMealItems.length)}
+            >
+              Guardar comida
+            </Button>
+          </Stack>
         </Box>
         </>
         )}

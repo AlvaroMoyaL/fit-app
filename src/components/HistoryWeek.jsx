@@ -275,7 +275,11 @@ export default function HistoryWeek({
   return (
     <div className="history">
       <div className="history-header">
+        <p className="section-eyebrow">Seguimiento semanal</p>
         <h2>Historial semanal</h2>
+        <p className="history-lead">
+          Resumen ejecutivo de cumplimiento, carga y detalle diario del entrenamiento registrado.
+        </p>
         {onRegisterPastExercise && (
           <button type="button" className="tiny" onClick={openRegister}>
             Registrar ejercicio anterior

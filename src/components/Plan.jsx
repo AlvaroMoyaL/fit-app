@@ -83,18 +83,26 @@ export default function Plan({
     <div className="plan" id="plan">
       <div className="plan-head">
         <div className="plan-head-main">
+          <p className="section-eyebrow">Entrenamiento semanal</p>
           <h2 className="plan-title">Tu plan inicial</h2>
           <p className="plan-version">
             Version {appVersion} · build {appBuild}
           </p>
           {activeProfileName && <p className="plan-subtitle">{activeProfileName}</p>}
           <div className="plan-head-meta">
-            <span>XP estimado de la semana: {estimatedWeeklyXp}</span>
-            <span>XP que se lleva en la semana: {weeklyEarnedXp}</span>
+            <span>
+              <strong>{estimatedWeeklyXp}</strong>
+              <em>XP estimado</em>
+            </span>
+            <span>
+              <strong>{weeklyEarnedXp}</strong>
+              <em>XP logrado</em>
+            </span>
           </div>
           {gifsLoading && <p className="note">Cargando gifs…</p>}
         </div>
         <div className="xp-summary plan-xp-summary">
+          <span className="plan-xp-kicker">Rendimiento actual</span>
           <strong>Nivel {level}</strong>
           <span>
             XP nivel: {xpInLevel} / {levelXpRequired}

@@ -176,8 +176,11 @@ export default function MetricsCharts({ metricsLog, lang }) {
 
   return (
     <div className="metrics-charts">
+      <p className="section-eyebrow">{lang === "en" ? "Health trends" : "Tendencias de salud"}</p>
       <h3>{lang === "en" ? "Trends" : "Tendencias"}</h3>
-      <p className="note">Vista de últimos 14 registros por métrica con detalle al pasar el mouse.</p>
+      <p className="metrics-lead">
+        Vista de los últimos 14 registros por métrica, con foco en lectura rápida y rango reciente.
+      </p>
       <div className="metric-chart-grid">
         {series.map((s) => (
           <MetricSparkCard key={s.key} title={s.label} unit={s.unit} data={buildSeries(entries, s.key)} />

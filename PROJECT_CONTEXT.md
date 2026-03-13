@@ -67,6 +67,8 @@
 
 ## Current Technical Notes
 - Build passes (`npm run build`).
+- Regla operativa del repo:
+  - antes de resumir/leer contexto del proyecto, actualizar `PROJECT_CONTEXT.md` si hubo cambios relevantes durante la sesión.
 - Production URL (Vercel): `https://fit-app-beta-sand.vercel.app`.
 - UX de carga inicial mejorada para móvil: `index.html` incluye `boot-splash` inmediato (spinner + mensaje) que se remueve tras primer render en `src/main.jsx`, evitando pantalla blanca mientras carga JS.
 - Lint has no errors; 4 hook dependency warnings in `src/App.jsx`.
@@ -258,6 +260,35 @@
       - `CampMealKit`,
       - `WorkNutritionTools` (tabs: casino, planificador, kit),
     - integración en `NutritionPage`:
+  - Rediseño y reorganización reciente del módulo de nutrición:
+    - `Inicio` dejó de ser la entrada principal; `Estado diario` es la vista por defecto del módulo.
+    - navegación de secciones de nutrición salió del sidebar general y ahora vive bajo el hero mediante `NutritionSectionNav`.
+    - el hero de nutrición usa el mismo lenguaje visual de `Plan` y `Stats`.
+    - el panel lateral derecho de nutrición se separó estructuralmente del contenido principal y ahora vive como rail independiente del shell.
+  - KPIs de nutrición actualizados:
+    - hero principal: `Calorías`, `Proteínas`, `Carbohidratos`, `Grasas`, `Nutrition score` y chips de contexto diario (`TDEE`, `Balance`, `Peso`, `Objetivo prot.`),
+    - panel lateral: `Comidas`, `Fibra`, `Sodio`, `Azúcares totales`, `Grasa saturada`, `Colesterol`.
+  - Peso efectivo en nutrición y métricas:
+    - el peso actual usado por KPI/cálculos ya no depende solo del perfil base; toma el último `weight` válido desde `metricsLog` cuando existe.
+  - Catálogo nutricional enriquecido:
+    - se añadió `src/data/foodMicros.js` para completar micronutrientes del catálogo base (`sodium`, `sugars`, `fiber`, `saturatedFat`, `cholesterol`, `transFat`),
+    - `src/data/foodCatalog.js` aplica ese overlay sobre `foods.js`.
+  - Registro de comidas mejorado:
+    - `NutritionLog` persiste micronutrientes por comida además de macros,
+    - la vista previa del alimento muestra macros y micronutrientes antes de guardar,
+    - el usuario puede elegir `fecha` y `hora de ingesta`,
+    - el flujo manual permite armar un `plato en preparación` con varios alimentos antes de guardar.
+  - Comidas compuestas y tiempos:
+    - cada fila nueva puede guardar `time`, `consumedAt` y `mealGroupId`,
+    - el conteo de comidas y la estimación de hambre/saciedad ahora priorizan esos campos cuando existen,
+    - esto evita que una comida con varios alimentos se cuente como múltiples comidas separadas.
+  - UX de ingreso manual refinada:
+    - `Plato en preparación` muestra aporte nutricional por alimento y total acumulado del plato antes de guardar,
+    - se puede editar la cantidad de un alimento ya agregado al plato sin eliminarlo,
+    - el flujo manual soporta `unidad/porción` para alimentos comunes cuando aplica (ej. frutas, huevo, o alimentos con `servingSize`), además del modo `x100 g`.
+  - Ajustes de interpretación nutricional:
+    - `Azúcares` se interpreta como `azúcares totales` con referencia flexible basada en `TDEE`, no como límite rígido de azúcares añadidos,
+    - `Colesterol` quedó como KPI informativo, con menor peso interpretativo que `grasa saturada`.
       - nueva sección `work` (`Nutrición en el trabajo`) desde sidebar,
   - mejoras recientes de UX en nutrición:
     - `NutritionLog` ahora organiza el flujo en tabs internas (`Ingreso de alimentos`, `Recetas rápidas`, `Crear alimentos`, `Crear recetas`, `Comidas de hoy`),
@@ -351,3 +382,6 @@
    - sync nube↔local.
 4. Revisar UX de móvil para menú/plan/sesión en pantallas pequeñas.
 5. Documentar esquema esperado de tabla `fit_cloud` y bucket de gifs en Supabase.
+6. Estado de repo remoto (marzo 2026):
+   - autenticación de GitHub migrada a SSH para evitar dependencia de PAT incrustado en el remote,
+   - `origin` usa SSH y el flujo de `push` quedó operativo nuevamente.

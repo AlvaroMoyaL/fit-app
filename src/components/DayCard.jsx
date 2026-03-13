@@ -258,6 +258,9 @@ export default function DayCard({
     <div className="day-card">
       <div className="day-head">
         <div className="day-title">
+          <span className="day-kicker">
+            {lang === "en" ? `Day ${index + 1}` : `Día ${index + 1}`}
+          </span>
           <strong>{day.title}</strong>
           {resolvedFocus && <span className="day-focus">{resolvedFocus}</span>}
         </div>
@@ -273,6 +276,25 @@ export default function DayCard({
             />
             {lang === "en" ? "Quiet mode" : "Modo silencioso"}
           </label>
+        </div>
+      </div>
+      <div className="day-summary-grid">
+        <div className="day-summary-card">
+          <span>{lang === "en" ? "Progress" : "Progreso"}</span>
+          <strong>{Math.round((dayEarned / Math.max(1, dayPossible)) * 100)}%</strong>
+          <small>
+            {dayEarned} / {dayPossible} XP
+          </small>
+        </div>
+        <div className="day-summary-card">
+          <span>{lang === "en" ? "Focus" : "Foco"}</span>
+          <strong>{resolvedFocus || (lang === "en" ? "Mixed" : "Mixto")}</strong>
+          <small>{lang === "en" ? "Primary block" : "Bloque principal"}</small>
+        </div>
+        <div className="day-summary-card">
+          <span>{lang === "en" ? "Volume" : "Volumen"}</span>
+          <strong>{day.exercises.length}</strong>
+          <small>{lang === "en" ? "planned exercises" : "ejercicios planificados"}</small>
         </div>
       </div>
       {dayCompleted && (

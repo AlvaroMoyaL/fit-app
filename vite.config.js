@@ -30,6 +30,29 @@ export default defineConfig(({ mode }) => {
           gitBuild
       ),
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) {
+              if (
+                id.includes("/src/components/StatsMetricDrawer") ||
+                id.includes("/src/components/MetricsCharts") ||
+                id.includes("/src/components/WeeklyCharts") ||
+                id.includes("/src/components/HistoryWeek")
+              ) {
+                return "insights";
+              }
+              return undefined;
+            }
+
+            if (id.includes("@mui") || id.includes("@emotion")) return "vendor-mui";
+            if (id.includes("@supabase")) return "vendor-supabase";
+            return "vendor";
+          },
+        },
+      },
+    },
     server: {
       port: 5175,
       strictPort: true,

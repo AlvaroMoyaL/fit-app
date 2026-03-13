@@ -239,6 +239,28 @@
       - `Insights nutricionales` y `Nutrition Alerts` se muestran en `Nutrición > Estado diario`,
       - el KPI `Nutrition score` del hero usa el score diario del Sprint 8,
       - el score previo de calidad promedio de comidas se mantiene como referencia secundaria,
+  - Sprint 9 (recomendaciones adaptativas) incorporado:
+    - utilidades nuevas:
+      - `src/utils/adaptiveMealEngine.js`,
+      - `src/utils/proteinRecoveryFoods.js`,
+      - `src/utils/vegetableRecoveryFoods.js`,
+      - `src/utils/mealCorrectionEngine.js`,
+    - componente nuevo:
+      - `src/components/nutrition/AdaptiveMealSuggestions.jsx`,
+    - integración actual:
+      - la ruta real de dashboard es `src/components/nutrition/NutritionHomePage.jsx` (no `src/pages/...`),
+      - `NutritionHomePage` construye `dailyStatus` real desde comidas del día, proteína, vegetales, macros y TDEE,
+      - la sección adaptativa se renderiza de forma defensiva, con fallback discreto si faltan datos,
+      - `mealCorrectionEngine` unifica sugerencias de comidas, proteína y vegetales en:
+        - `suggestions.meals`,
+        - `suggestions.proteinFoods`,
+        - `suggestions.vegetableFoods`,
+      - `bestStrategy` usa shape estable:
+        - `type`,
+        - `label`,
+        - `reason`,
+      - `adaptiveMealEngine` ya respeta filtros de `mealType`, `maxCalories` y `vegetarianOnly` cuando recibe opciones,
+      - `AdaptiveMealSuggestions` tolera datos parciales (`summary`, `messages`, `bestStrategy`, `suggestions`) sin romper la UI.
   - sistema de nutrición adaptativa en `src/utils/adaptiveNutrition.js`:
     - análisis de progreso de peso,
     - eficiencia del déficit,

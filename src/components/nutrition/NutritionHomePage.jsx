@@ -6,6 +6,7 @@ import NutritionDashboard from "./NutritionDashboard";
 import NutritionSectionNav from "./NutritionSectionNav";
 import NutritionAlerts from "./NutritionAlerts";
 import NutritionInsights from "./NutritionInsights";
+import AdaptiveMealSuggestions from "./AdaptiveMealSuggestions";
 import calculateDailyNutritionScore from "../../utils/dailyNutritionScore";
 import analyzeMacroBalance from "../../utils/macroAnalyzer";
 import analyzeProteinIntake from "../../utils/proteinAnalyzer";
@@ -27,6 +28,14 @@ function getTodayDateKey() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function inferMealTiming() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 11) return "breakfast";
+  if (hour >= 11 && hour < 17) return "lunch";
+  if (hour >= 17 && hour < 23) return "dinner";
+  return "snack";
 }
 
 export default function NutritionHomePage({
@@ -123,6 +132,73 @@ export default function NutritionHomePage({
       }),
     [bodyWeightKg, mealsToday, totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
   );
+  const caloriesRemaining = useMemo(
+    () => {
+      const target = Number(tdee);
+      const consumed = Number(totalsToday.calories);
+      if (!Number.isFinite(target) || target <= 0) return 0;
+      if (!Number.isFinite(consumed) || consumed < 0) return Math.round(target);
+      return Math.max(0, Math.round(target - consumed));
+    },
+    [tdee, totalsToday.calories]
+  );
+  const mealTiming = useMemo(() => inferMealTiming(), []);
+  const dailyStatus = useMemo(
+    () => {
+      if (!Array.isArray(mealsToday) || mealsToday.length === 0) return null;
+
+      const proteinTarget = Number(proteinAnalysis?.proteinTarget || 0);
+      const proteinConsumed = Number(proteinAnalysis?.proteinConsumed || 0);
+
+      return {
+        caloriesRemaining,
+        proteinRemaining:
+          proteinTarget > 0 ? Math.max(0, proteinTarget - proteinConsumed) : 0,
+        vegetableServings: Number(vegetableAnalysis?.servings || 0),
+        macroBalance: {
+          protein: macroAnalysis?.protein?.status === "good" ? "ok" : macroAnalysis?.protein?.status,
+          carbs: macroAnalysis?.carbs?.status === "good" ? "ok" : macroAnalysis?.carbs?.status,
+          fats: macroAnalysis?.fats?.status === "good" ? "ok" : macroAnalysis?.fats?.status,
+        },
+        mealTiming,
+      };
+    },
+    [
+      mealsToday,
+      caloriesRemaining,
+      macroAnalysis.carbs?.status,
+      macroAnalysis.fats?.status,
+      macroAnalysis.protein?.status,
+      mealTiming,
+      proteinAnalysis.proteinConsumed,
+      proteinAnalysis.proteinTarget,
+      vegetableAnalysis.servings,
+    ]
+  );
+  const canShowAdaptiveSuggestions = useMemo(() => {
+    if (!dailyStatus) return false;
+
+    const hasMeaningfulDailyData =
+      totalsToday.calories > 0 ||
+      totalsToday.protein > 0 ||
+      vegetableAnalysis.servings > 0 ||
+      proteinAnalysis.proteinTarget > 0;
+
+    return mealsToday.length > 0 && hasMeaningfulDailyData;
+  }, [
+    dailyStatus,
+    mealsToday.length,
+    proteinAnalysis.proteinTarget,
+    totalsToday.calories,
+    totalsToday.protein,
+    vegetableAnalysis.servings,
+  ]);
+  const adaptiveOptions = useMemo(() => {
+    if (mealTiming === "dinner") {
+      return { mealType: "dinner" };
+    }
+    return {};
+  }, [mealTiming]);
 
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
@@ -180,6 +256,17 @@ export default function NutritionHomePage({
           proteinAnalysis={proteinAnalysis}
           vegetableAnalysis={vegetableAnalysis}
         />
+        {canShowAdaptiveSuggestions ? (
+          <AdaptiveMealSuggestions
+            title="Que comer para mejorar tu dia"
+            dailyStatus={dailyStatus}
+            options={adaptiveOptions}
+          />
+        ) : mealsToday.length > 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Aun no hay suficientes datos para sugerir mejoras.
+          </Typography>
+        ) : null}
         <NutritionAlerts alerts={alerts} />
       </Box>
 

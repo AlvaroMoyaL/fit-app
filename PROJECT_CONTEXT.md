@@ -339,6 +339,14 @@
       - nueva sección `work` (`Nutrición en el trabajo`) desde sidebar,
   - mejoras recientes de UX en nutrición:
     - `NutritionLog` ahora organiza el flujo en tabs internas (`Ingreso de alimentos`, `Recetas rápidas`, `Crear alimentos`, `Crear recetas`, `Comidas de hoy`),
+    - `Recetas rápidas` evolucionó a mini constructor:
+      - permite elegir una receta, ver sus ingredientes y personalizarlos antes de agregarlos al plato,
+      - cada receta puede editar gramos, quitar ingredientes y sumar otros desde el catálogo,
+      - incorpora chips de categoría para filtrar recetas (`Hamburguesas`, `Sandwich y wraps`, `Ensaladas y frescas`, `Desayunos`, `Platos rapidos`),
+    - se añadió soporte específico para `Smash burger con queso`:
+      - presente como alimento en `src/data/foods.js`,
+      - presente como receta rápida editable en `src/data/recipes.js`,
+      - reconocido por `src/utils/foodParser.js` con aliases como `smash burger`, `hamburguesa con queso`, `cheeseburger` y variantes con typo,
     - `Comidas de hoy` se mantiene visible de forma persistente aunque se cambie de tab de registro,
     - alimentos personalizados ahora soportan `brand` (marca) y edición desde la UI,
     - `customFoodsStorage` guarda y lee catálogo compartido global para reutilizar alimentos personalizados entre perfiles del mismo dispositivo,

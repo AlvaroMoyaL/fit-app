@@ -339,6 +339,18 @@ export const recipes = [
     ],
   },
   {
+    id: "smash_burger_queso",
+    name: "Smash burger con queso",
+    mealType: "dinner",
+    ingredients: [
+      { foodId: "pan_blanco", grams: 75 },
+      { foodId: "hamburguesa_congelada", grams: 100 },
+      { foodId: "queso", grams: 25 },
+      { foodId: "lechuga", grams: 20 },
+      { foodId: "tomate", grams: 30 },
+    ],
+  },
+  {
     id: "porotos_rienda_rapido",
     name: "Porotos con rienda rápido",
     mealType: "lunch",

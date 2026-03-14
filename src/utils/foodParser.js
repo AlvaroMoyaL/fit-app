@@ -51,6 +51,13 @@ export function parseFoodText(inputText, recipes, foodCatalog) {
   const aliases = {
     pan: "pan_blanco",
     huevos: "huevo",
+    "smash burger": "smash_burger_queso",
+    "smash burger con queso": "smash_burger_queso",
+    "smashburger con queso": "smash_burger_queso",
+    "hamburger con queso": "smash_burger_queso",
+    "hamburguesa con queso": "smash_burger_queso",
+    cheeseburger: "smash_burger_queso",
+    "smachet haburger con queso": "smash_burger_queso",
   };
   const withAlias = aliases[needle] || needle;
   const needleVariants = new Set([needle, withAlias, singularize(needle), singularize(withAlias)]);

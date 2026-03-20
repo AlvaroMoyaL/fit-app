@@ -315,6 +315,7 @@
   - Ajuste reciente de despliegue/tema:
     - el `service worker` se registra con versión por build para reducir cache viejo en producción,
     - la aplicación del tema (`light`/`dark`) ahora fija también `data-theme`, `colorScheme` y `meta theme-color`,
+    - `src/main.jsx` aplica el tema guardado antes del primer render para evitar que Chrome/producción arranque visualmente pegado en oscuro,
     - se añadió `-webkit-backdrop-filter` para acercar el render de Safari al look esperado.
   - Peso efectivo en nutrición y métricas:
     - el peso actual usado por KPI/cálculos ya no depende solo del perfil base; toma el último `weight` válido desde `metricsLog` cuando existe.

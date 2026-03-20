@@ -17,13 +17,16 @@ export default function NutritionSectionNav({
       sx={{
         display: "grid",
         gap: 1.2,
-        p: { xs: 1, md: 1.1 },
-        borderRadius: 3.5,
+        p: { xs: 0.95, md: 1.1 },
+        borderRadius: { xs: 3, md: 3.5 },
         border: "1px solid",
         borderColor: "divider",
         bgcolor: "rgba(255,255,255,0.74)",
         boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
         backdropFilter: "blur(14px)",
+        position: { xs: "sticky", md: "static" },
+        top: { xs: 10, md: "auto" },
+        zIndex: { xs: 8, md: "auto" },
       }}
     >
       <Box
@@ -47,13 +50,16 @@ export default function NutritionSectionNav({
       </Box>
       <Box
         sx={{
-          display: "grid",
+          display: { xs: "flex", sm: "grid" },
           gridTemplateColumns: {
-            xs: "1fr",
             sm: "repeat(2, minmax(0, 1fr))",
             md: "repeat(4, minmax(0, 1fr))",
           },
           gap: 1,
+          overflowX: { xs: "auto", sm: "visible" },
+          pb: { xs: 0.2, sm: 0 },
+          scrollbarWidth: "none",
+          "&::-webkit-scrollbar": { display: "none" },
         }}
       >
         {SECTION_ITEMS.map((item) => {
@@ -66,12 +72,15 @@ export default function NutritionSectionNav({
               color={isActive ? "primary" : "inherit"}
               onClick={() => onChangeSection && onChangeSection(item.key)}
               sx={{
+                flex: { xs: "0 0 auto", sm: "1 1 auto" },
+                minWidth: { xs: 148, sm: 0 },
                 minHeight: 52,
                 px: 1.5,
                 py: 1.1,
                 borderRadius: 3,
                 justifyContent: "flex-start",
                 textAlign: "left",
+                whiteSpace: { xs: "nowrap", sm: "normal" },
                 textTransform: "none",
                 fontWeight: 700,
                 lineHeight: 1.2,

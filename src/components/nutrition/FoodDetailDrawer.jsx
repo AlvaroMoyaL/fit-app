@@ -7,6 +7,8 @@ import {
   Drawer,
   Stack,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 
 function mealTypeLabel(type) {
@@ -33,10 +35,23 @@ function num(value, digits = 1) {
 }
 
 export default function FoodDetailDrawer({ open, onClose, meal }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: { xs: "100vw", sm: 390 }, p: 2.2, display: "grid", gap: 1.3 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Drawer
+      anchor={isMobile ? "bottom" : "right"}
+      open={open}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: { xs: "100%", sm: 390 },
+          maxHeight: { xs: "82vh", sm: "100%" },
+        },
+      }}
+    >
+      <Box sx={{ width: "100%", p: { xs: 1.6, sm: 2.2 }, display: "grid", gap: 1.3 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" useFlexGap flexWrap="wrap" gap={1}>
           <Typography variant="h6">Detalle de alimento</Typography>
           <Button size="small" onClick={onClose}>
             Cerrar
@@ -49,7 +64,7 @@ export default function FoodDetailDrawer({ open, onClose, meal }) {
           </Typography>
         ) : (
           <>
-            <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
+            <Typography variant="h5" sx={{ lineHeight: 1.2, fontSize: { xs: "1.3rem", sm: "1.5rem" } }}>
               {meal.name}
               {meal?.brand ? ` · ${meal.brand}` : ""}
             </Typography>

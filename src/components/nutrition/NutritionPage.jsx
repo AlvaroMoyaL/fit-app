@@ -325,12 +325,12 @@ export default function NutritionPage({
   };
   const sectionStackSx = {
     display: "grid",
-    gap: 2.25,
+    gap: { xs: 1.5, sm: 2.25 },
   };
   const sectionHeaderSx = {
     display: "grid",
-    gap: 1.4,
-    p: { xs: 1.5, sm: 1.9, md: 2.3 },
+    gap: { xs: 1.1, sm: 1.4 },
+    p: { xs: 1.3, sm: 1.9, md: 2.3 },
     border: "1px solid",
     borderColor: "divider",
     borderRadius: 4,
@@ -340,9 +340,39 @@ export default function NutritionPage({
     boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
   };
   const tabsContainerSx = {
-    px: 0.55,
-    py: 0.7,
+    px: { xs: 0.35, sm: 0.55 },
+    py: { xs: 0.45, sm: 0.7 },
     ...surfaceSx,
+  };
+  const heroMetricsRailSx = {
+    display: { xs: "flex", sm: "grid" },
+    gridTemplateColumns: {
+      sm: "repeat(2, minmax(0, 1fr))",
+      md: "repeat(3, minmax(0, 1fr))",
+      xl: "repeat(5, minmax(0, 1fr))",
+    },
+    gap: 1.5,
+    overflowX: { xs: "auto", sm: "visible" },
+    pb: { xs: 0.3, sm: 0 },
+    scrollSnapType: { xs: "x proximity", sm: "none" },
+    scrollbarWidth: "none",
+    "&::-webkit-scrollbar": {
+      display: "none",
+    },
+    "& > *": {
+      minWidth: { xs: 212, sm: 0 },
+      flex: { xs: "0 0 76%", sm: "1 1 auto" },
+      scrollSnapAlign: { xs: "start", sm: "none" },
+    },
+  };
+  const compactStatusTabsSx = {
+    "& .MuiTab-root": {
+      minHeight: { xs: 42, sm: 44 },
+      minWidth: "auto",
+      px: { xs: 1.05, sm: 1.35 },
+      py: 0.6,
+      fontSize: { xs: "0.82rem", sm: "0.9rem" },
+    },
   };
   const [meals, setMeals] = useState([]);
   const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
@@ -679,7 +709,7 @@ export default function NutritionPage({
   };
 
   return (
-    <Box className="nutrition-page-content" sx={{ ...sectionStackSx, pb: 1 }}>
+    <Box className="nutrition-page-content" sx={{ ...sectionStackSx, pb: { xs: 0.4, sm: 1 } }}>
       <Box sx={sectionHeaderSx}>
         <Typography
           variant="overline"
@@ -724,18 +754,7 @@ export default function NutritionPage({
             sx={{ display: { xs: "none", sm: "inline-flex" } }}
           />
         </Box>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              md: "repeat(3, minmax(0, 1fr))",
-              xl: "repeat(5, minmax(0, 1fr))",
-            },
-            gap: 1.5,
-          }}
-        >
+        <Box sx={heroMetricsRailSx}>
           <HeroMetricCard
             label="Calorías"
             valueText={`${Math.round(totalsToday.calories)} / ${Math.round(macroTargets.calories || 0)}`}
@@ -846,6 +865,7 @@ export default function NutritionPage({
               onChange={(_, value) => setDailyStatusTab(value)}
               variant="scrollable"
               allowScrollButtonsMobile
+              sx={compactStatusTabsSx}
             >
               <Tab label={tabLabelDot("primary.main", "Resumen")} />
               <Tab label={tabLabelDot("warning.main", "Balance y proyección")} />

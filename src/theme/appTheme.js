@@ -4,6 +4,8 @@ import { getThemeTokens } from "./themeTokens";
 export function createAppTheme(mode = "light") {
   const colors = getThemeTokens(mode);
   const radius = 12;
+  const mobileQuery = "@media (max-width:900px)";
+  const narrowQuery = "@media (max-width:600px)";
 
   return createTheme({
     shape: {
@@ -62,6 +64,17 @@ export function createAppTheme(mode = "light") {
             WebkitFontSmoothing: "antialiased",
             MozOsxFontSmoothing: "grayscale",
           },
+          "input, select, textarea, .MuiInputBase-input, .MuiSelect-select": {
+            fontSize: "0.96rem",
+          },
+          [mobileQuery]: {
+            "input, select, textarea, .MuiInputBase-input, .MuiSelect-select": {
+              fontSize: "16px !important",
+            },
+            ".MuiAutocomplete-popper .MuiAutocomplete-option, .MuiMenuItem-root": {
+              fontSize: "0.98rem",
+            },
+          },
         },
       },
       MuiPaper: {
@@ -75,6 +88,7 @@ export function createAppTheme(mode = "light") {
               mode === "dark"
                 ? "0 10px 30px rgba(0, 0, 0, 0.24)"
                 : "0 10px 24px rgba(20, 24, 38, 0.05)",
+            backgroundImage: "none",
           },
         },
       },
@@ -102,6 +116,12 @@ export function createAppTheme(mode = "light") {
             "&:last-child": {
               paddingBottom: 18,
             },
+            [mobileQuery]: {
+              padding: 14,
+              "&:last-child": {
+                paddingBottom: 14,
+              },
+            },
           },
         },
       },
@@ -112,11 +132,15 @@ export function createAppTheme(mode = "light") {
         styleOverrides: {
           root: {
             borderRadius: 10,
-            minHeight: 38,
+            minHeight: 40,
             paddingInline: 14,
             transition: "background-color 160ms ease, border-color 160ms ease, transform 120ms ease",
             "&:active": {
               transform: "translateY(1px)",
+            },
+            [mobileQuery]: {
+              minHeight: 44,
+              paddingInline: 16,
             },
           },
           containedPrimary: {
@@ -157,7 +181,22 @@ export function createAppTheme(mode = "light") {
           root: {
             borderRadius: 10,
             backgroundColor: mode === "dark" ? alpha("#0f172a", 0.45) : "#fff",
+            minHeight: 42,
             transition: "box-shadow 140ms ease, border-color 140ms ease",
+            "& .MuiInputBase-input": {
+              fontSize: "0.96rem",
+              paddingBlock: 10,
+              [mobileQuery]: {
+                fontSize: "16px",
+                paddingBlock: 12,
+              },
+            },
+            "& .MuiSelect-select": {
+              fontSize: "0.96rem",
+              [mobileQuery]: {
+                fontSize: "16px",
+              },
+            },
             "& .MuiOutlinedInput-notchedOutline": {
               borderColor: mode === "dark" ? alpha("#64748b", 0.6) : alpha("#8b95a7", 0.42),
             },
@@ -174,6 +213,15 @@ export function createAppTheme(mode = "light") {
           },
         },
       },
+      MuiSelect: {
+        styleOverrides: {
+          select: {
+            display: "flex",
+            alignItems: "center",
+            minHeight: "1.5em",
+          },
+        },
+      },
       MuiInputLabel: {
         styleOverrides: {
           root: {
@@ -186,28 +234,137 @@ export function createAppTheme(mode = "light") {
           root: {
             minHeight: 42,
             borderBottom: `1px solid ${alpha(colors.border, 0.72)}`,
+            [mobileQuery]: {
+              minHeight: 40,
+            },
           },
           indicator: {
             height: 3,
             borderRadius: 99,
             backgroundColor: colors.primary,
           },
+          scrollButtons: {
+            color: colors.textMuted,
+            "&.Mui-disabled": {
+              opacity: 0.24,
+            },
+          },
         },
       },
       MuiTab: {
         styleOverrides: {
           root: {
-            minHeight: 42,
-            borderRadius: 8,
+            minHeight: 40,
+            borderRadius: 10,
             marginRight: 6,
+            paddingInline: 14,
             color: colors.textMuted,
             fontWeight: 700,
+            fontSize: "0.92rem",
             "&.Mui-selected": {
               color: mode === "dark" ? colors.textMain : colors.primaryDark,
               backgroundColor: alpha(colors.primary, 0.14),
             },
             "&:hover": {
               backgroundColor: alpha(colors.primary, 0.08),
+            },
+            [mobileQuery]: {
+              minHeight: 44,
+              paddingInline: 12,
+              fontSize: "0.9rem",
+            },
+          },
+        },
+      },
+      MuiAutocomplete: {
+        styleOverrides: {
+          inputRoot: {
+            "& .MuiInputBase-input": {
+              minWidth: 0,
+            },
+          },
+          paper: {
+            marginTop: 6,
+            borderRadius: 14,
+          },
+          listbox: {
+            padding: 6,
+            "& .MuiAutocomplete-option": {
+              borderRadius: 10,
+              minHeight: 42,
+              alignItems: "flex-start",
+              [mobileQuery]: {
+                minHeight: 48,
+                fontSize: "0.98rem",
+                paddingTop: 10,
+                paddingBottom: 10,
+              },
+            },
+          },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: {
+            maxHeight: "min(68vh, 420px)",
+            marginTop: 6,
+            borderRadius: 14,
+          },
+          list: {
+            padding: 6,
+          },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: {
+          root: {
+            fontSize: "0.95rem",
+            minHeight: 42,
+            alignItems: "flex-start",
+            whiteSpace: "normal",
+            lineHeight: 1.35,
+            [mobileQuery]: {
+              minHeight: 48,
+              fontSize: "0.98rem",
+              paddingTop: 10,
+              paddingBottom: 10,
+            },
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            maxWidth: "100%",
+            backgroundImage: "none",
+            "&.MuiDrawer-paperAnchorRight": {
+              width: "min(100vw, 440px)",
+              borderRadius: "22px 0 0 22px",
+            },
+            "&.MuiDrawer-paperAnchorBottom": {
+              borderRadius: "22px 22px 0 0",
+              maxHeight: "90vh",
+            },
+            [narrowQuery]: {
+              "&.MuiDrawer-paperAnchorRight": {
+                width: "100vw",
+                borderRadius: "22px 22px 0 0",
+              },
+              "&.MuiDrawer-paperAnchorBottom": {
+                maxHeight: "92vh",
+              },
+            },
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            width: "min(100vw, 720px)",
+            maxWidth: "calc(100vw - 24px)",
+            [narrowQuery]: {
+              margin: 12,
+              borderRadius: 18,
             },
           },
         },

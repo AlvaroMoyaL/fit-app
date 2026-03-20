@@ -30,7 +30,7 @@ function tabLabelDot(color, text) {
 export default function NutritionTools({ profileId, onMealParsed }) {
   const [tab, setTab] = useState(0);
   const panelSx = {
-    p: 1.2,
+    p: { xs: 1.1, sm: 1.2 },
     border: "1px solid",
     borderColor: "divider",
     borderRadius: 2,
@@ -47,18 +47,19 @@ export default function NutritionTools({ profileId, onMealParsed }) {
     bgcolor: "transparent",
   };
   const compactTabsSx = {
-    minHeight: 36,
+    minHeight: { xs: 40, sm: 36 },
     width: "100%",
     "& .MuiTab-root": {
-      minHeight: 36,
+      minHeight: { xs: 40, sm: 36 },
       minWidth: "auto",
-      px: 1.1,
-      py: 0.45,
-      fontSize: "0.82rem",
+      px: { xs: 1.15, sm: 1.1 },
+      py: { xs: 0.7, sm: 0.45 },
+      fontSize: { xs: "0.88rem", sm: "0.82rem" },
       mr: 0.45,
+      whiteSpace: "nowrap",
     },
     "& .MuiTabs-flexContainer": {
-      gap: 0.3,
+      gap: 0.4,
     },
   };
   const contentFrameSx = {

@@ -7,6 +7,8 @@ import {
   Drawer,
   Stack,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import {
   analizarProgresoPeso,
@@ -28,6 +30,8 @@ export default function AdaptiveInsightDrawer({
   currentTargetCalories = 0,
   focusSection = "progreso",
 }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const progress = analizarProgresoPeso({ calorieHistory, weightHistory });
   const stall = detectarEstancamientoPeso({ calorieHistory, weightHistory });
   const adjustment = calcularAjusteCalorico({ calorieHistory, weightHistory });
@@ -35,9 +39,19 @@ export default function AdaptiveInsightDrawer({
   const caloriePoints = Array.isArray(calorieHistory) ? calorieHistory.length : 0;
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: { xs: "100vw", sm: 430 }, p: 2.2, display: "grid", gap: 1.5 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Drawer
+      anchor={isMobile ? "bottom" : "right"}
+      open={open}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: { xs: "100%", sm: 430 },
+          maxHeight: { xs: "88vh", sm: "100%" },
+        },
+      }}
+    >
+      <Box sx={{ width: "100%", p: { xs: 1.6, sm: 2.2 }, display: "grid", gap: 1.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" useFlexGap flexWrap="wrap" gap={1}>
           <Typography variant="h6">Detalle Adaptativo</Typography>
           <Button size="small" onClick={onClose}>
             Cerrar
@@ -49,7 +63,7 @@ export default function AdaptiveInsightDrawer({
           sx={{
             display: "grid",
             gap: 0.6,
-            p: 1,
+            p: { xs: 1.1, sm: 1 },
             borderRadius: 1,
             border: "1px solid",
             borderColor: focusSection === "progreso" ? "primary.main" : "divider",
@@ -88,7 +102,7 @@ export default function AdaptiveInsightDrawer({
           sx={{
             display: "grid",
             gap: 0.6,
-            p: 1,
+            p: { xs: 1.1, sm: 1 },
             borderRadius: 1,
             border: "1px solid",
             borderColor: focusSection === "estancamiento" ? "primary.main" : "divider",
@@ -129,7 +143,7 @@ export default function AdaptiveInsightDrawer({
           sx={{
             display: "grid",
             gap: 0.6,
-            p: 1,
+            p: { xs: 1.1, sm: 1 },
             borderRadius: 1,
             border: "1px solid",
             borderColor: focusSection === "ajuste" ? "primary.main" : "divider",

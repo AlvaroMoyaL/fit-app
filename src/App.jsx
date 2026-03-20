@@ -4330,9 +4330,16 @@ export default function App({ themeMode = "light", onToggleTheme }) {
               renameProfileName={renameProfileName}
               onChangeRenameProfileName={setRenameProfileName}
               activeTab={sidebarTab}
-              onChangeTab={setSidebarTab}
+              onChangeTab={(nextTab) => {
+                setSidebarTab(nextTab);
+                setMobileMenuOpen(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
               nutritionSection={nutritionSection}
-              onChangeNutritionSection={setNutritionSection}
+              onChangeNutritionSection={(nextSection) => {
+                setNutritionSection(nextSection);
+                setMobileMenuOpen(false);
+              }}
               profile={effectiveProfile}
               metrics={metrics}
               level={level}

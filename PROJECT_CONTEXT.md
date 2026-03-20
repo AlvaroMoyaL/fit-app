@@ -312,6 +312,13 @@
     - `NutritionSectionNav` se compacta en móvil con labels cortos,
     - hero de `Nutrición` se compacta en `xs` y recupera KPIs secundarios en un bloque plegable `KPIs de apoyo`,
     - `Plan` y `Stats` reducen densidad vertical en móvil (heroes, KPIs y cards más compactos).
+  - Ajuste responsive/visual posterior:
+    - `mobile-nav` pasó a rail horizontal scrollable con targets más grandes y tipografía legible para evitar zoom en teléfonos estrechos,
+    - el menú móvil reutiliza `Sidebar` como sheet inferior con grid de tabs en 2 columnas y ahora se cierra automáticamente al cambiar de sección,
+    - `NutritionSectionNav` quedó sticky en móvil y usa desplazamiento horizontal para reducir scroll de retorno al hero,
+    - el hero de `Nutrición` muestra KPIs principales en rail horizontal en `xs`, priorizando lectura rápida sin apilar tantas cards,
+    - `AdaptiveInsightDrawer` y `FoodDetailDrawer` usan comportamiento de bottom sheet en móvil,
+    - tema MUI y CSS global elevan inputs/selects/menús a tamaños legibles en móvil (`16px` en campos) y mejoran alturas, overflow y padding de modales/drawers custom.
   - Ajuste reciente de despliegue/tema:
     - el `service worker` se registra con versión por build para reducir cache viejo en producción,
     - la aplicación del tema (`light`/`dark`) ahora fija también `data-theme`, `colorScheme` y `meta theme-color`,

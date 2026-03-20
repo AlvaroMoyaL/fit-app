@@ -3,9 +3,11 @@ import { getThemeTokens } from "./themeTokens";
 
 export function createAppTheme(mode = "light") {
   const colors = getThemeTokens(mode);
-  const radius = 12;
+  const radius = 14;
   const mobileQuery = "@media (max-width:900px)";
   const narrowQuery = "@media (max-width:600px)";
+  const surfaceInset = colors.highlightInset;
+  const buttonInset = `inset 0 1px 0 ${alpha("#ffffff", mode === "dark" ? 0.08 : 0.2)}`;
 
   return createTheme({
     shape: {
@@ -28,10 +30,22 @@ export function createAppTheme(mode = "light") {
       primary: {
         main: colors.primary,
         dark: colors.primaryDark,
-        light: mode === "dark" ? "#6ee7b7" : "#2f948b",
+        light: mode === "dark" ? "#a6bac1" : "#6f848d",
       },
       secondary: {
-        main: mode === "dark" ? "#cbd5e1" : "#334155",
+        main: mode === "dark" ? "#b4c0cc" : "#687587",
+      },
+      success: {
+        main: mode === "dark" ? "#8ea89e" : "#6d877d",
+      },
+      info: {
+        main: mode === "dark" ? "#8ea3b8" : "#72879a",
+      },
+      warning: {
+        main: mode === "dark" ? "#b09a7a" : "#8f7956",
+      },
+      error: {
+        main: mode === "dark" ? "#b09292" : "#8c6f6f",
       },
       background: {
         default: colors.bg,
@@ -58,6 +72,14 @@ export function createAppTheme(mode = "light") {
             "--fit-accent-soft": alpha(colors.primary, 0.12),
             "--fit-accent-strong": alpha(colors.primary, 0.22),
             "--fit-text-muted": colors.textMuted,
+            "--fit-surface-top": colors.surfaceTop,
+            "--fit-surface-bottom": colors.surfaceBottom,
+            "--fit-surface-raised-top": colors.surfaceRaisedTop,
+            "--fit-surface-raised-bottom": colors.surfaceRaisedBottom,
+            "--fit-shadow-soft": colors.shadowSoft,
+            "--fit-shadow-medium": colors.shadowMedium,
+            "--fit-shadow-strong": colors.shadowStrong,
+            "--fit-highlight-inset": colors.highlightInset,
             background: colors.bodyBackground,
             color: colors.textMain,
             textRendering: "optimizeLegibility",
@@ -84,11 +106,8 @@ export function createAppTheme(mode = "light") {
             boxSizing: "border-box",
             borderRadius: radius,
             border: `1px solid ${alpha(colors.border, 0.8)}`,
-            boxShadow:
-              mode === "dark"
-                ? "0 10px 30px rgba(0, 0, 0, 0.24)"
-                : "0 10px 24px rgba(20, 24, 38, 0.05)",
-            backgroundImage: "none",
+            backgroundImage: `linear-gradient(180deg, ${colors.surfaceTop} 0%, ${colors.surfaceBottom} 100%)`,
+            boxShadow: `${colors.shadowSoft}, ${surfaceInset}`,
           },
         },
       },
@@ -100,10 +119,8 @@ export function createAppTheme(mode = "light") {
             overflow: "hidden",
             borderRadius: radius + 2,
             border: `1px solid ${alpha(colors.border, 0.82)}`,
-            boxShadow:
-              mode === "dark"
-                ? "0 12px 28px rgba(0, 0, 0, 0.28)"
-                : "0 10px 24px rgba(20, 24, 38, 0.06)",
+            backgroundImage: `linear-gradient(180deg, ${colors.surfaceRaisedTop} 0%, ${colors.surfaceRaisedBottom} 100%)`,
+            boxShadow: `${colors.shadowMedium}, ${surfaceInset}`,
           },
         },
       },
@@ -134,10 +151,8 @@ export function createAppTheme(mode = "light") {
             borderRadius: 10,
             minHeight: 40,
             paddingInline: 14,
-            transition: "background-color 160ms ease, border-color 160ms ease, transform 120ms ease",
-            "&:active": {
-              transform: "translateY(1px)",
-            },
+            transition:
+              "transform 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 140ms ease",
             [mobileQuery]: {
               minHeight: 44,
               paddingInline: 16,
@@ -145,11 +160,19 @@ export function createAppTheme(mode = "light") {
           },
           containedPrimary: {
             background: `linear-gradient(180deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)`,
+            boxShadow: `${
+              mode === "dark"
+                ? `0 14px 28px ${alpha(colors.primaryDark, 0.24)}`
+                : `0 14px 28px ${alpha(colors.primaryDark, 0.18)}`
+            }, ${buttonInset}`,
             "&:hover": {
-              background:
+              background: `linear-gradient(180deg, ${colors.primaryDark} 0%, ${colors.primaryDark} 100%)`,
+              transform: "translateY(-1px)",
+              boxShadow: `${
                 mode === "dark"
-                  ? "linear-gradient(180deg, #2dd4bf 0%, #0ea5a0 100%)"
-                  : "linear-gradient(180deg, #0d6c64 0%, #095952 100%)",
+                  ? `0 18px 34px ${alpha(colors.primaryDark, 0.28)}`
+                  : `0 18px 34px ${alpha(colors.primaryDark, 0.22)}`
+              }, ${buttonInset}`,
             },
             "&.Mui-disabled": {
               background: mode === "dark" ? "#4b5563" : "#95a5a6",
@@ -157,15 +180,21 @@ export function createAppTheme(mode = "light") {
             },
           },
           outlined: {
-            borderColor: alpha(colors.primary, 0.48),
+            borderColor: alpha(colors.primary, 0.26),
+            backgroundImage: `linear-gradient(180deg, ${alpha(colors.primary, 0.06)} 0%, ${alpha(
+              colors.primary,
+              0.02,
+            )} 100%)`,
+            boxShadow: surfaceInset,
             "&:hover": {
-              borderColor: colors.primary,
-              backgroundColor: alpha(colors.primary, 0.08),
+              borderColor: alpha(colors.primary, 0.36),
+              backgroundColor: alpha(colors.primary, 0.065),
+              boxShadow: `${colors.shadowSoft}, ${surfaceInset}`,
             },
           },
           text: {
             "&:hover": {
-              backgroundColor: alpha(colors.primary, 0.1),
+              backgroundColor: alpha(colors.textMain, 0.04),
             },
           },
         },
@@ -180,9 +209,14 @@ export function createAppTheme(mode = "light") {
         styleOverrides: {
           root: {
             borderRadius: 10,
-            backgroundColor: mode === "dark" ? alpha("#0f172a", 0.45) : "#fff",
+            backgroundColor: mode === "dark" ? alpha("#0f172a", 0.4) : alpha("#ffffff", 0.98),
+            backgroundImage:
+              mode === "dark"
+                ? `linear-gradient(180deg, ${alpha("#ffffff", 0.03)} 0%, ${alpha("#ffffff", 0.01)} 100%)`
+                : "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,252,0.96) 100%)",
             minHeight: 42,
-            transition: "box-shadow 140ms ease, border-color 140ms ease",
+            boxShadow: surfaceInset,
+            transition: "box-shadow 140ms ease, border-color 140ms ease, background-color 140ms ease",
             "& .MuiInputBase-input": {
               fontSize: "0.96rem",
               paddingBlock: 10,
@@ -198,17 +232,17 @@ export function createAppTheme(mode = "light") {
               },
             },
             "& .MuiOutlinedInput-notchedOutline": {
-              borderColor: mode === "dark" ? alpha("#64748b", 0.6) : alpha("#8b95a7", 0.42),
+              borderColor: mode === "dark" ? alpha("#64748b", 0.44) : alpha("#8b95a7", 0.28),
             },
             "&:hover .MuiOutlinedInput-notchedOutline": {
-              borderColor: alpha(colors.primary, 0.5),
+              borderColor: alpha(colors.primary, 0.34),
             },
             "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
               borderColor: colors.primary,
-              borderWidth: 2,
+              borderWidth: 1.5,
             },
             "&.Mui-focused": {
-              boxShadow: `0 0 0 3px ${alpha(colors.primary, 0.2)}`,
+              boxShadow: `0 0 0 3px ${alpha(colors.primary, 0.12)}`,
             },
           },
         },
@@ -261,12 +295,28 @@ export function createAppTheme(mode = "light") {
             color: colors.textMuted,
             fontWeight: 700,
             fontSize: "0.92rem",
+            border: `1px solid ${alpha(colors.border, 0.76)}`,
+            backgroundImage: `linear-gradient(180deg, ${alpha(colors.textMain, mode === "dark" ? 0.06 : 0.04)} 0%, ${alpha(
+              colors.textMain,
+              mode === "dark" ? 0.03 : 0.02,
+            )} 100%)`,
+            boxShadow: surfaceInset,
             "&.Mui-selected": {
               color: mode === "dark" ? colors.textMain : colors.primaryDark,
-              backgroundColor: alpha(colors.primary, 0.14),
+              backgroundImage: `linear-gradient(180deg, ${alpha(colors.primary, mode === "dark" ? 0.22 : 0.18)} 0%, ${alpha(
+                colors.primary,
+                mode === "dark" ? 0.12 : 0.08,
+              )} 100%)`,
+              borderColor: alpha(colors.primary, 0.22),
+              boxShadow: `${
+                mode === "dark"
+                  ? `0 10px 22px ${alpha(colors.primaryDark, 0.18)}`
+                  : `0 10px 22px ${alpha(colors.primaryDark, 0.12)}`
+              }, ${surfaceInset}`,
             },
             "&:hover": {
-              backgroundColor: alpha(colors.primary, 0.08),
+              backgroundColor: alpha(colors.textMain, mode === "dark" ? 0.08 : 0.05),
+              boxShadow: `${colors.shadowSoft}, ${surfaceInset}`,
             },
             [mobileQuery]: {
               minHeight: 44,
@@ -374,7 +424,7 @@ export function createAppTheme(mode = "light") {
           head: {
             fontWeight: 750,
             color: mode === "dark" ? "#e2e8f0" : "#1e293b",
-            backgroundColor: mode === "dark" ? "#1f2937" : "#f8fafc",
+            backgroundColor: mode === "dark" ? "#1b2430" : "#f5f7fa",
           },
         },
       },
@@ -388,7 +438,7 @@ export function createAppTheme(mode = "light") {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
+            borderRadius: 999,
             fontWeight: 650,
           },
         },

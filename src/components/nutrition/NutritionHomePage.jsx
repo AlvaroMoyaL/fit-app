@@ -7,6 +7,7 @@ import NutritionSectionNav from "./NutritionSectionNav";
 import NutritionAlerts from "./NutritionAlerts";
 import NutritionInsights from "./NutritionInsights";
 import AdaptiveMealSuggestions from "./AdaptiveMealSuggestions";
+import { nutritionHeroSx } from "./nutritionUi";
 import calculateDailyNutritionScore from "../../utils/dailyNutritionScore";
 import analyzeMacroBalance from "../../utils/macroAnalyzer";
 import analyzeProteinIntake from "../../utils/proteinAnalyzer";
@@ -203,18 +204,11 @@ export default function NutritionHomePage({
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
       <Box
-        sx={{
-          display: "grid",
+        sx={(theme) => ({
+          ...nutritionHeroSx(theme),
           gap: 1.4,
           p: { xs: 2.2, md: 2.8 },
-          border: "1px solid",
-          borderColor: "divider",
-          borderRadius: 4,
-          bgcolor: "background.paper",
-          backgroundImage:
-            "linear-gradient(140deg, rgba(15, 118, 110, 0.18) 0%, rgba(255,255,255,0) 42%), radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), rgba(255,255,255,0) 34%)",
-          boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
-        }}
+        })}
       >
         <Typography
           variant="overline"

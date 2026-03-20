@@ -84,11 +84,14 @@ export default function Plan({
       <div className="plan-head">
         <div className="plan-head-main">
           <p className="section-eyebrow">Entrenamiento semanal</p>
-          <h2 className="plan-title">Tu plan inicial</h2>
+          <h2 className="plan-title">Plan semanal</h2>
           <p className="plan-version">
             Version {appVersion} · build {appBuild}
           </p>
           {activeProfileName && <p className="plan-subtitle">{activeProfileName}</p>}
+          <p className="plan-lead">
+            Semana operativa, progreso acumulado y acceso directo a cada día.
+          </p>
           <div className="plan-head-meta">
             <span>
               <strong>{estimatedWeeklyXp}</strong>
@@ -97,6 +100,10 @@ export default function Plan({
             <span>
               <strong>{weeklyEarnedXp}</strong>
               <em>XP logrado</em>
+            </span>
+            <span>
+              <strong>{totalPossibleXp || 0}</strong>
+              <em>Capacidad total</em>
             </span>
           </div>
           {gifsLoading && <p className="note">Cargando gifs…</p>}

@@ -319,6 +319,13 @@
     - el hero de `Nutrición` muestra KPIs principales en rail horizontal en `xs`, priorizando lectura rápida sin apilar tantas cards,
     - `AdaptiveInsightDrawer` y `FoodDetailDrawer` usan comportamiento de bottom sheet en móvil,
     - tema MUI y CSS global elevan inputs/selects/menús a tamaños legibles en móvil (`16px` en campos) y mejoran alturas, overflow y padding de modales/drawers custom.
+  - Redirección visual posterior hacia look más profesional:
+    - la paleta base migró desde beige cálido a neutros más fríos (`slate/stone`) en `src/theme/themeTokens.js`,
+    - `Sidebar` se rehízo como panel de navegación más editorial: marca oscura, tabs con badge, helpers cortos y secciones internas con superficies homogéneas,
+    - `mobile-nav` ahora usa chips/badges abreviados para reforzar jerarquía visual y reducir la sensación de botones genéricos,
+    - `Perfil` e `Historial` recibieron heroes dedicados en `src/App.jsx` para unificar jerarquía con `Plan` y `Stats`,
+    - `Plan` y `Stats` adoptaron héroes oscuros consistentes, copys más ejecutivos y KPI cards visualmente alineadas,
+    - `collapsible`, cards raíz, botones secundarios y grids de métricas quedaron con un lenguaje visual más sobrio y coherente.
   - Ajuste reciente de despliegue/tema:
     - el `service worker` se registra con versión por build para reducir cache viejo en producción,
     - la aplicación del tema (`light`/`dark`) ahora fija también `data-theme`, `colorScheme` y `meta theme-color`,
@@ -430,6 +437,14 @@
 - Se definió que el ajuste de gasto energético en `Nutrición` usa métricas del día actual (sin fallback a días previos).
 - Se habilitó auto-sync en segundo plano (foco/online/visibilidad/intervalo) con indicador persistente de estado de sincronización en `Cuenta`.
 - Se consolidó una sub-vista específica “Nutrición en el trabajo” para concentrar herramientas de logística alimentaria laboral.
+- Se volvió persistente el estado de los bloques colapsables por pantalla, evitando que se reabran/cambien de forma errática tras rerenders.
+- Se redujo el scroll inicial en `Stats` dejando `Importar Garmin` y `Registrar métricas` cerrados por defecto, y mostrando `Estadísticas por tipo` cerrada en móvil.
+- El registro manual de métricas se compactó en una vista de campos clave + bloque de métricas avanzadas opcional, con historial reciente en tarjetas en vez de filas densas.
+- `ProfileForm` pasó a tener una cabecera de estado más editorial y el plan diario dejó de mostrar IDs/gifs técnicos en la lista principal de ejercicios para sentirse más producto y menos debug.
+- Se aplicó una segunda corrección visual de unificación: la paleta global se desaturó hacia azules/grises apagados y se eliminaron gradientes/teales intensos en botones, heroes y estados activos.
+- `Nutrición` dejó de depender de estilos aislados y ahora comparte helpers MUI para superficies, hero, tabs y navegación (`src/components/nutrition/nutritionUi.jsx`), alineándose mejor con `Perfil`, `Plan`, `Historial` y `Stats`.
+- El módulo nutricional bajó contraste decorativo: tabs en formato pill sobrio, KPI cards con estados más neutros y rail lateral sin look de “widget” separado.
+- Se añadió una tercera corrección visual para evitar que la UI quedara demasiado plana: ahora existen tokens compartidos de profundidad (gradientes suaves, sombras por nivel e inset highlights) aplicados de forma consistente a surfaces MUI, cards CSS, heroes, tabs, navegación móvil y estados activos.
 
 ## Pendientes Priorizados
 1. Refactor de `src/App.jsx` (extraer lógica a hooks/servicios por dominio: profiles, plan, sync, metrics).

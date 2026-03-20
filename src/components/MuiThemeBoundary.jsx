@@ -20,13 +20,13 @@ export default function MuiThemeBoundary({ mode = "light", children }) {
             maxWidth: "100%",
             boxSizing: "border-box",
             overflow: "hidden",
-            borderRadius: 14,
+            borderRadius: 18,
             border: `1px solid ${muiTheme.palette.divider}`,
             backgroundColor: muiTheme.palette.background.paper,
+            backgroundImage:
+              "linear-gradient(180deg, var(--fit-surface-raised-top, rgba(255,255,255,0.99)), var(--fit-surface-raised-bottom, rgba(241,246,250,0.95)))",
             boxShadow:
-              muiTheme.palette.mode === "dark"
-                ? "0 10px 28px rgba(0,0,0,0.28)"
-                : "0 8px 24px rgba(15,23,42,0.06)",
+              "var(--fit-shadow-soft, 0 10px 24px rgba(15,23,42,0.05)), var(--fit-highlight-inset, inset 0 1px 0 rgba(255,255,255,0.76))",
           },
           ".card > *, .rest-panel > *, .metrics > *, .metrics-log > *, .form-section > *": {
             maxWidth: "100%",
@@ -39,17 +39,12 @@ export default function MuiThemeBoundary({ mode = "light", children }) {
           },
           ".tab.active, .profile-item.active": {
             boxShadow:
-              muiTheme.palette.mode === "dark"
-                ? "0 0 0 2px rgba(52,211,153,0.3) inset"
-                : "0 0 0 2px rgba(15,118,110,0.18) inset",
+              "var(--fit-shadow-soft, 0 10px 24px rgba(15,23,42,0.05)), var(--fit-highlight-inset, inset 0 1px 0 rgba(255,255,255,0.76))",
           },
           "button, .tiny, .tab, .primary, .primary-btn": {
             borderRadius: 10,
             transition:
               "background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease",
-          },
-          "button:hover, .tiny:hover, .tab:hover": {
-            filter: "saturate(1.04)",
           },
           "input, select, textarea": {
             borderRadius: 10,
@@ -59,7 +54,10 @@ export default function MuiThemeBoundary({ mode = "light", children }) {
             borderRadius: 12,
             padding: "14px 12px",
             color: muiTheme.palette.text.secondary,
-            background: muiTheme.palette.mode === "dark" ? "rgba(255,255,255,0.02)" : "#fff",
+            background:
+              "linear-gradient(180deg, var(--fit-surface-top, rgba(255,255,255,0.98)), var(--fit-surface-bottom, rgba(245,248,251,0.94)))",
+            boxShadow:
+              "var(--fit-shadow-soft, 0 10px 24px rgba(15,23,42,0.05)), var(--fit-highlight-inset, inset 0 1px 0 rgba(255,255,255,0.76))",
           },
           ".primary-btn:disabled, button:disabled": {
             opacity: 0.62,

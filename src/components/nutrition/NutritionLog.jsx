@@ -30,6 +30,12 @@ import RecipeSelector from "./RecipeSelector";
 import QuickFoodInput from "./QuickFoodInput";
 import FoodDetailDrawer from "./FoodDetailDrawer";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
+import {
+  nutritionCompactTabsSx,
+  nutritionSurfaceSx,
+  nutritionTabLabelDot,
+  nutritionTabsRailSx,
+} from "./nutritionUi";
 
 function getTodayDateKey() {
   const now = new Date();
@@ -248,58 +254,13 @@ function getFoodIdentity(food) {
   return `${normalizeFoodIdentityPart(food?.name)}::${normalizeFoodIdentityPart(food?.brand)}`;
 }
 
-function tabLabelDot(color, text) {
-  return (
-    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
-      <Box
-        component="span"
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          bgcolor: color,
-          flex: "0 0 auto",
-        }}
-      />
-      <Box component="span">{text}</Box>
-    </Box>
-  );
-}
-
 export default function NutritionLog({ profileId, meals, onMealsChange, onDataChange }) {
-  const panelSx = {
+  const panelSx = (theme) => ({
+    ...nutritionSurfaceSx(theme),
     p: { xs: 1.2, sm: 1.5 },
-    border: "1px solid",
-    borderColor: "divider",
-    borderRadius: 2,
-    bgcolor: "background.paper",
-  };
-  const tabsPanelSx = {
-    p: 0,
-    width: "100%",
-    maxWidth: "100%",
-    alignSelf: "stretch",
-    boxSizing: "border-box",
-    border: "none",
-    borderRadius: 0,
-    bgcolor: "transparent",
-  };
-  const compactTabsSx = {
-    minHeight: { xs: 40, sm: 36 },
-    width: "100%",
-    "& .MuiTab-root": {
-      minHeight: { xs: 40, sm: 36 },
-      minWidth: "auto",
-      px: { xs: 1.15, sm: 1.1 },
-      py: { xs: 0.7, sm: 0.45 },
-      fontSize: { xs: "0.88rem", sm: "0.82rem" },
-      mr: 0.45,
-      whiteSpace: "nowrap",
-    },
-    "& .MuiTabs-flexContainer": {
-      gap: 0.4,
-    },
-  };
+  });
+  const tabsPanelSx = nutritionTabsRailSx;
+  const compactTabsSx = (theme) => nutritionCompactTabsSx(theme);
   const contentFrameSx = {
     width: "100%",
     maxWidth: "100%",
@@ -785,16 +746,16 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
           allowScrollButtonsMobile
           sx={compactTabsSx}
         >
-          <Tab label={tabLabelDot("primary.main", "Ingreso")} />
-          <Tab label={tabLabelDot("warning.main", "Rápidas")} />
-          <Tab label={tabLabelDot("success.main", "Alimentos")} />
-          <Tab label={tabLabelDot("secondary.main", "Recetas")} />
-          <Tab label={tabLabelDot("info.main", "Hoy")} />
+          <Tab label={nutritionTabLabelDot("primary.main", "Ingreso")} />
+          <Tab label={nutritionTabLabelDot("warning.main", "Rápidas")} />
+          <Tab label={nutritionTabLabelDot("success.main", "Alimentos")} />
+          <Tab label={nutritionTabLabelDot("secondary.main", "Recetas")} />
+          <Tab label={nutritionTabLabelDot("info.main", "Hoy")} />
         </Tabs>
       </Box>
 
       {registerTab === 1 && (
-        <Box sx={{ ...panelSx, ...contentFrameSx, display: "grid", gap: 2 }}>
+        <Box sx={(theme) => ({ ...panelSx(theme), ...contentFrameSx, display: "grid", gap: 2 })}>
           <RecipeSelector onAddFoods={addFoodsToLog} recipes={recipeOptions} catalog={foodOptions} />
           <QuickFoodInput
             onAddFoods={onQuickAddFoods}
@@ -805,7 +766,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       )}
 
       {registerTab === 3 && (
-        <Box sx={{ ...panelSx, ...contentFrameSx }}>
+        <Box sx={(theme) => ({ ...panelSx(theme), ...contentFrameSx })}>
         <Button
           type="button"
           variant="text"
@@ -818,7 +779,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       )}
 
       {registerTab === 3 && showCustomRecipeForm && (
-        <Box sx={{ ...panelSx, ...contentFrameSx, display: "grid", gap: 1.5 }}>
+        <Box sx={(theme) => ({ ...panelSx(theme), ...contentFrameSx, display: "grid", gap: 1.5 })}>
           <Typography variant="subtitle1">Nueva receta personalizada</Typography>
           <TextField
             label="Nombre de la receta"
@@ -869,7 +830,11 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         </Box>
       )}
       {(registerTab === 0 || registerTab === 2) && (
-      <Box component="form" onSubmit={saveDraftMeal} sx={{ ...panelSx, ...contentFrameSx, display: "grid", gap: 2 }}>
+      <Box
+        component="form"
+        onSubmit={saveDraftMeal}
+        sx={(theme) => ({ ...panelSx(theme), ...contentFrameSx, display: "grid", gap: 2 })}
+      >
         {registerTab === 0 && (
         <>
         <FormControl fullWidth>
@@ -994,7 +959,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         )}
 
         {showCustomFoodForm && (
-          <Box sx={{ ...panelSx, display: "grid", gap: 1.5, bgcolor: "transparent" }}>
+          <Box sx={(theme) => ({ ...panelSx(theme), display: "grid", gap: 1.5, bgcolor: "transparent" })}>
             <Typography variant="subtitle2">
               {editingCustomFoodIdentity ? "Editando alimento personalizado" : "Nuevo alimento personalizado"}
             </Typography>

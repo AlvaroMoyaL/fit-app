@@ -47,6 +47,19 @@ export default function DayCard({
     if (isCore) return "Core";
     return "Fuerza";
   };
+  const prescriptionLabel = (ex) => {
+    if (ex.prescription?.type === "reps") {
+      return lang === "en"
+        ? `${ex.prescription.sets}x${ex.prescription.reps} • ${ex.prescription.restSec}s rest`
+        : `${ex.prescription.sets}x${ex.prescription.reps} • ${ex.prescription.restSec}s descanso`;
+    }
+    if (ex.prescription?.type === "time") {
+      return lang === "en"
+        ? `${ex.prescription.workSec}s work • ${ex.prescription.restSec}s rest`
+        : `${ex.prescription.workSec}s trabajo • ${ex.prescription.restSec}s descanso`;
+    }
+    return lang === "en" ? "Custom prescription" : "Prescripción personalizada";
+  };
 
   const isCoreExercise = (ex) => {
     const body = (ex.bodyPart || "").toLowerCase();
@@ -85,18 +98,10 @@ export default function DayCard({
       <div className="ex-info">
         <span className="ex-name">{getName(ex)}</span>
         <span className="ex-meta">
-          {ex.target} • {ex.equipment}
+          {(ex.target || (lang === "en" ? "General" : "General"))} •{" "}
+          {translateEquipment(ex.equipment || (lang === "en" ? "Bodyweight" : "Sin equipo"))}
         </span>
-        <span className="ex-meta">
-          {ex.prescription?.type === "reps" &&
-            `${ex.prescription.sets}x${ex.prescription.reps} • ${ex.prescription.restSec}s descanso`}
-          {ex.prescription?.type === "time" &&
-            `${ex.prescription.workSec}s trabajo • ${ex.prescription.restSec}s descanso`}
-        </span>
-        <span className="ex-meta">
-          ID ex: {ex.id || "—"} • ID gif: {ex.gifResolvedId || "—"} • fuente:{" "}
-          {ex.gifSource || "—"}
-        </span>
+        <span className="ex-meta">{prescriptionLabel(ex)}</span>
         <span className={`type-pill ${typeLabel(ex).toLowerCase()}`}>
           {typeLabel(ex)}
         </span>

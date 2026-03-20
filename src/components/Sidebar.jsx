@@ -28,8 +28,6 @@ export default function Sidebar({
   onChangeRenameProfileName,
   activeTab,
   onChangeTab,
-  nutritionSection,
-  onChangeNutritionSection,
   profile,
   metrics,
   level,
@@ -99,6 +97,33 @@ export default function Sidebar({
     gifStatus && gifStatus.state !== "downloading" && gifStatus.state !== "paused";
   const gifDownloadLabel =
     gifStatus?.state === "ready" ? "Re-descargar gifs" : "Descargar gifs";
+  const navItems = [
+    { key: "profile", label: "Perfil", short: "PF", helper: "Base y objetivos" },
+    { key: "plan", label: "Plan", short: "PL", helper: "Semana activa" },
+    { key: "history", label: "Historial", short: "HI", helper: "Registro y adherencia" },
+    { key: "stats", label: "Métricas", short: "MT", helper: "Salud y tendencias" },
+    { key: "nutrition", label: "Nutrición", short: "NU", helper: "Balance diario" },
+  ];
+  const brandTitle =
+    activeTab === "nutrition"
+      ? "Nutrición diaria"
+      : activeTab === "stats"
+      ? "Rendimiento y salud"
+      : activeTab === "history"
+      ? "Historial y adherencia"
+      : activeTab === "plan"
+      ? "Plan semanal"
+      : "Perfil y objetivos";
+  const brandLead =
+    activeTab === "nutrition"
+      ? "Registro, balance y decisiones del día."
+      : activeTab === "stats"
+      ? "Métricas clave, tendencias y carga."
+      : activeTab === "history"
+      ? "Consistencia, volumen y semanas previas."
+      : activeTab === "plan"
+      ? "Ejecución semanal y progreso actual."
+      : "Datos base para personalizar el sistema.";
 
   const trend = (key) => {
     if (!lastMetric || !prevMetric) return "";
@@ -249,56 +274,28 @@ export default function Sidebar({
         <div className="sidebar-brand-mark">FA</div>
         <div className="sidebar-brand-copy">
           <span>Fit App</span>
-          <strong>
-            {activeTab === "nutrition"
-              ? "Fuel and planning"
-              : activeTab === "stats"
-              ? "Performance lab"
-              : activeTab === "history"
-              ? "Training archive"
-              : activeTab === "plan"
-              ? "Weekly control room"
-              : "Profile and setup"}
-          </strong>
+          <strong>{brandTitle}</strong>
+          <small>{brandLead}</small>
         </div>
       </div>
       <div className="sidebar-section">
         <div className="sidebar-tabs">
-          <button
-            type="button"
-            className={`tab ${activeTab === "profile" ? "active" : ""}`}
-            onClick={() => onChangeTab("profile")}
-          >
-            Perfil
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "plan" ? "active" : ""}`}
-            onClick={() => onChangeTab("plan")}
-          >
-            Plan
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "history" ? "active" : ""}`}
-            onClick={() => onChangeTab("history")}
-          >
-            Historial
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "stats" ? "active" : ""}`}
-            onClick={() => onChangeTab("stats")}
-          >
-            Stats
-          </button>
-          <button
-            type="button"
-            className={`tab ${activeTab === "nutrition" ? "active" : ""}`}
-            onClick={() => onChangeTab("nutrition")}
-          >
-            Nutrición
-          </button>
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`tab ${activeTab === item.key ? "active" : ""}`}
+              onClick={() => onChangeTab(item.key)}
+            >
+              <span className="tab-icon" aria-hidden="true">
+                {item.short}
+              </span>
+              <span className="tab-copy">
+                <strong>{item.label}</strong>
+                <small>{item.helper}</small>
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -388,6 +385,10 @@ export default function Sidebar({
                 <strong>
                   {completedCount} / {totalExercises}
                 </strong>
+              </div>
+              <div>
+                <span>Capacidad XP</span>
+                <strong>{totalPossibleXp || 0}</strong>
               </div>
             </div>
           </>

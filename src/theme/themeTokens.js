@@ -1,39 +1,55 @@
 export const LIGHT_THEME_TOKENS = {
-  primary: "#0f766e",
-  primaryDark: "#0b5f58",
-  bg: "#f4f1eb",
-  paper: "#ffffff",
-  border: "#ddd4c9",
-  textMain: "#1f2937",
-  textMuted: "#5b6472",
+  primary: "#556b74",
+  primaryDark: "#43575f",
+  bg: "#f3f5f7",
+  paper: "#fbfcfd",
+  border: "#d8dee5",
+  textMain: "#172331",
+  textMuted: "#687587",
   shellBg: "transparent",
-  panelBg: "rgba(255, 255, 255, 0.78)",
-  softBg: "rgba(15, 23, 42, 0.03)",
-  softBorder: "rgba(221, 212, 201, 0.72)",
-  strongBorder: "rgba(221, 212, 201, 0.96)",
-  accentSoft: "rgba(15, 118, 110, 0.12)",
-  accentStrong: "rgba(15, 118, 110, 0.22)",
+  panelBg: "rgba(251, 252, 253, 0.94)",
+  softBg: "rgba(15, 23, 42, 0.025)",
+  softBorder: "rgba(216, 222, 229, 0.82)",
+  strongBorder: "rgba(216, 222, 229, 0.98)",
+  accentSoft: "rgba(85, 107, 116, 0.08)",
+  accentStrong: "rgba(85, 107, 116, 0.16)",
+  surfaceTop: "rgba(255, 255, 255, 0.98)",
+  surfaceBottom: "rgba(245, 248, 251, 0.94)",
+  surfaceRaisedTop: "rgba(255, 255, 255, 0.99)",
+  surfaceRaisedBottom: "rgba(241, 246, 250, 0.95)",
+  shadowSoft: "0 10px 24px rgba(15, 23, 42, 0.05)",
+  shadowMedium: "0 16px 34px rgba(15, 23, 42, 0.08)",
+  shadowStrong: "0 22px 46px rgba(15, 23, 42, 0.1)",
+  highlightInset: "inset 0 1px 0 rgba(255, 255, 255, 0.78)",
   bodyBackground:
-    "radial-gradient(1200px circle at 10% 0%, #ffffff 0%, #f4f1eb 52%, #ece7de 100%)",
+    "radial-gradient(1200px circle at 0% 0%, #ffffff 0%, #f8fafb 34%, #f3f5f7 72%, #edf1f4 100%)",
 };
 
 export const DARK_THEME_TOKENS = {
-  primary: "#34d399",
-  primaryDark: "#10b981",
-  bg: "#0f1318",
-  paper: "#171d24",
-  border: "#2d3745",
-  textMain: "#e5e7eb",
-  textMuted: "#9aa4b2",
+  primary: "#8aa0a8",
+  primaryDark: "#6f878f",
+  bg: "#0f141b",
+  paper: "#171e26",
+  border: "#2e3946",
+  textMain: "#e7edf4",
+  textMuted: "#98a6b6",
   shellBg: "transparent",
-  panelBg: "rgba(23, 29, 36, 0.82)",
-  softBg: "rgba(255,255,255,0.04)",
-  softBorder: "rgba(45, 55, 69, 0.72)",
-  strongBorder: "rgba(45, 55, 69, 0.96)",
-  accentSoft: "rgba(52, 211, 153, 0.12)",
-  accentStrong: "rgba(52, 211, 153, 0.22)",
+  panelBg: "rgba(23, 30, 38, 0.92)",
+  softBg: "rgba(255,255,255,0.035)",
+  softBorder: "rgba(46, 57, 70, 0.82)",
+  strongBorder: "rgba(46, 57, 70, 0.98)",
+  accentSoft: "rgba(138, 160, 168, 0.1)",
+  accentStrong: "rgba(138, 160, 168, 0.18)",
+  surfaceTop: "rgba(28, 37, 48, 0.98)",
+  surfaceBottom: "rgba(20, 27, 35, 0.95)",
+  surfaceRaisedTop: "rgba(31, 41, 53, 0.98)",
+  surfaceRaisedBottom: "rgba(21, 28, 37, 0.96)",
+  shadowSoft: "0 14px 30px rgba(0, 0, 0, 0.24)",
+  shadowMedium: "0 18px 38px rgba(0, 0, 0, 0.3)",
+  shadowStrong: "0 24px 48px rgba(0, 0, 0, 0.36)",
+  highlightInset: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
   bodyBackground:
-    "radial-gradient(1200px circle at 10% 0%, #1b2330 0%, #0f1318 52%, #0a0d12 100%)",
+    "radial-gradient(1200px circle at 10% 0%, #19222d 0%, #0f141b 52%, #0b1016 100%)",
 };
 
 export function getThemeTokens(mode = "light") {
@@ -47,7 +63,7 @@ export function applyThemeTokensToDocument(mode = "light") {
   if (!root || !body) return;
 
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  const nextThemeColor = mode === "dark" ? "#0f1318" : "#0b5f58";
+  const nextThemeColor = mode === "dark" ? "#141b22" : "#43575f";
 
   root.style.setProperty("--fit-shell-bg", tokens.shellBg);
   root.style.setProperty("--fit-panel-bg", tokens.panelBg);
@@ -58,9 +74,19 @@ export function applyThemeTokensToDocument(mode = "light") {
   root.style.setProperty("--fit-accent-strong", tokens.accentStrong);
   root.style.setProperty("--fit-text-muted", tokens.textMuted);
   root.style.setProperty("--fit-text-main", tokens.textMain);
+  root.style.setProperty("--fit-surface-top", tokens.surfaceTop);
+  root.style.setProperty("--fit-surface-bottom", tokens.surfaceBottom);
+  root.style.setProperty("--fit-surface-raised-top", tokens.surfaceRaisedTop);
+  root.style.setProperty("--fit-surface-raised-bottom", tokens.surfaceRaisedBottom);
+  root.style.setProperty("--fit-shadow-soft", tokens.shadowSoft);
+  root.style.setProperty("--fit-shadow-medium", tokens.shadowMedium);
+  root.style.setProperty("--fit-shadow-strong", tokens.shadowStrong);
+  root.style.setProperty("--fit-highlight-inset", tokens.highlightInset);
   root.style.setProperty("--fit-body-bg", tokens.bodyBackground);
   root.style.setProperty("--fit-paper", tokens.paper);
   root.style.setProperty("--fit-divider", tokens.border);
+  root.style.setProperty("--fit-primary", tokens.primary);
+  root.style.setProperty("--fit-primary-dark", tokens.primaryDark);
   root.setAttribute("data-theme", mode);
   root.style.colorScheme = mode;
 

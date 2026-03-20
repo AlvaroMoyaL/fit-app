@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Box, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { getMeals, saveMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateTDEEDynamic } from "../../utils/metabolism";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
+import {
+  getNutritionInformationalMetricState,
+  getNutritionMetricState,
+  nutritionSurfaceSx,
+} from "./nutritionUi";
 
 function getTodayDateKey() {
   const now = new Date();
@@ -19,75 +25,6 @@ function calculateMicroTargets() {
     fiber: 28,
     sodium: 2300,
     cholesterol: 300,
-  };
-}
-
-function getHeroMetricState(value, target, options = {}) {
-  const current = Math.max(0, Number(value || 0));
-  const goal = Math.max(0, Number(target || 0));
-  const overWarnRatio = Number(options.overWarnRatio || 1.2);
-  const lowWarnRatio = Number(options.lowWarnRatio || 0.6);
-  const progress = goal > 0 ? Math.max(0, Math.min(1, current / goal)) : 0;
-  const ratio = goal > 0 ? current / goal : 0;
-
-  if (!goal) {
-    return {
-      progress,
-      accent: "rgba(148, 163, 184, 0.75)",
-      background: "rgba(255,255,255,0.64)",
-      border: "rgba(15,23,42,0.08)",
-      label: "Sin referencia",
-    };
-  }
-
-  if (ratio > overWarnRatio) {
-    return {
-      progress,
-      accent: "rgba(220, 38, 38, 0.82)",
-      background: "rgba(254, 242, 242, 0.92)",
-      border: "rgba(248, 113, 113, 0.32)",
-      label: "Sobre rango",
-    };
-  }
-
-  if (ratio >= 0.9) {
-    return {
-      progress,
-      accent: "rgba(15, 118, 110, 0.9)",
-      background: "rgba(240, 253, 250, 0.92)",
-      border: "rgba(45, 212, 191, 0.22)",
-      label: "En rango",
-    };
-  }
-
-  if (ratio >= lowWarnRatio) {
-    return {
-      progress,
-      accent: "rgba(217, 119, 6, 0.84)",
-      background: "rgba(255, 251, 235, 0.92)",
-      border: "rgba(251, 191, 36, 0.28)",
-      label: "Avanzando",
-    };
-  }
-
-  return {
-    progress,
-    accent: "rgba(59, 130, 246, 0.82)",
-    background: "rgba(239, 246, 255, 0.92)",
-    border: "rgba(96, 165, 250, 0.24)",
-    label: "Bajo objetivo",
-  };
-}
-
-function getInformationalMetricState(value, reference) {
-  const current = Math.max(0, Number(value || 0));
-  const goal = Math.max(0, Number(reference || 0));
-  return {
-    progress: goal > 0 ? Math.max(0, Math.min(1, current / goal)) : 0,
-    accent: "rgba(71, 85, 105, 0.78)",
-    background: "rgba(248, 250, 252, 0.92)",
-    border: "rgba(148, 163, 184, 0.24)",
-    label: "Informativo",
   };
 }
 
@@ -118,13 +55,13 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
       <Typography variant="h6" sx={{ lineHeight: 1 }}>
         {valueText}
       </Typography>
-      <Box sx={{ height: 7, borderRadius: 999, bgcolor: "rgba(15,23,42,0.08)", overflow: "hidden" }}>
+      <Box sx={{ height: 7, borderRadius: 999, bgcolor: state.track, overflow: "hidden" }}>
         <Box
           sx={{
             width: `${Math.max(6, Math.round((state.progress || 0) * 100))}%`,
             height: "100%",
             borderRadius: 999,
-            bgcolor: state.accent,
+            bgcolor: state.fill,
           }}
         />
       </Box>
@@ -198,6 +135,7 @@ function enrichMealsWithStoredNutrients(meals, foodLookup) {
 }
 
 export default function NutritionSidePanel({ profileId, profile, metricsLog = [] }) {
+  const theme = useTheme();
   const [meals, setMeals] = useState([]);
   const todayKey = useMemo(() => getTodayDateKey(), []);
 
@@ -259,56 +197,58 @@ export default function NutritionSidePanel({ profileId, profile, metricsLog = []
     return (dailyCalories * 0.1) / 9;
   }, [tdee]);
   const fiberState = useMemo(
-    () => getHeroMetricState(totalsToday.fiber, microTargets.fiber, { lowWarnRatio: 0.5, overWarnRatio: 1.35 }),
-    [microTargets.fiber, totalsToday.fiber]
+    () => getNutritionMetricState(theme, totalsToday.fiber, microTargets.fiber, { lowWarnRatio: 0.5, overWarnRatio: 1.35 }),
+    [microTargets.fiber, theme, totalsToday.fiber]
   );
   const sodiumState = useMemo(
-    () => getHeroMetricState(totalsToday.sodium, microTargets.sodium, { lowWarnRatio: 0.35, overWarnRatio: 1 }),
-    [microTargets.sodium, totalsToday.sodium]
+    () => getNutritionMetricState(theme, totalsToday.sodium, microTargets.sodium, { lowWarnRatio: 0.35, overWarnRatio: 1 }),
+    [microTargets.sodium, theme, totalsToday.sodium]
   );
   const sugarsState = useMemo(
-    () => getHeroMetricState(totalsToday.sugars, sugarReference, { lowWarnRatio: 0.35, overWarnRatio: 1.35 }),
-    [sugarReference, totalsToday.sugars]
+    () => getNutritionMetricState(theme, totalsToday.sugars, sugarReference, { lowWarnRatio: 0.35, overWarnRatio: 1.35 }),
+    [sugarReference, theme, totalsToday.sugars]
   );
   const saturatedFatState = useMemo(
-    () => getHeroMetricState(totalsToday.saturatedFat, saturatedFatReference, { lowWarnRatio: 0.25, overWarnRatio: 1 }),
-    [saturatedFatReference, totalsToday.saturatedFat]
+    () => getNutritionMetricState(theme, totalsToday.saturatedFat, saturatedFatReference, { lowWarnRatio: 0.25, overWarnRatio: 1 }),
+    [saturatedFatReference, theme, totalsToday.saturatedFat]
   );
   const cholesterolState = useMemo(
-    () => getInformationalMetricState(totalsToday.cholesterol, microTargets.cholesterol),
-    [microTargets.cholesterol, totalsToday.cholesterol]
+    () => getNutritionInformationalMetricState(theme, totalsToday.cholesterol, microTargets.cholesterol),
+    [microTargets.cholesterol, theme, totalsToday.cholesterol]
   );
   const mealsState = useMemo(
-    () => getHeroMetricState(totalsToday.mealsCount, 4, { lowWarnRatio: 0.5, overWarnRatio: 1.5 }),
-    [totalsToday.mealsCount]
+    () => getNutritionMetricState(theme, totalsToday.mealsCount, 4, { lowWarnRatio: 0.5, overWarnRatio: 1.5 }),
+    [theme, totalsToday.mealsCount]
   );
-
-  const surfaceSx = {
-    border: "1px solid",
-    borderColor: "divider",
-    borderRadius: 3,
-    bgcolor: "background.paper",
-    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
-  };
+  const surfaceSx = (muiTheme) => ({
+    ...nutritionSurfaceSx(muiTheme),
+    p: 1.2,
+    display: "grid",
+    gap: 1.1,
+  });
 
   return (
     <Box
-      sx={{
+      sx={(muiTheme) => ({
         display: "grid",
         gap: 1.4,
         position: { xs: "static", lg: "sticky" },
         top: { lg: 88 },
         width: "100%",
         minWidth: 0,
-        p: { xs: 0, xl: 1.9 },
-        borderRadius: { xl: "26px" },
-        bgcolor: { xl: "rgba(252, 250, 246, 0.96)" },
-        border: { xl: "1px solid rgba(201, 189, 176, 0.9)" },
-        boxShadow: { xl: "0 24px 50px rgba(15, 23, 42, 0.1)" },
-        backdropFilter: { xl: "blur(18px)" },
-      }}
+        p: { xs: 0, xl: 1.2 },
+        borderRadius: { xl: "24px" },
+        bgcolor: { xl: muiTheme.palette.background.paper },
+        border: { xl: `1px solid ${muiTheme.palette.divider}` },
+        boxShadow: {
+          xl:
+            muiTheme.palette.mode === "dark"
+              ? "0 12px 28px rgba(0, 0, 0, 0.18)"
+              : "0 10px 24px rgba(15, 23, 42, 0.045)",
+        },
+      })}
     >
-      <Box sx={{ ...surfaceSx, p: 1.2, display: "grid", gap: 1.1 }}>
+      <Box sx={surfaceSx}>
         <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}>
           KPIs de apoyo
         </Typography>

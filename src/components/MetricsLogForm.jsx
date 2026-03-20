@@ -27,6 +27,17 @@ const METRIC_FIELDS = [
   { name: "vo2max", min: 10, max: 90, step: "0.1", labelEs: "VO2 max", labelEn: "VO2 max" },
 ];
 
+const PRIMARY_FIELD_NAMES = [
+  "weight",
+  "waist",
+  "bodyFat",
+  "restHr",
+  "sleepHours",
+  "steps",
+  "sleepScore",
+  "readiness",
+];
+
 export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, lang }) {
   const clamp = (min, max, v) => Math.max(min, Math.min(max, v));
   const parseOptional = (value, min, max) => {
@@ -66,16 +77,55 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
   };
 
   const entries = [...(metricsLog || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const primaryFields = METRIC_FIELDS.filter((field) =>
+    PRIMARY_FIELD_NAMES.includes(field.name)
+  );
+  const advancedFields = METRIC_FIELDS.filter(
+    (field) => !PRIMARY_FIELD_NAMES.includes(field.name)
+  );
+  const entrySummary = (entry) => {
+    const labels =
+      lang === "en"
+        ? [
+            ["Weight", entry.weight ? `${entry.weight} kg` : "—"],
+            ["Waist", entry.waist ? `${entry.waist} cm` : "—"],
+            ["Rest HR", entry.restHr ? `${entry.restHr} bpm` : "—"],
+            ["Sleep", entry.sleepHours ? `${entry.sleepHours} h` : "—"],
+            ["Steps", entry.steps ? `${entry.steps}` : "—"],
+            ["Readiness", entry.readiness ? `${entry.readiness}` : "—"],
+          ]
+        : [
+            ["Peso", entry.weight ? `${entry.weight} kg` : "—"],
+            ["Cintura", entry.waist ? `${entry.waist} cm` : "—"],
+            ["FC reposo", entry.restHr ? `${entry.restHr} bpm` : "—"],
+            ["Sueño", entry.sleepHours ? `${entry.sleepHours} h` : "—"],
+            ["Pasos", entry.steps ? `${entry.steps}` : "—"],
+            ["Readiness", entry.readiness ? `${entry.readiness}` : "—"],
+          ];
+    return labels;
+  };
 
   return (
     <div className="metrics-log">
-      <h3>{lang === "en" ? "Log Measurements" : "Registrar medidas"}</h3>
+      <div className="metrics-log-head">
+        <div>
+          <p className="section-eyebrow">
+            {lang === "en" ? "Manual tracking" : "Seguimiento manual"}
+          </p>
+          <h3>{lang === "en" ? "Log Measurements" : "Registrar medidas"}</h3>
+          <p className="note">
+            {lang === "en"
+              ? "Keep the core metrics visible and use advanced fields only when needed."
+              : "Deja visibles las métricas clave y abre las avanzadas solo cuando las necesites."}
+          </p>
+        </div>
+      </div>
       <form onSubmit={onSubmit} className="metrics-form">
-        <label>
+        <label className="full">
           {lang === "en" ? "Date" : "Fecha"}
           <input type="date" name="date" value={form.date} onChange={onChange} />
         </label>
-        {METRIC_FIELDS.map((field) => (
+        {primaryFields.map((field) => (
           <label key={field.name}>
             {lang === "en" ? field.labelEn : field.labelEs}
             <input
@@ -89,6 +139,25 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
             />
           </label>
         ))}
+        <details className="metrics-advanced full">
+          <summary>{lang === "en" ? "Advanced metrics" : "Métricas avanzadas"}</summary>
+          <div className="metrics-advanced-grid">
+            {advancedFields.map((field) => (
+              <label key={field.name}>
+                {lang === "en" ? field.labelEn : field.labelEs}
+                <input
+                  type="number"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  name={field.name}
+                  value={form[field.name]}
+                  onChange={onChange}
+                />
+              </label>
+            ))}
+          </div>
+        </details>
         <label className="full">
           {lang === "en" ? "Notes" : "Notas"}
           <input type="text" name="notes" value={form.notes} onChange={onChange} />
@@ -101,19 +170,24 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
       {entries.length > 0 && (
         <div className="metrics-list">
           {entries.slice(0, 8).map((e) => (
-            <div className="metrics-row" key={e.date}>
-              <strong>{e.date}</strong>
-              <span>{e.weight ? `${e.weight} kg` : "-"}</span>
-              <span>{e.waist ? `${e.waist} cm` : "-"}</span>
-              <span>{e.hip ? `${e.hip} cm` : "-"}</span>
-              <span>{e.neck ? `${e.neck} cm` : "-"}</span>
-              <span>{e.bodyFat ? `${e.bodyFat}%` : "-"}</span>
-              <span>{e.restHr ? `${e.restHr} bpm` : "-"}</span>
-              <span>{e.sleepHours ? `${e.sleepHours} h` : "-"}</span>
-              <span>{e.steps ? `${e.steps}` : "-"}</span>
-              <button className="tiny" type="button" onClick={() => onDeleteEntry(e.date)}>
-                {lang === "en" ? "Delete" : "Borrar"}
-              </button>
+            <div className="metrics-entry-card" key={e.date}>
+              <div className="metrics-entry-head">
+                <div>
+                  <strong>{e.date}</strong>
+                  {e.notes ? <p className="metrics-entry-note">{e.notes}</p> : null}
+                </div>
+                <button className="tiny" type="button" onClick={() => onDeleteEntry(e.date)}>
+                  {lang === "en" ? "Delete" : "Borrar"}
+                </button>
+              </div>
+              <div className="metrics-entry-grid">
+                {entrySummary(e).map(([label, value]) => (
+                  <div key={`${e.date}-${label}`}>
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

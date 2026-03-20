@@ -30,6 +30,25 @@ export default function ProfileForm({
 
   return (
     <form onSubmit={onSubmit}>
+      <div className="form-intro">
+        <div className="form-intro-copy">
+          <p className="section-eyebrow">Perfil base</p>
+          <h3>Datos que definen tu sistema</h3>
+          <p className="note">
+            Completa lo esencial para generar un plan más coherente y métricas más útiles.
+          </p>
+        </div>
+        <div className="form-intro-status">
+          <span>Estado</span>
+          <strong>{hasMissing ? "Incompleto" : "Listo"}</strong>
+          <small>
+            {hasMissing
+              ? `Falta: ${requiredMissing.slice(0, 3).join(", ")}${requiredMissing.length > 3 ? "..." : ""}`
+              : "Perfil listo para recalcular plan y objetivos."}
+          </small>
+        </div>
+      </div>
+
       <div className="form-section">
         <div className="section-head">
           <h3>Datos personales</h3>
@@ -226,6 +245,7 @@ export default function ProfileForm({
 
       <div className="rest-panel">
         <h3>Días a entrenar</h3>
+        <p className="note">Marca solo los días que quieres ver activos dentro del plan semanal.</p>
         <div className="rest-days">
           {weekLabels.map((label, idx) => (
             <label key={label} className="check">
@@ -254,9 +274,6 @@ export default function ProfileForm({
             Limpiar
           </button>
         </div>
-        <p className="note">
-          Selecciona los días en los que quieres entrenar.
-        </p>
         <div className="reminder">
           <label className="check">
             <input

@@ -827,6 +827,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     return localStorage.getItem("fit_high_contrast") === "1";
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [collapsibleState, setCollapsibleState] = useState({});
 
   const touchLocalChange = () => {
     localStorage.setItem(LOCAL_SYNC_KEY, new Date().toISOString());
@@ -3476,12 +3477,30 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     }
   };
 
-  const renderCollapsible = (title, content, open = false) => (
-    <details className="collapsible" open={open}>
-      <summary>{title}</summary>
-      <div className="collapsible-body">{content}</div>
-    </details>
-  );
+  const renderCollapsible = (
+    id,
+    title,
+    content,
+    { desktopOpen = false, mobileOpen = false } = {}
+  ) => {
+    const isOpen =
+      collapsibleState[id] ?? (isDesktop ? desktopOpen : mobileOpen);
+    return (
+      <details
+        className="collapsible"
+        open={isOpen}
+        onToggle={(e) => {
+          const nextOpen = e.currentTarget.open;
+          setCollapsibleState((prev) =>
+            prev[id] === nextOpen ? prev : { ...prev, [id]: nextOpen }
+          );
+        }}
+      >
+        <summary>{title}</summary>
+        <div className="collapsible-body">{content}</div>
+      </details>
+    );
+  };
 
   const formatBackupDate = (raw) => {
     if (!raw) return "";
@@ -3497,6 +3516,13 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   const backupLastLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_KEY));
   const backupPrevLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_PREV_KEY));
   const showNutritionSidePanel = sidebarTab === "nutrition" && isDesktop;
+  const mobileNavItems = [
+    { key: "profile", label: "Perfil", short: "PF" },
+    { key: "plan", label: "Plan", short: "PL" },
+    { key: "history", label: "Historial", short: "HI" },
+    { key: "stats", label: "Métricas", short: "MT" },
+    { key: "nutrition", label: "Nutrición", short: "NU" },
+  ];
 
   return (
     <div className={`app-shell ${showNutritionSidePanel ? "nutrition-layout" : ""}`}>
@@ -3599,10 +3625,29 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           )}
           {sidebarTab === "profile" && (
             <>
-              <h1>Perfil inicial</h1>
-              <p className="subtitle">
-                Cuéntanos sobre ti para crear tu plan y calcular métricas.
-              </p>
+              <div className="page-hero">
+                <div className="page-hero-main">
+                  <p className="section-eyebrow">Base del sistema</p>
+                  <h1>Perfil y objetivos</h1>
+                  <p className="page-hero-lead">
+                    Define tu contexto físico y de entrenamiento para que el plan y las métricas tengan una base real.
+                  </p>
+                </div>
+                <div className="page-hero-kpis">
+                  <div>
+                    <span>Perfil activo</span>
+                    <strong>{activeProfileName || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Nivel</span>
+                    <strong>{level}</strong>
+                  </div>
+                  <div>
+                    <span>TDEE</span>
+                    <strong>{metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—"}</strong>
+                  </div>
+                </div>
+              </div>
 
               {!plan && (
                 <p className="note">
@@ -3629,6 +3674,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
 
               {(showProfileForm || !plan) &&
                 renderCollapsible(
+                  "profile-form",
                   "Formulario de perfil",
                   <>
                     <ProfileForm
@@ -3667,7 +3713,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                       </button>
                     </div>
                   </>,
-                  false
+                  { desktopOpen: true, mobileOpen: true }
                 )}
             </>
           )}
@@ -3713,12 +3759,37 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           {sidebarTab === "history" && (
             <Suspense fallback={<LazyBlockFallback message="Cargando historial..." />}>
               <>
+                <div className="page-hero page-hero-history">
+                  <div className="page-hero-main">
+                    <p className="section-eyebrow">Seguimiento</p>
+                    <h1>Historial y adherencia</h1>
+                    <p className="page-hero-lead">
+                      Revisa consistencia, carga semanal y registros anteriores sin perder el contexto del plan.
+                    </p>
+                  </div>
+                  <div className="page-hero-kpis">
+                    <div>
+                      <span>Días entrenados</span>
+                      <strong>{trainedDaysTotal || 0}</strong>
+                    </div>
+                    <div>
+                      <span>Este mes</span>
+                      <strong>{trainedDaysThisMonth || 0}</strong>
+                    </div>
+                    <div>
+                      <span>Racha</span>
+                      <strong>{trainingStreak || 0}</strong>
+                    </div>
+                  </div>
+                </div>
                 {renderCollapsible(
+                  "history-muscle",
                   "Resumen muscular",
                   <MuscleSummary history={history} lang={lang} />,
-                  false
+                  { desktopOpen: false, mobileOpen: false }
                 )}
                 {renderCollapsible(
+                  "history-weekly",
                   "Resumen semanal",
                   <WeeklyCharts
                     history={history}
@@ -3729,9 +3800,10 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                       setSelectedPlanDayIndex(dayIndex);
                     }}
                   />,
-                  false
+                  { desktopOpen: false, mobileOpen: false }
                 )}
                 {renderCollapsible(
+                  "history-log",
                   "Historial de entrenamientos",
                   <HistoryWeek
                     history={history}
@@ -3740,7 +3812,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                     onRegisterPastExercise={onRegisterPastExercise}
                     onPreviewExercise={onSelectExercise}
                   />,
-                  false
+                  { desktopOpen: false, mobileOpen: false }
                 )}
               </>
             </Suspense>
@@ -3751,14 +3823,14 @@ export default function App({ themeMode = "light", onToggleTheme }) {
               <div className="stats-hero">
                 <div className="stats-hero-main">
                   <p className="section-eyebrow">Rendimiento y salud</p>
-                  <h2>Vista Stats</h2>
+                  <h2>Dashboard de salud</h2>
                   <p className="stats-hero-lead">
-                    Panel orientado a métricas de salud, tendencias y carga de datos Garmin.
+                    Métricas clave, tendencias y datos Garmin en una vista pensada para revisar rápido y decidir mejor.
                   </p>
                 </div>
                 <div className="stats-hero-kpis">
                   <div>
-                    <span>Peso</span>
+                    <span>Peso actual</span>
                     <strong>
                       {lastMetric?.weight ? `${lastMetric.weight} kg` : "—"}
                     </strong>
@@ -3795,6 +3867,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                 </button>
               </div>
               {renderCollapsible(
+                "stats-garmin",
                 "Importar Garmin",
                 <div className="metrics-log">
                   <p className="note">
@@ -3858,9 +3931,10 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                     body battery, estrés, SpO2, respiración, carga y actividad diaria.
                   </p>
                 </div>,
-                true
+                { desktopOpen: false, mobileOpen: false }
               )}
               {renderCollapsible(
+                "stats-groups",
                 "Estadísticas por tipo",
                 <div className="stats-groups">
                   <section className="stats-group">
@@ -4085,16 +4159,18 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                     </div>
                   </section>
                 </div>,
-                true
+                { desktopOpen: true, mobileOpen: false }
               )}
               {renderCollapsible(
+                "stats-trends",
                 "Tendencia de métricas",
                 <Suspense fallback={<LazyBlockFallback message="Cargando tendencias..." />}>
                   <MetricsCharts metricsLog={metricsLog} lang={lang} />
                 </Suspense>,
-                false
+                { desktopOpen: false, mobileOpen: false }
               )}
               {renderCollapsible(
+                "stats-log",
                 "Registrar métricas",
                 <div id="metrics-log-stats">
                   <MetricsLogForm
@@ -4104,7 +4180,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                     lang={lang}
                   />
                 </div>,
-                true
+                { desktopOpen: false, mobileOpen: false }
               )}
             </>
           )}
@@ -4255,58 +4331,23 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           className="menu-btn"
           onClick={() => setMobileMenuOpen(true)}
         >
-          Menú
+          <span className="mobile-nav-chip">MN</span>
+          <span>Menú</span>
         </button>
-        <button
-          type="button"
-          className={sidebarTab === "profile" ? "active" : ""}
-          onClick={() => {
-            setSidebarTab("profile");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          Perfil
-        </button>
-        <button
-          type="button"
-          className={sidebarTab === "plan" ? "active" : ""}
-          onClick={() => {
-            setSidebarTab("plan");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          Plan
-        </button>
-        <button
-          type="button"
-          className={sidebarTab === "history" ? "active" : ""}
-          onClick={() => {
-            setSidebarTab("history");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          Historial
-        </button>
-        <button
-          type="button"
-          className={sidebarTab === "stats" ? "active" : ""}
-          onClick={() => {
-            setSidebarTab("stats");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          Stats
-        </button>
-        <button
-          type="button"
-          className={sidebarTab === "nutrition" ? "active" : ""}
-          onClick={() => {
-            setSidebarTab("nutrition");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-        >
-          Nutrición
-        </button>
+        {mobileNavItems.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={sidebarTab === item.key ? "active" : ""}
+            onClick={() => {
+              setSidebarTab(item.key);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          >
+            <span className="mobile-nav-chip">{item.short}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
       </nav>
 
       {mobileMenuOpen && (

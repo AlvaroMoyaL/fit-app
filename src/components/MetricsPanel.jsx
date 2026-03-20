@@ -1,10 +1,16 @@
 export default function MetricsPanel({ metrics, onInfo }) {
   return (
     <div className="metrics">
-      <h2>Métricas calculadas</h2>
-      <button type="button" className="link" onClick={onInfo}>
-        ¿Qué significan estas métricas?
-      </button>
+      <div className="metrics-head">
+        <div>
+          <p className="section-eyebrow">Snapshot físico</p>
+          <h2>Métricas calculadas</h2>
+          <p className="note">Resumen automático a partir de tu perfil y medidas actuales.</p>
+        </div>
+        <button type="button" className="link" onClick={onInfo}>
+          ¿Qué significan estas métricas?
+        </button>
+      </div>
       <div className="metrics-grid">
         <div>
           <span>IMC</span>

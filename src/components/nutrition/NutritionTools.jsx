@@ -8,60 +8,21 @@ import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WorkMealPlanner from "./WorkMealPlanner";
 import CampMealKit from "./CampMealKit";
 import ShoppingList from "./ShoppingList";
-
-function tabLabelDot(color, text) {
-  return (
-    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.8 }}>
-      <Box
-        component="span"
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          bgcolor: color,
-          flex: "0 0 auto",
-        }}
-      />
-      <Box component="span">{text}</Box>
-    </Box>
-  );
-}
+import {
+  nutritionCompactTabsSx,
+  nutritionSurfaceSx,
+  nutritionTabLabelDot,
+  nutritionTabsRailSx,
+} from "./nutritionUi";
 
 export default function NutritionTools({ profileId, onMealParsed }) {
   const [tab, setTab] = useState(0);
-  const panelSx = {
+  const panelSx = (theme) => ({
+    ...nutritionSurfaceSx(theme),
     p: { xs: 1.1, sm: 1.2 },
-    border: "1px solid",
-    borderColor: "divider",
-    borderRadius: 2,
-    bgcolor: "background.paper",
-  };
-  const tabsPanelSx = {
-    p: 0,
-    width: "100%",
-    maxWidth: "100%",
-    alignSelf: "stretch",
-    boxSizing: "border-box",
-    border: "none",
-    borderRadius: 0,
-    bgcolor: "transparent",
-  };
-  const compactTabsSx = {
-    minHeight: { xs: 40, sm: 36 },
-    width: "100%",
-    "& .MuiTab-root": {
-      minHeight: { xs: 40, sm: 36 },
-      minWidth: "auto",
-      px: { xs: 1.15, sm: 1.1 },
-      py: { xs: 0.7, sm: 0.45 },
-      fontSize: { xs: "0.88rem", sm: "0.82rem" },
-      mr: 0.45,
-      whiteSpace: "nowrap",
-    },
-    "& .MuiTabs-flexContainer": {
-      gap: 0.4,
-    },
-  };
+  });
+  const tabsPanelSx = nutritionTabsRailSx;
+  const compactTabsSx = (theme) => nutritionCompactTabsSx(theme);
   const contentFrameSx = {
     width: "100%",
     maxWidth: "100%",
@@ -70,7 +31,7 @@ export default function NutritionTools({ profileId, onMealParsed }) {
 
   return (
     <Box sx={{ display: "grid", gap: 1.4 }}>
-      <Box sx={{ ...panelSx, display: "grid", gap: 0.5 }}>
+      <Box sx={(theme) => ({ ...panelSx(theme), display: "grid", gap: 0.5 })}>
         <Typography variant="subtitle1">Herramientas nutricionales</Typography>
         <Typography variant="body2" color="text.secondary">
           Registro inteligente, sugerencias y logística semanal.
@@ -85,12 +46,12 @@ export default function NutritionTools({ profileId, onMealParsed }) {
           allowScrollButtonsMobile
           sx={compactTabsSx}
         >
-          <Tab label={tabLabelDot("primary.main", "Registro")} />
-          <Tab label={tabLabelDot("warning.main", "Cocinar")} />
-          <Tab label={tabLabelDot("info.main", "Casino")} />
-          <Tab label={tabLabelDot("secondary.main", "Plan")} />
-          <Tab label={tabLabelDot("success.main", "Kit")} />
-          <Tab label={tabLabelDot("error.main", "Compras")} />
+          <Tab label={nutritionTabLabelDot("primary.main", "Registro")} />
+          <Tab label={nutritionTabLabelDot("warning.main", "Cocinar")} />
+          <Tab label={nutritionTabLabelDot("info.main", "Casino")} />
+          <Tab label={nutritionTabLabelDot("secondary.main", "Plan")} />
+          <Tab label={nutritionTabLabelDot("success.main", "Kit")} />
+          <Tab label={nutritionTabLabelDot("error.main", "Compras")} />
         </Tabs>
       </Box>
 

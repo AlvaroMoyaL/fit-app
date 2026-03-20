@@ -1,4 +1,4 @@
-import { calculateRecipeMacros } from "./recipes";
+import { calculateRecipeMacros } from "./recipes.js";
 
 function toNumber(value) {
   const n = Number(value);

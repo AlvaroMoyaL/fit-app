@@ -1,4 +1,4 @@
-import { recipes } from "../data/recipes";
+import { recipes } from "../data/recipes.js";
 
 function toNumber(value) {
   const n = Number(value);

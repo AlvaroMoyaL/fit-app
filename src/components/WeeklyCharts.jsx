@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import EmptyState from "./EmptyState";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -212,49 +213,122 @@ export default function WeeklyCharts({ history, lang, goals, onGoToPlanDay }) {
 
   return (
     <>
-      <div className="charts">
-        <div className="chart chart-highlight">
-          <p className="section-eyebrow">{lang === "en" ? "Weekly review" : "Revisión semanal"}</p>
-          <h3>{lang === "en" ? "Weekly focus" : "Resumen semanal"}</h3>
-          {!latest ? (
-            <p className="note">Sin datos de semanas recientes.</p>
-          ) : (
-            <div className="chart-kpis">
+      <section className="workspace-panel history-panel history-weekly-panel">
+        <div className="workspace-section-head">
+          <div>
+            <p className="workspace-section-kicker">
+              {lang === "en" ? "Weekly review" : "Revisión semanal"}
+            </p>
+            <h3>{lang === "en" ? "Weekly performance" : "Rendimiento semanal"}</h3>
+            <p className="workspace-section-copy">
+              {lang === "en"
+                ? "Compare recent weeks, detect consistency shifts and jump back to the weakest training day."
+                : "Compara semanas recientes, detecta cambios de consistencia y vuelve al día de menor rendimiento sin salir del flujo principal."}
+            </p>
+          </div>
+        </div>
+
+        <div className="history-overview-grid">
+          <div className="history-overview-card history-overview-highlight">
+            <div className="history-overview-head">
               <div>
-                <span>XP semana</span>
-                <strong>{latest.xp}</strong>
-                <small>{previous ? `${deltaText(latest.xp, previous.xp)} vs semana previa` : "Primera semana"}</small>
+                <p className="workspace-section-kicker">
+                  {lang === "en" ? "Current pulse" : "Pulso actual"}
+                </p>
+                <h4>{lang === "en" ? "Weekly focus" : "Resumen semanal"}</h4>
+                <p>
+                  {lang === "en"
+                    ? "Quick read of XP, sessions and current load."
+                    : "Lectura rápida de XP, sesiones y carga acumulada."}
+                </p>
               </div>
-              <div>
-                <span>Sesiones</span>
-                <strong>{latest.sessions}/7</strong>
-                <small>{previous ? `${deltaText(latest.sessions, previous.sessions)} vs semana previa` : "Sin referencia"}</small>
+              {goalXp > 0 && <span className="history-meta-pill">Meta {goalXp} XP</span>}
+            </div>
+
+            {!latest ? (
+              <EmptyState
+                eyebrow={lang === "en" ? "No recent weeks" : "Sin semanas recientes"}
+                title={lang === "en" ? "No weekly trend yet" : "Todavía no hay tendencia semanal"}
+                description={
+                  lang === "en"
+                    ? "Complete a few sessions and this panel will summarize XP, frequency and total load."
+                    : "Completa algunas sesiones y este panel resumirá XP, frecuencia y carga total."
+                }
+              />
+            ) : (
+              <div className="chart-kpis history-kpi-grid">
+                <div>
+                  <span>XP semana</span>
+                  <strong>{latest.xp}</strong>
+                  <small>
+                    {previous
+                      ? `${deltaText(latest.xp, previous.xp)} vs semana previa`
+                      : "Primera semana"}
+                  </small>
+                </div>
+                <div>
+                  <span>Sesiones</span>
+                  <strong>{latest.sessions}/7</strong>
+                  <small>
+                    {previous
+                      ? `${deltaText(latest.sessions, previous.sessions)} vs semana previa`
+                      : "Sin referencia"}
+                  </small>
+                </div>
+                <div>
+                  <span>XP por sesión</span>
+                  <strong>{latest.avgXpPerSession}</strong>
+                  <small>{latest.minutes} min total</small>
+                </div>
+                <div>
+                  <span>Meta XP</span>
+                  <strong>
+                    {goalXp > 0 ? `${Math.round((latest.xp / goalXp) * 100)}%` : "—"}
+                  </strong>
+                  <small>{goalXp > 0 ? `${latest.xp}/${goalXp} XP` : "Sin meta definida"}</small>
+                </div>
               </div>
-              <div>
-                <span>XP por sesión</span>
-                <strong>{latest.avgXpPerSession}</strong>
-                <small>{latest.minutes} min total</small>
+            )}
+          </div>
+
+          <div className="history-chart-grid">
+            <div className="history-chart-card">
+              <div className="history-chart-head">
+                <div>
+                  <h4>{lang === "en" ? "XP per week" : "XP por semana"}</h4>
+                  <p>
+                    {lang === "en"
+                      ? "Trend versus recent weeks and weekly goal."
+                      : "Tendencia frente a semanas recientes y meta semanal."}
+                  </p>
+                </div>
               </div>
-              <div>
-                <span>Meta XP</span>
-                <strong>{goalXp > 0 ? `${Math.round((latest.xp / goalXp) * 100)}%` : "—"}</strong>
-                <small>{goalXp > 0 ? `${latest.xp}/${goalXp} XP` : "Sin meta definida"}</small>
+              <div className="history-chart-scroll">{renderBars(weeks, "xp", maxXp, "xp")}</div>
+              <p className="note">
+                {lang === "en"
+                  ? "Tap a bar to open the weekly breakdown."
+                  : "Toca una barra para abrir el desglose semanal."}
+              </p>
+            </div>
+
+            <div className="history-chart-card">
+              <div className="history-chart-head">
+                <div>
+                  <h4>{lang === "en" ? "Sessions per week" : "Sesiones por semana"}</h4>
+                  <p>
+                    {lang === "en"
+                      ? "Frequency pattern to assess adherence."
+                      : "Patrón de frecuencia para revisar adherencia y ritmo."}
+                  </p>
+                </div>
+              </div>
+              <div className="history-chart-scroll">
+                {renderBars(weeks, "sessions", maxSessions, "sessions")}
               </div>
             </div>
-          )}
+          </div>
         </div>
-
-        <div className="chart">
-          <h3>{lang === "en" ? "XP per week" : "XP por semana"}</h3>
-          {renderBars(weeks, "xp", maxXp, "xp")}
-          <p className="note">Click en una barra para ver desglose semanal.</p>
-        </div>
-
-        <div className="chart">
-          <h3>{lang === "en" ? "Sessions per week" : "Sesiones por semana"}</h3>
-          {renderBars(weeks, "sessions", maxSessions, "sessions")}
-        </div>
-      </div>
+      </section>
 
       <div
         className={`drawer-backdrop ${selectedWeek ? "is-open" : ""}`}
@@ -344,7 +418,20 @@ export default function WeeklyCharts({ history, lang, goals, onGoToPlanDay }) {
             <div className="weekly-breakdown">
               <h4>Top ejercicios (por XP)</h4>
               {selectedWeek.topExercises.length === 0 ? (
-                <p className="note">Sin ejercicios registrados esta semana.</p>
+                <EmptyState
+                  compact
+                  eyebrow={lang === "en" ? "No exercises" : "Sin ejercicios"}
+                  title={
+                    lang === "en"
+                      ? "This week has no registered work"
+                      : "Esta semana no tiene trabajo registrado"
+                  }
+                  description={
+                    lang === "en"
+                      ? "When sessions are logged, the highest-impact exercises will appear here."
+                      : "Cuando registres sesiones, aquí aparecerán los ejercicios con mayor impacto."
+                  }
+                />
               ) : (
                 selectedWeek.topExercises.map((ex) => (
                   <div className="weekly-day-row" key={ex.name}>

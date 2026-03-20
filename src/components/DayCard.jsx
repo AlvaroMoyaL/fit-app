@@ -22,7 +22,15 @@ export default function DayCard({
     const key = getExerciseKey(day.title, ex);
     return sum + (completedMap[key] ? getExerciseXp(ex) : 0);
   }, 0);
+  const completedExercisesCount = day.exercises.reduce((sum, ex) => {
+    const key = getExerciseKey(day.title, ex);
+    return sum + (completedMap[key] ? 1 : 0);
+  }, 0);
   const dayCompleted = day.exercises.every((ex) => completedMap[getExerciseKey(day.title, ex)]);
+  const progressPct = Math.round((dayEarned / Math.max(1, dayPossible)) * 100);
+  const completionPct = Math.round(
+    (completedExercisesCount / Math.max(1, day.exercises.length)) * 100
+  );
   const resolvedFocus = buildDayFocusLabel(day, lang, day.focus);
 
   const getName = (ex) => {
@@ -250,6 +258,9 @@ export default function DayCard({
   const selectedEquipmentSet = new Set(
     selectedEquipment.map((item) => normalizeEquipment(item)).filter(Boolean)
   );
+  const selectedEquipmentLabels = Array.from(
+    new Set(selectedEquipment.map((item) => normalizeEquipment(item)).filter(Boolean))
+  );
   const currentCoreIds = new Set(
     coreExercises.map((item) => String(item?.id || item?.instanceId || ""))
   );
@@ -260,33 +271,73 @@ export default function DayCard({
     .slice(0, 6);
 
   return (
-    <div className="day-card">
+    <div className={`day-card ${dayCompleted ? "is-complete" : ""}`}>
       <div className="day-head">
         <div className="day-title">
           <span className="day-kicker">
             {lang === "en" ? `Day ${index + 1}` : `Día ${index + 1}`}
           </span>
           <strong>{day.title}</strong>
-          {resolvedFocus && <span className="day-focus">{resolvedFocus}</span>}
+          <div className="day-title-meta">
+            {resolvedFocus && <span className="day-focus-pill">{resolvedFocus}</span>}
+            <span className="day-meta-pill">
+              {day.exercises.length} {lang === "en" ? "planned" : "planificados"}
+            </span>
+          </div>
         </div>
         <div className="day-head-side">
           <span className="day-xp">
             {dayEarned} / {dayPossible} XP
           </span>
-          <label className="toggle quiet-inline">
-            <input
-              type="checkbox"
-              checked={Boolean(day.quiet)}
-              onChange={(e) => onToggleQuiet(index, e.target.checked)}
-            />
-            {lang === "en" ? "Quiet mode" : "Modo silencioso"}
-          </label>
+          <div className="day-head-actions">
+            <label className="toggle quiet-inline">
+              <input
+                type="checkbox"
+                checked={Boolean(day.quiet)}
+                onChange={(e) => onToggleQuiet(index, e.target.checked)}
+              />
+              {lang === "en" ? "Quiet mode" : "Modo silencioso"}
+            </label>
+            <button
+              className="tiny primary-btn"
+              type="button"
+              onClick={() => onStartSession(index)}
+            >
+              {lang === "en" ? "Start session" : "Iniciar sesión"}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="day-progress-strip">
+        <div className="day-progress-copy">
+          <span className="day-progress-kicker">
+            {lang === "en" ? "Session pulse" : "Pulso de la sesión"}
+          </span>
+          <strong>
+            {completedExercisesCount}/{day.exercises.length}{" "}
+            {lang === "en" ? "blocks completed" : "bloques completados"}
+          </strong>
+          <small>
+            {lang === "en"
+              ? `${progressPct}% of planned XP completed`
+              : `${progressPct}% del XP previsto completado`}
+          </small>
+        </div>
+        <div
+          className="day-progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={completionPct}
+          aria-label={lang === "en" ? "Day completion" : "Progreso del día"}
+        >
+          <div className="day-progress-fill" style={{ width: `${completionPct}%` }} />
         </div>
       </div>
       <div className="day-summary-grid">
         <div className="day-summary-card">
           <span>{lang === "en" ? "Progress" : "Progreso"}</span>
-          <strong>{Math.round((dayEarned / Math.max(1, dayPossible)) * 100)}%</strong>
+          <strong>{progressPct}%</strong>
           <small>
             {dayEarned} / {dayPossible} XP
           </small>
@@ -297,9 +348,11 @@ export default function DayCard({
           <small>{lang === "en" ? "Primary block" : "Bloque principal"}</small>
         </div>
         <div className="day-summary-card">
-          <span>{lang === "en" ? "Volume" : "Volumen"}</span>
-          <strong>{day.exercises.length}</strong>
-          <small>{lang === "en" ? "planned exercises" : "ejercicios planificados"}</small>
+          <span>{lang === "en" ? "Structure" : "Estructura"}</span>
+          <strong>
+            {strengthExercises.length} + {coreExercises.length}
+          </strong>
+          <small>{lang === "en" ? "strength + core" : "fuerza + core"}</small>
         </div>
       </div>
       {dayCompleted && (
@@ -308,71 +361,103 @@ export default function DayCard({
         </div>
       )}
 
-      <div className="equipment-inline">
-        <label className="field">
-          {lang === "en" ? "Do you have equipment?" : "¿Tienes equipo?"}
-          <select
-            value={hasEquipment ? "yes" : "no"}
-            onChange={(e) => {
-              const enabled = e.target.value === "yes";
-              if (!enabled) {
-                applyEquipmentSelection([]);
-                return;
-              }
-              if (day.mode === "week") onChangeMode(index, "weekend");
-            }}
-          >
-            <option value="no">{lang === "en" ? "No" : "No"}</option>
-            <option value="yes">{lang === "en" ? "Yes" : "Sí"}</option>
-          </select>
-        </label>
-        {hasEquipment && (
-          <div className="field equipment-checklist">
-            <span>{lang === "en" ? "What equipment do you have?" : "¿Qué equipo tienes?"}</span>
-            <div className="equipment-grid">
-              {checklistOptions.map((item) => (
-                <label key={item} className="check">
-                  <input
-                    type="checkbox"
-                    checked={hasSelectedEquipmentValue(item)}
-                    onChange={() => toggleEquipment(item)}
-                  />
-                  {translateEquipment(item)}
-                </label>
-              ))}
+      <section className="day-control-panel">
+        <div className="day-block-head">
+          <div className="day-block-title">
+            <span className="day-block-kicker">
+              {lang === "en" ? "Preparation" : "Preparación"}
+            </span>
+            <strong>{lang === "en" ? "Equipment and setup" : "Equipo y entorno"}</strong>
+            <small>
+              {hasEquipment
+                ? lang === "en"
+                  ? "Adjust the available equipment before starting the session."
+                  : "Ajusta el equipo disponible antes de iniciar la sesión."
+                : lang === "en"
+                  ? "No equipment selected. The day stays in the base setup."
+                : "Sin equipo seleccionado. El día se mantiene en la configuración base."}
+            </small>
+          </div>
+          <span className="day-inline-count">
+            {selectedEquipmentLabels.length > 0
+              ? `${selectedEquipmentLabels.length} ${
+                  lang === "en" ? "selected" : "seleccionados"
+                }`
+              : lang === "en"
+                ? "Base setup"
+                : "Base"}
+          </span>
+        </div>
+
+        <div className="equipment-inline">
+          <label className="field">
+            {lang === "en" ? "Do you have equipment?" : "¿Tienes equipo?"}
+            <select
+              value={hasEquipment ? "yes" : "no"}
+              onChange={(e) => {
+                const enabled = e.target.value === "yes";
+                if (!enabled) {
+                  applyEquipmentSelection([]);
+                  return;
+                }
+                if (day.mode === "week") onChangeMode(index, "weekend");
+              }}
+            >
+              <option value="no">{lang === "en" ? "No" : "No"}</option>
+              <option value="yes">{lang === "en" ? "Yes" : "Sí"}</option>
+            </select>
+          </label>
+          {hasEquipment && (
+            <div className="field equipment-checklist">
+              <span>{lang === "en" ? "What equipment do you have?" : "¿Qué equipo tienes?"}</span>
+              <div className="equipment-grid">
+                {checklistOptions.map((item) => (
+                  <label key={item} className="check">
+                    <input
+                      type="checkbox"
+                      checked={hasSelectedEquipmentValue(item)}
+                      onChange={() => toggleEquipment(item)}
+                    />
+                    {translateEquipment(item)}
+                  </label>
+                ))}
+              </div>
             </div>
+          )}
+        </div>
+
+        {hasEquipment && selectedEquipmentLabels.length > 0 && (
+          <div className="equipment-selected day-selected-equipment">
+            {selectedEquipmentLabels.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="pill"
+                onClick={() => removeEquipment(item)}
+                title={lang === "en" ? "Remove" : "Quitar"}
+              >
+                {translateEquipment(item)} ×
+              </button>
+            ))}
           </div>
         )}
-      </div>
-
-      {hasEquipment && selectedEquipment.length > 0 && (
-        <div className="equipment-selected">
-          {Array.from(
-            new Set(selectedEquipment.map((item) => normalizeEquipment(item)).filter(Boolean))
-          ).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className="pill"
-              onClick={() => removeEquipment(item)}
-              title={lang === "en" ? "Remove" : "Quitar"}
-            >
-              {translateEquipment(item)} ×
-            </button>
-          ))}
-        </div>
-      )}
-      {day.equipmentShortage && (
-        <div className="equipment-warning">
-          {lang === "en"
-            ? "Not enough exercises for selected equipment. Add more equipment or change selection."
-            : "No hay suficientes ejercicios para el equipo seleccionado. Agrega más equipo o cambia la selección."}
-        </div>
-      )}
+        {day.equipmentShortage && (
+          <div className="equipment-warning">
+            {lang === "en"
+              ? "Not enough exercises for selected equipment. Add more equipment or change selection."
+              : "No hay suficientes ejercicios para el equipo seleccionado. Agrega más equipo o cambia la selección."}
+          </div>
+        )}
+      </section>
 
       <div className="ex-section">
         <div className="ex-section-head">
-          <strong>{lang === "en" ? "Strength" : "Fuerza"}</strong>
+          <div className="ex-section-copy">
+            <strong>{lang === "en" ? "Strength" : "Fuerza"}</strong>
+            <small>
+              {lang === "en" ? "Primary work block" : "Bloque principal del día"}
+            </small>
+          </div>
           <span>{strengthExercises.length}/3</span>
         </div>
         <ul className="ex-list">
@@ -382,7 +467,12 @@ export default function DayCard({
 
       <div className="ex-section">
         <div className="ex-section-head">
-          <strong>Core</strong>
+          <div className="ex-section-copy">
+            <strong>Core</strong>
+            <small>
+              {lang === "en" ? "Stability and trunk support" : "Estabilidad y soporte del tronco"}
+            </small>
+          </div>
           <span>{coreExercises.length}/3</span>
         </div>
         {selectedEquipment.length > 0 && coreEquipmentAlternatives.length > 0 && (
@@ -424,16 +514,6 @@ export default function DayCard({
           {coreExercises.map((ex, i) => renderExercise(ex, i, "core"))}
         </ul>
       </div>
-      <div className="day-actions">
-        <button
-          className="tiny primary-btn"
-          type="button"
-          onClick={() => onStartSession(index)}
-        >
-          {lang === "en" ? "Start session" : "Iniciar sesión"}
-        </button>
-      </div>
-      <div className="xp">+{day.xp} XP</div>
     </div>
   );
 }

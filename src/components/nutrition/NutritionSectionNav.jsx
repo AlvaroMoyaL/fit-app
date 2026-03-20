@@ -12,6 +12,9 @@ export default function NutritionSectionNav({
   activeSection = "estado",
   onChangeSection,
   note = "Orden sugerido: registro rápido, revisión del balance y luego planificación semanal.",
+  showHeader = true,
+  showNote = true,
+  compact = false,
 }) {
   return (
     <Box
@@ -25,31 +28,33 @@ export default function NutritionSectionNav({
         zIndex: { xs: 8, md: "auto" },
       })}
     >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-          flexWrap: "wrap",
-        }}
-      >
-        <Typography
-          variant="overline"
-          sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}
+      {showHeader ? (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            flexWrap: "wrap",
+          }}
         >
-          Navegación nutricional
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
-          Cambia de sección sin volver al panel lateral.
-        </Typography>
-      </Box>
+          <Typography
+            variant="overline"
+            sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}
+          >
+            Navegación nutricional
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
+            Cambia de sección sin volver al panel lateral.
+          </Typography>
+        </Box>
+      ) : null}
       <Box
         sx={{
           display: { xs: "flex", sm: "grid" },
           gridTemplateColumns: {
-            sm: "repeat(2, minmax(0, 1fr))",
-            md: "repeat(4, minmax(0, 1fr))",
+            sm: compact ? "1fr" : "repeat(2, minmax(0, 1fr))",
+            lg: compact ? "1fr" : "repeat(4, minmax(0, 1fr))",
           },
           gap: 1,
           overflowX: { xs: "auto", sm: "visible" },
@@ -67,21 +72,34 @@ export default function NutritionSectionNav({
               variant="text"
               color="inherit"
               onClick={() => onChangeSection && onChangeSection(item.key)}
-              sx={(theme) => nutritionNavButtonSx(theme, isActive)}
+              sx={(theme) =>
+                nutritionNavButtonSx(theme, isActive, compact
+                  ? {
+                      mobileMinWidth: 128,
+                      minHeight: 48,
+                      px: 1.2,
+                      py: 0.95,
+                      mobileFontSize: "0.88rem",
+                      desktopFontSize: "0.88rem",
+                    }
+                  : {})
+              }
             >
-              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                {item.label}
+              <Box component="span" className="nutrition-nav-button-label" sx={{ display: { xs: "none", sm: "inline" } }}>
+                {compact ? item.shortLabel : item.label}
               </Box>
-              <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
+              <Box component="span" className="nutrition-nav-button-label" sx={{ display: { xs: "inline", sm: "none" } }}>
                 {item.shortLabel}
               </Box>
             </Button>
           );
         })}
       </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
-        {note}
-      </Typography>
+      {showNote ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
+          {note}
+        </Typography>
+      ) : null}
     </Box>
   );
 }

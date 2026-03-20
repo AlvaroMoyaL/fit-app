@@ -1,4 +1,6 @@
-export default function MuscleSummary({ history, lang }) {
+import EmptyState from "./EmptyState";
+
+export default function MuscleSummary({ history, lang, embedded = false }) {
   const muscleCounts = {};
   const exerciseCounts = {};
 
@@ -33,15 +35,41 @@ export default function MuscleSummary({ history, lang }) {
     .slice(0, 8);
 
   return (
-    <div className="summary">
-      <h2>{lang === "en" ? "Summary" : "Resumen"}</h2>
-      <div className="summary-grid">
-        <div className="summary-card">
-          <h3>{lang === "en" ? "Top Muscles" : "Top músculos"}</h3>
+    <div className={`muscle-summary ${embedded ? "is-embedded" : ""}`}>
+      {!embedded && (
+        <div className="workspace-section-head">
+          <div>
+            <p className="workspace-section-kicker">
+              {lang === "en" ? "Coverage" : "Cobertura"}
+            </p>
+            <h3>{lang === "en" ? "Muscle summary" : "Resumen muscular"}</h3>
+            <p className="workspace-section-copy">
+              {lang === "en"
+                ? "Top muscles and exercises registered in your history."
+                : "Músculos y ejercicios con mayor presencia dentro de tu historial."}
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="muscle-summary-grid">
+        <section className="muscle-summary-card">
+          <div className="muscle-summary-card-head">
+            <span>{lang === "en" ? "Coverage" : "Cobertura"}</span>
+            <h4>{lang === "en" ? "Top muscles" : "Top músculos"}</h4>
+          </div>
           {topMuscles.length === 0 ? (
-            <p className="note">Sin datos</p>
+            <EmptyState
+              compact
+              eyebrow={lang === "en" ? "No coverage yet" : "Sin cobertura"}
+              title={lang === "en" ? "No muscles tracked yet" : "Aún no hay músculos registrados"}
+              description={
+                lang === "en"
+                  ? "Tracked sessions will show which zones are repeating most."
+                  : "Las sesiones registradas mostrarán qué zonas se repiten con más frecuencia."
+              }
+            />
           ) : (
-            <ul>
+            <ul className="muscle-summary-list">
               {topMuscles.map(([name, count]) => (
                 <li key={name}>
                   <span>{name}</span>
@@ -50,13 +78,25 @@ export default function MuscleSummary({ history, lang }) {
               ))}
             </ul>
           )}
-        </div>
-        <div className="summary-card">
-          <h3>{lang === "en" ? "Top Exercises" : "Top ejercicios"}</h3>
+        </section>
+        <section className="muscle-summary-card">
+          <div className="muscle-summary-card-head">
+            <span>{lang === "en" ? "Frequency" : "Frecuencia"}</span>
+            <h4>{lang === "en" ? "Top exercises" : "Top ejercicios"}</h4>
+          </div>
           {topExercises.length === 0 ? (
-            <p className="note">Sin datos</p>
+            <EmptyState
+              compact
+              eyebrow={lang === "en" ? "No frequency yet" : "Sin frecuencia"}
+              title={lang === "en" ? "No exercises ranked yet" : "Todavía no hay ejercicios rankeados"}
+              description={
+                lang === "en"
+                  ? "As you accumulate history, the most repeated exercises will appear here."
+                  : "A medida que acumules historial, aquí aparecerán los ejercicios más repetidos."
+              }
+            />
           ) : (
-            <ul>
+            <ul className="muscle-summary-list">
               {topExercises.map(([name, count]) => (
                 <li key={name}>
                   <span>{name}</span>
@@ -65,7 +105,7 @@ export default function MuscleSummary({ history, lang }) {
               ))}
             </ul>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

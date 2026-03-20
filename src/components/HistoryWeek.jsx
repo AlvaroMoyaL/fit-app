@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import EmptyState from "./EmptyState";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -273,72 +274,181 @@ export default function HistoryWeek({
   };
 
   return (
-    <div className="history">
-      <div className="history-header">
-        <p className="section-eyebrow">Seguimiento semanal</p>
-        <h2>Historial semanal</h2>
-        <p className="history-lead">
-          Resumen ejecutivo de cumplimiento, carga y detalle diario del entrenamiento registrado.
-        </p>
-        {onRegisterPastExercise && (
-          <button type="button" className="tiny" onClick={openRegister}>
-            Registrar ejercicio anterior
-          </button>
-        )}
-        <div className="history-nav">
-          <button
-            type="button"
-            className="tiny"
-            onClick={() => setOffset((o) => o - 1)}
-          >
-            Semana anterior
-          </button>
-          <button
-            type="button"
-            className="tiny"
-            onClick={() => setOffset(0)}
-          >
-            Esta semana
-          </button>
-          <button
-            type="button"
-            className="tiny"
-            onClick={() => setOffset((o) => o + 1)}
-          >
-            Semana siguiente
-          </button>
-          <div className="week-picker">
-            <label>
-              Ir a semana
-              <input
-                type="week"
-                value={weekInput}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (!value) return;
-                  const [yearStr, weekStr] = value.split("-W");
-                  const year = Number(yearStr);
-                  const week = Number(weekStr);
-                  if (!year || !week) return;
-                  const jan4 = new Date(year, 0, 4);
-                  const firstWeekStart = startOfWeek(jan4);
-                  const target = addDays(firstWeekStart, (week - 1) * 7);
-                  const nowWeekStart = startOfWeek(new Date());
-                  const diffWeeks = Math.round(
-                    (target - nowWeekStart) / (7 * 24 * 60 * 60 * 1000)
-                  );
-                  setOffset(diffWeeks);
-                }}
-              />
-            </label>
+    <div className="history-stack">
+      <section className="workspace-panel history-panel history-log-panel">
+        <div className="workspace-section-head">
+          <div>
+            <p className="workspace-section-kicker">Seguimiento semanal</p>
+            <h3>Historial semanal</h3>
+            <p className="workspace-section-copy">
+              Resumen ejecutivo de cumplimiento, carga y detalle diario del entrenamiento
+              registrado con una navegación más compacta.
+            </p>
           </div>
         </div>
-      </div>
+
+        <div className="history-toolbar">
+          <div className="history-toolbar-actions history-toolbar-nav">
+            <button type="button" className="tiny" onClick={() => setOffset((o) => o - 1)}>
+              Semana anterior
+            </button>
+            <button type="button" className="tiny" onClick={() => setOffset(0)}>
+              Esta semana
+            </button>
+            <button type="button" className="tiny" onClick={() => setOffset((o) => o + 1)}>
+              Semana siguiente
+            </button>
+          </div>
+
+          <div className="history-toolbar-actions history-toolbar-meta">
+            <div className="history-week-picker">
+              <label>
+                Ir a semana
+                <input
+                  type="week"
+                  value={weekInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) return;
+                    const [yearStr, weekStr] = value.split("-W");
+                    const year = Number(yearStr);
+                    const week = Number(weekStr);
+                    if (!year || !week) return;
+                    const jan4 = new Date(year, 0, 4);
+                    const firstWeekStart = startOfWeek(jan4);
+                    const target = addDays(firstWeekStart, (week - 1) * 7);
+                    const nowWeekStart = startOfWeek(new Date());
+                    const diffWeeks = Math.round(
+                      (target - nowWeekStart) / (7 * 24 * 60 * 60 * 1000)
+                    );
+                    setOffset(diffWeeks);
+                  }}
+                />
+              </label>
+            </div>
+            {onRegisterPastExercise && (
+              <button type="button" className="tiny" onClick={openRegister}>
+                Registrar ejercicio anterior
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="history-summary history-summary-exec">
+          <div>
+            <span>XP semanal</span>
+            <strong>{weekXp}</strong>
+          </div>
+          <div>
+            <span>Consistencia</span>
+            <strong>{adherence}%</strong>
+          </div>
+          <div>
+            <span>Día más fuerte</span>
+            <strong>
+              {bestDay?.xp ? `${formatDayLabel(bestDay.date)} (${bestDay.xp} XP)` : "—"}
+            </strong>
+          </div>
+          <div>
+            <span>Carga semanal</span>
+            <strong>{weekMinutes} min</strong>
+          </div>
+          <div>
+            <span>Ejercicios registrados</span>
+            <strong>{weekExercises}</strong>
+          </div>
+          <div>
+            <span>Promedio por sesión</span>
+            <strong>
+              {weekAvgXpPerSession} XP · {avgMinutesPerActiveDay} min
+            </strong>
+          </div>
+        </div>
+
+        <p className="history-insight">
+          {weekSessions < 3
+            ? "Semana con baja frecuencia. Prioriza sumar días de cumplimiento antes de subir intensidad."
+            : weekSessions < 5
+              ? "Semana intermedia. Buen punto para mejorar constancia y cerrar más sesiones completas."
+              : "Semana sólida de adherencia. Mantén consistencia y gestiona recuperación para sostener progreso."}
+        </p>
+
+        <div className="history-day-list">
+          {days.map((d) => {
+            const isOpen = expandedDayKey === d.key;
+            return (
+              <div
+                className={`history-day-row ${d.items.length ? "has-data" : "is-empty"}`}
+                key={d.key}
+              >
+                <button
+                  type="button"
+                  className="history-day-row-head"
+                  onClick={() => setExpandedDayKey((prev) => (prev === d.key ? "" : d.key))}
+                >
+                  <div className="history-day-row-date">
+                    <strong>{formatDayLabel(d.date)}</strong>
+                    <small>{d.key}</small>
+                  </div>
+                  <div className="history-day-row-metrics">
+                    <span className="history-pill">{d.items.length} ej</span>
+                    <span className="history-pill">XP {d.xp || 0}</span>
+                    <span className="history-pill">{d.minutes || 0} min</span>
+                  </div>
+                  <span className="history-row-toggle">{isOpen ? "Ocultar" : "Ver"}</span>
+                </button>
+                {isOpen && (
+                  <div className="history-day-row-body">
+                    {d.items.length === 0 ? (
+                      <EmptyState
+                        compact
+                        eyebrow={lang === "en" ? "Empty day" : "Día vacío"}
+                        title={lang === "en" ? "No session was logged" : "No se registró ninguna sesión"}
+                        description={
+                          lang === "en"
+                            ? "Use the manual register if you trained outside the current flow."
+                            : "Usa el registro manual si entrenaste fuera del flujo principal."
+                        }
+                      />
+                    ) : (
+                      <ul className="history-list">
+                        {d.items.map((item) => (
+                          <li key={item.key} className="history-item">
+                            <div className="history-item-top">
+                              <strong>
+                                {lang === "en"
+                                  ? item.name_en || item.name || item.name_es
+                                  : item.name_es || item.name || item.name_en}
+                              </strong>
+                              <span className="history-item-xp">+{item.xp || 0} XP</span>
+                            </div>
+                            {item.type === "replace" && <span>Motivo: {item.reason}</span>}
+                            {item.type === "reps" && (
+                              <span>{item.repsBySet?.join(" / ") || "—"} reps</span>
+                            )}
+                            {item.type === "time" && <span>{item.workSec || 0}s</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {showRegister && (
-        <div className="history-register">
+        <section className="workspace-panel history-panel history-register-panel">
           <div className="history-register-head">
-            <strong>Registrar ejercicio anterior</strong>
+            <div>
+              <p className="workspace-section-kicker">Registro manual</p>
+              <strong>Registrar ejercicio anterior</strong>
+              <p className="history-register-copy">
+                Guarda sesiones pasadas sin salir de la vista semanal.
+              </p>
+            </div>
             <div className="history-register-head-actions">
               <button type="button" className="tiny" onClick={onSaveAll}>
                 Guardar todo
@@ -348,6 +458,7 @@ export default function HistoryWeek({
               </button>
             </div>
           </div>
+
           <div className="history-register-grid">
             <label>
               Fecha
@@ -369,7 +480,8 @@ export default function HistoryWeek({
 
           {!selectedDay && (
             <p className="note">
-              La fecha seleccionada corresponde a descanso. Cambia la fecha para registrar ejercicios del plan.
+              La fecha seleccionada corresponde a descanso. Cambia la fecha para registrar
+              ejercicios del plan.
             </p>
           )}
 
@@ -395,7 +507,9 @@ export default function HistoryWeek({
                       <strong>{name}</strong>
                     </label>
                     <div className="history-register-item-actions">
-                      <span className="note">{ex.target} • {ex.equipment}</span>
+                      <span className="note">
+                        {ex.target} • {ex.equipment}
+                      </span>
                       <button
                         type="button"
                         className="tiny"
@@ -471,96 +585,8 @@ export default function HistoryWeek({
           </div>
 
           {registerMsg && <span className="note">{registerMsg}</span>}
-        </div>
+        </section>
       )}
-
-      <div className="history-summary history-summary-exec">
-        <div>
-          <span>XP semanal</span>
-          <strong>{weekXp}</strong>
-        </div>
-        <div>
-          <span>Consistencia</span>
-          <strong>{adherence}%</strong>
-        </div>
-        <div>
-          <span>Día más fuerte</span>
-          <strong>{bestDay?.xp ? `${formatDayLabel(bestDay.date)} (${bestDay.xp} XP)` : "—"}</strong>
-        </div>
-        <div>
-          <span>Carga semanal</span>
-          <strong>{weekMinutes} min</strong>
-        </div>
-        <div>
-          <span>Ejercicios registrados</span>
-          <strong>{weekExercises}</strong>
-        </div>
-        <div>
-          <span>Promedio por sesión</span>
-          <strong>
-            {weekAvgXpPerSession} XP · {avgMinutesPerActiveDay} min
-          </strong>
-        </div>
-      </div>
-      <p className="history-insight">
-        {weekSessions < 3
-          ? "Semana con baja frecuencia. Prioriza sumar días de cumplimiento antes de subir intensidad."
-          : weekSessions < 5
-            ? "Semana intermedia. Buen punto para mejorar constancia y cerrar más sesiones completas."
-            : "Semana sólida de adherencia. Mantén consistencia y gestiona recuperación para sostener progreso."}
-      </p>
-      <div className="history-day-list">
-        {days.map((d) => {
-          const isOpen = expandedDayKey === d.key;
-          return (
-            <div className={`history-day-row ${d.items.length ? "has-data" : "is-empty"}`} key={d.key}>
-              <button
-                type="button"
-                className="history-day-row-head"
-                onClick={() => setExpandedDayKey((prev) => (prev === d.key ? "" : d.key))}
-              >
-                <div className="history-day-row-date">
-                  <strong>{formatDayLabel(d.date)}</strong>
-                  <small>{d.key}</small>
-                </div>
-                <div className="history-day-row-metrics">
-                  <span className="history-pill">{d.items.length} ej</span>
-                  <span className="history-pill">XP {d.xp || 0}</span>
-                  <span className="history-pill">{d.minutes || 0} min</span>
-                </div>
-                <span className="history-row-toggle">{isOpen ? "Ocultar" : "Ver"}</span>
-              </button>
-              {isOpen && (
-                <div className="history-day-row-body">
-                  {d.items.length === 0 ? (
-                    <p className="note">Sin registro</p>
-                  ) : (
-                    <ul className="history-list">
-                      {d.items.map((item) => (
-                        <li key={item.key} className="history-item">
-                          <div className="history-item-top">
-                            <strong>
-                              {lang === "en"
-                                ? item.name_en || item.name || item.name_es
-                                : item.name_es || item.name || item.name_en}
-                            </strong>
-                            <span className="history-item-xp">+{item.xp || 0} XP</span>
-                          </div>
-                          {item.type === "replace" && <span>Motivo: {item.reason}</span>}
-                          {item.type === "reps" && (
-                            <span>{item.repsBySet?.join(" / ") || "—"} reps</span>
-                          )}
-                          {item.type === "time" && <span>{item.workSec || 0}s</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

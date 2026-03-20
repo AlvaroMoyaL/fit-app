@@ -6,6 +6,7 @@ import {
   calculateCalorieBalance,
   calculateTDEEDynamic,
 } from "../../utils/metabolism";
+import { nutritionSurfaceSx } from "./nutritionUi";
 
 function getTodayDateKey() {
   const now = new Date();
@@ -16,9 +17,9 @@ function getTodayDateKey() {
 }
 
 function statusLabel(status) {
-  if (status === "deficit") return "Deficit calorico";
+  if (status === "deficit") return "Déficit calórico";
   if (status === "maintenance") return "Mantenimiento";
-  return "Superavit calorico";
+  return "Superávit calórico";
 }
 
 function statusColor(status) {
@@ -27,7 +28,7 @@ function statusColor(status) {
   return "error.main";
 }
 
-export default function NutritionSummary({ profile, meals, tdeeOverride, activityMetrics = {} }) {
+export default function NutritionSummary({ profile, meals, tdeeOverride, activityMetrics = {}, embedded = false }) {
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const totals = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
@@ -53,60 +54,101 @@ export default function NutritionSummary({ profile, meals, tdeeOverride, activit
     bgcolor: "background.paper",
   };
 
+  const content = (
+    <>
+      <Typography variant={embedded ? "subtitle1" : "h6"}>Resumen nutricional del día</Typography>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, minmax(0, 1fr))",
+            md: "repeat(3, minmax(0, 1fr))",
+            xl: "repeat(5, minmax(0, 1fr))",
+          },
+          gap: 1,
+        }}
+      >
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">Calorías</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.calories)} kcal</Typography>
+        </Box>
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">Proteína</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.protein)} g</Typography>
+        </Box>
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">Carbohidratos</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.carbs)} g</Typography>
+        </Box>
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">Grasas</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.fat)} g</Typography>
+        </Box>
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">Comidas</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{totals.mealsCount}</Typography>
+        </Box>
+      </Box>
+      <Divider sx={{ my: 0.35 }} />
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+          gap: 1,
+        }}
+      >
+        <Box sx={statCardSx}>
+          <Typography variant="caption" color="text.secondary">BMR estimado</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>{roundedBmr || 0} kcal</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Pasos considerados: {Math.round(Number(activityMetrics?.steps || 0))}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            ...statCardSx,
+            display: "grid",
+            gap: 0.6,
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">Balance energético</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+            {balanceSign} kcal
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            TDEE estimado: {roundedTdee || 0} kcal
+          </Typography>
+          <Box>
+            <Chip
+              size="small"
+              label={`Estado: ${statusLabel(calorieBalance.status)}`}
+              sx={{
+                color: statusColor(calorieBalance.status),
+                borderColor: statusColor(calorieBalance.status),
+                bgcolor: "transparent",
+                fontWeight: 700,
+              }}
+              variant="outlined"
+            />
+          </Box>
+        </Box>
+      </Box>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={(theme) => ({ ...nutritionSurfaceSx(theme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.2 })}>
+        {content}
+      </Box>
+    );
+  }
+
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: "grid", gap: 1.2 }}>
-        <Typography variant="h6">Resumen nutricional del día</Typography>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
-            gap: 1,
-          }}
-        >
-          <Box sx={statCardSx}>
-            <Typography variant="caption" color="text.secondary">Calorías</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.calories)} kcal</Typography>
-          </Box>
-          <Box sx={statCardSx}>
-            <Typography variant="caption" color="text.secondary">Proteína</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.protein)} g</Typography>
-          </Box>
-          <Box sx={statCardSx}>
-            <Typography variant="caption" color="text.secondary">Carbohidratos</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.carbs)} g</Typography>
-          </Box>
-          <Box sx={statCardSx}>
-            <Typography variant="caption" color="text.secondary">Grasas</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 700 }}>{Math.round(totals.fat)} g</Typography>
-          </Box>
-          <Box sx={statCardSx}>
-            <Typography variant="caption" color="text.secondary">Comidas</Typography>
-            <Typography variant="body1" sx={{ fontWeight: 700 }}>{totals.mealsCount}</Typography>
-          </Box>
-        </Box>
-        <Divider sx={{ my: 1 }} />
-        <Typography variant="subtitle1">Balance energetico</Typography>
-        <Typography variant="body2">Calorías consumidas: {totals.calories} kcal</Typography>
-        <Typography variant="body2">BMR estimado: {roundedBmr || 0} kcal</Typography>
-        <Typography variant="body2">Gasto estimado (TDEE): {roundedTdee || 0} kcal</Typography>
-        <Typography variant="body2">
-          Pasos considerados: {Math.round(Number(activityMetrics?.steps || 0))}
-        </Typography>
-        <Typography variant="body2">Balance: {balanceSign} kcal</Typography>
-        <Box>
-          <Chip
-            size="small"
-            label={`Estado: ${statusLabel(calorieBalance.status)}`}
-            sx={{
-              color: statusColor(calorieBalance.status),
-              borderColor: statusColor(calorieBalance.status),
-              bgcolor: "transparent",
-              fontWeight: 700,
-            }}
-            variant="outlined"
-          />
-        </Box>
+        {content}
       </CardContent>
     </Card>
   );

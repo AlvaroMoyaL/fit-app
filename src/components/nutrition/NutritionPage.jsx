@@ -23,10 +23,10 @@ import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
 import { recipes } from "../../data/recipes";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
+import WorkspaceHeader from "../WorkspaceHeader";
 import {
   getNutritionMetricState,
   nutritionCompactTabsSx,
-  nutritionHeroSx,
   nutritionSurfaceSx,
   nutritionTabLabelDot,
   nutritionTabsRailSx,
@@ -93,6 +93,57 @@ function NutritionSectionFallback({ rows = 3 }) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+function NutritionWorkspacePanel({
+  eyebrow,
+  title,
+  description,
+  children,
+  id,
+  action = null,
+}) {
+  return (
+    <Box id={id} className="workspace-panel" sx={{ gap: { xs: 1.15, sm: 1.4 } }}>
+      <Box
+        className="workspace-section-head"
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 1.2,
+          flexWrap: "wrap",
+        }}
+      >
+        <Box sx={{ display: "grid", gap: 0.65, minWidth: 0 }}>
+          {eyebrow ? (
+            <Typography component="p" className="workspace-section-kicker">
+              {eyebrow}
+            </Typography>
+          ) : null}
+          <Typography
+            component="h3"
+            sx={{
+              m: 0,
+              fontSize: { xs: "1.24rem", sm: "1.42rem" },
+              lineHeight: 1.08,
+              letterSpacing: "-0.03em",
+              color: "text.primary",
+            }}
+          >
+            {title}
+          </Typography>
+          {description ? (
+            <Typography component="p" className="workspace-section-copy" sx={{ m: 0 }}>
+              {description}
+            </Typography>
+          ) : null}
+        </Box>
+        {action ? <Box>{action}</Box> : null}
+      </Box>
+      {children}
+    </Box>
   );
 }
 
@@ -244,14 +295,42 @@ export default function NutritionPage({
   activeSection = "estado",
   onChangeActiveSection,
   onNutritionDataChange,
+  showInlineSectionNav = true,
 }) {
   const theme = useTheme();
   const sectionStackSx = {
     display: "grid",
     gap: { xs: 1.5, sm: 2.25 },
   };
-  const sectionHeaderSx = nutritionHeroSx;
   const tabsContainerSx = nutritionTabsRailSx;
+  const statusWorkspaceSx = {
+    display: "grid",
+    gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.2fr) minmax(320px, 0.92fr)" },
+    gap: { xs: 1.3, md: 1.6 },
+    alignItems: "start",
+  };
+  const statusColumnSx = {
+    display: "grid",
+    gap: { xs: 1.2, md: 1.4 },
+  };
+  const historyChartsGridSx = {
+    display: "grid",
+    gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
+    gap: { xs: 1.2, md: 1.4 },
+  };
+  const historyScrollChartSx = {
+    overflowX: "auto",
+    pb: 0.3,
+    scrollbarWidth: "thin",
+    "& > *": {
+      minWidth: { xs: 410, sm: "100%" },
+    },
+  };
+  const historySummaryGridSx = {
+    display: "grid",
+    gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(3, minmax(0, 1fr))" },
+    gap: 1,
+  };
   const heroMetricsRailSx = {
     display: { xs: "flex", sm: "grid" },
     gridTemplateColumns: {
@@ -617,51 +696,20 @@ export default function NutritionPage({
   };
 
   return (
-    <Box className="nutrition-page-content" sx={{ ...sectionStackSx, pb: { xs: 0.4, sm: 1 } }}>
-      <Box sx={sectionHeaderSx}>
-        <Typography
-          variant="overline"
-          sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.14em", fontSize: { xs: "0.62rem", sm: "0.72rem" } }}
-        >
-          Estado diario y planificación
-        </Typography>
-        <Typography variant="h4" sx={{ lineHeight: 1, fontSize: { xs: "1.9rem", sm: "2.125rem" } }}>
-          Nutrición
-        </Typography>
-        <Typography
-          variant="body1"
-          color="text.secondary"
-          sx={{ maxWidth: 720, lineHeight: 1.5, fontSize: { xs: "0.95rem", sm: "1rem" }, display: { xs: "none", sm: "block" } }}
-        >
-          Estado diario, registro, planificación y herramientas prácticas en un solo flujo.
-        </Typography>
-        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
-          <Chip size="small" label={`TDEE ${Math.round(tdee || 0)} kcal`} variant="outlined" />
-          <Chip
-            size="small"
-            label={`Balance ${Math.round(calorieBalance.balance)} kcal`}
-            color={
-              calorieBalance.status === "deficit"
-                ? "success"
-                : calorieBalance.status === "surplus"
-                ? "error"
-                : "warning"
-            }
-            variant="outlined"
-            sx={{ display: { xs: "none", sm: "inline-flex" } }}
-          />
-          <Chip
-            size="small"
-            label={currentWeight ? `Peso ${currentWeight.toFixed(1)} kg` : "Peso sin registro"}
-            variant="outlined"
-          />
-          <Chip
-            size="small"
-            label={`Objetivo prot. ${Math.round(macroTargets.protein || 0)} g`}
-            variant="outlined"
-            sx={{ display: { xs: "none", sm: "inline-flex" } }}
-          />
-        </Box>
+    <Box className="nutrition-page-content workspace-view" sx={{ ...sectionStackSx, pb: { xs: 0.4, sm: 1 } }}>
+      <WorkspaceHeader
+        eyebrow="Estado diario y planificación"
+        title="Nutrición"
+        description="Estado diario, registro, planificación y herramientas prácticas dentro del mismo marco visual que el resto de la app."
+        tags={[
+          `TDEE ${Math.round(tdee || 0)} kcal`,
+          `Balance ${Math.round(calorieBalance.balance)} kcal`,
+          currentWeight ? `Peso ${currentWeight.toFixed(1)} kg` : "Peso sin registro",
+          `Objetivo prot. ${Math.round(macroTargets.protein || 0)} g`,
+        ]}
+        className="workspace-header-nutrition"
+        bodyClassName="workspace-header-body-nutrition"
+      >
         <Box sx={heroMetricsRailSx}>
           <HeroMetricCard
             label="Calorías"
@@ -736,11 +784,27 @@ export default function NutritionPage({
             <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg`} state={cholesterolState} />
           </Box>
         </Box>
-      </Box>
-      <NutritionSectionNav activeSection={activeSection} onChangeSection={onChangeActiveSection} />
-      <Divider />
+      </WorkspaceHeader>
+      {showInlineSectionNav ? (
+        <>
+          <NutritionWorkspacePanel
+            eyebrow="Flujo del módulo"
+            title="Navegación nutricional"
+            description="Registro, estado, planificación y herramientas prácticas dentro del mismo flujo."
+          >
+            <NutritionSectionNav activeSection={activeSection} onChangeSection={onChangeActiveSection} />
+          </NutritionWorkspacePanel>
+          <Divider />
+        </>
+      ) : null}
       {activeSection === "registro" && (
-        <Box sx={sectionStackSx}>
+        <Box className="workspace-section" sx={sectionStackSx}>
+          <NutritionWorkspacePanel
+            id="nutrition-register-panel"
+            eyebrow="Registro"
+            title="Ingesta del día"
+            description="Alta rápida, borradores y detalle de comidas sin salir del flujo principal."
+          >
           {!nutritionReady ? (
             <NutritionSectionFallback rows={2} />
           ) : (
@@ -753,98 +817,138 @@ export default function NutritionPage({
               />
             </Suspense>
           )}
+          </NutritionWorkspacePanel>
         </Box>
       )}
 
       {activeSection === "estado" && (
-        <Box sx={sectionStackSx}>
-          <NutritionInsights
-            nutritionScore={dailyNutritionScore}
-            macroAnalysis={macroAnalysis}
-            proteinAnalysis={proteinAnalysis}
-            vegetableAnalysis={vegetableAnalysis}
-          />
-          <Box sx={tabsContainerSx}>
-            <Tabs
-              value={dailyStatusTab}
-              onChange={(_, value) => setDailyStatusTab(value)}
-              variant="scrollable"
-              allowScrollButtonsMobile
-              sx={compactStatusTabsSx}
-            >
-              <Tab label={nutritionTabLabelDot("primary.main", "Resumen")} />
-              <Tab label={nutritionTabLabelDot("warning.main", "Balance y proyección")} />
-              <Tab label={nutritionTabLabelDot("success.main", "Adaptativo")} />
-              <Tab label={nutritionTabLabelDot("info.main", "Historial")} />
-            </Tabs>
-          </Box>
+        <Box className="workspace-section" sx={sectionStackSx}>
+          <NutritionWorkspacePanel
+            id="nutrition-status-panel"
+            eyebrow="Estado diario"
+            title="Lectura del día"
+            description="Resume calidad, balance y tendencia antes de entrar a los detalles de cada bloque."
+          >
+            <NutritionInsights
+              nutritionScore={dailyNutritionScore}
+              macroAnalysis={macroAnalysis}
+              proteinAnalysis={proteinAnalysis}
+              vegetableAnalysis={vegetableAnalysis}
+            />
+            <Box sx={tabsContainerSx}>
+              <Tabs
+                value={dailyStatusTab}
+                onChange={(_, value) => setDailyStatusTab(value)}
+                variant="scrollable"
+                allowScrollButtonsMobile
+                sx={compactStatusTabsSx}
+              >
+                <Tab label={nutritionTabLabelDot("primary.main", "Resumen")} />
+                <Tab label={nutritionTabLabelDot("warning.main", "Balance y proyección")} />
+                <Tab label={nutritionTabLabelDot("success.main", "Adaptativo")} />
+                <Tab label={nutritionTabLabelDot("info.main", "Historial")} />
+              </Tabs>
+            </Box>
+          </NutritionWorkspacePanel>
 
           {dailyStatusTab === 0 && (
-            <Box sx={sectionStackSx}>
-              <Card variant="outlined">
-                <CardContent sx={{ display: "grid", gap: 1.25 }}>
-                  <Typography variant="h6">Índice de saciedad del día</Typography>
-                  {hungerToday.hasData ? (
-                    <>
-                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                        <Chip
-                          size="small"
-                          label={`Saciedad: ${hungerToday.satietyLevel}`}
-                          color={
-                            hungerToday.satietyLevel === "high"
-                              ? "success"
-                              : hungerToday.satietyLevel === "medium"
-                              ? "warning"
-                              : "error"
-                          }
-                        />
-                        <Chip
-                          size="small"
-                          label={`Hambre estimada: ${hungerToday.hungerLevel}`}
-                          variant="outlined"
-                        />
-                      </Box>
+            <NutritionWorkspacePanel
+              eyebrow="Resumen"
+              title="Estado del día"
+              description="Saciedad, alertas y lectura global de la alimentación del día."
+            >
+              <Box sx={statusWorkspaceSx}>
+                <Box sx={statusColumnSx}>
+                  <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.25 })}>
+                    <Typography variant="subtitle1">Índice de saciedad del día</Typography>
+                    {hungerToday.hasData ? (
+                      <>
+                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                          <Chip
+                            size="small"
+                            label={`Saciedad: ${hungerToday.satietyLevel}`}
+                            color={
+                              hungerToday.satietyLevel === "high"
+                                ? "success"
+                                : hungerToday.satietyLevel === "medium"
+                                ? "warning"
+                                : "error"
+                            }
+                          />
+                          <Chip
+                            size="small"
+                            label={`Hambre estimada: ${hungerToday.hungerLevel}`}
+                            variant="outlined"
+                          />
+                        </Box>
+                        <Typography variant="body2" color="text.secondary">
+                          Score: {hungerToday.satietyScore} · Ventana estimada de hambre: {hungerToday.windowText}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Última comida: {hungerToday.lastMealTimeText} · Próxima hambre estimada: {hungerToday.nextHungerText}
+                        </Typography>
+                      </>
+                    ) : (
                       <Typography variant="body2" color="text.secondary">
-                        Score: {hungerToday.satietyScore} · Ventana estimada de hambre: {hungerToday.windowText}
+                        Registra al menos una comida hoy para estimar saciedad y próxima ventana de hambre.
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Última comida: {hungerToday.lastMealTimeText} · Próxima hambre estimada: {hungerToday.nextHungerText}
-                      </Typography>
-                    </>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      Registra al menos una comida hoy para estimar saciedad y próxima ventana de hambre.
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-              <NutritionAlerts alerts={dailyNutritionAlerts} />
-              <NutritionSummary
-                profile={nutritionProfile}
-                meals={meals}
-                tdeeOverride={tdee}
-                activityMetrics={metricsForTdee}
-              />
-              <MealSuggestions
-                dailyCaloriesTarget={tdee}
-                dailyCaloriesConsumed={totalsToday.calories}
-                recipes={recipes}
-                foodCatalog={foodCatalog}
-                mealType={suggestedMealType}
-              />
-              <NutritionEvaluation totals={totalsToday} profile={nutritionProfile} tdee={tdee} />
-            </Box>
+                    )}
+                  </Box>
+                  <NutritionInsights
+                    nutritionScore={dailyNutritionScore}
+                    macroAnalysis={macroAnalysis}
+                    proteinAnalysis={proteinAnalysis}
+                    vegetableAnalysis={vegetableAnalysis}
+                    embedded
+                  />
+                  <NutritionSummary
+                    profile={nutritionProfile}
+                    meals={meals}
+                    tdeeOverride={tdee}
+                    activityMetrics={metricsForTdee}
+                    embedded
+                  />
+                </Box>
+                <Box sx={statusColumnSx}>
+                  <NutritionAlerts alerts={dailyNutritionAlerts} embedded />
+                  <MealSuggestions
+                    dailyCaloriesTarget={tdee}
+                    dailyCaloriesConsumed={totalsToday.calories}
+                    recipes={recipes}
+                    foodCatalog={foodCatalog}
+                    mealType={suggestedMealType}
+                    embedded
+                  />
+                  <NutritionEvaluation totals={totalsToday} profile={nutritionProfile} tdee={tdee} embedded />
+                </Box>
+              </Box>
+            </NutritionWorkspacePanel>
           )}
 
           {dailyStatusTab === 1 && (
-            <Box sx={sectionStackSx}>
-              <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} />
-              <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} />
-            </Box>
+            <NutritionWorkspacePanel
+              eyebrow="Balance"
+              title="Balance y proyección"
+              description="Cruza consumo, gasto y posible trayectoria del peso con un bloque más analítico."
+            >
+              <Box sx={{ ...statusWorkspaceSx, gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
+                <EnergyBalanceCard caloriesConsumed={totalsToday.calories} tdee={tdee} embedded />
+                <WeightProjection currentWeight={currentWeight} dailyBalance={calorieBalance.balance} embedded />
+              </Box>
+            </NutritionWorkspacePanel>
           )}
 
           {dailyStatusTab === 2 && (
-            <Box sx={sectionStackSx}>
+            <NutritionWorkspacePanel
+              eyebrow="Ajuste"
+              title="Análisis adaptativo"
+              description="Revisa alertas de tendencia y si el objetivo energético necesita corrección."
+              action={
+                <Button variant="outlined" size="medium" onClick={() => openAdaptiveDrawer("progreso")}>
+                  Ver detalle
+                </Button>
+              }
+            >
               <NutritionAlerts
                 calorieHistory={calorieHistory}
                 weightHistory={weightHistory}
@@ -857,167 +961,244 @@ export default function NutritionPage({
                 currentTargetCalories={currentTargetCalories}
                 onOpenDetail={openAdaptiveDrawer}
               />
-              <Box>
-                <Button variant="outlined" size="large" onClick={() => openAdaptiveDrawer("progreso")}>
-                  Ver análisis adaptativo
-                </Button>
-              </Box>
-            </Box>
+            </NutritionWorkspacePanel>
           )}
 
           {dailyStatusTab === 3 && (
-            <Box sx={sectionStackSx}>
-              <Card variant="outlined">
-                <CardContent sx={{ display: "grid", gap: 1.1 }}>
-                  <Typography variant="h6">Comparación calorías vs TDEE (7 días)</Typography>
-                  <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-                    <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                      <Box component="span" sx={{ width: 10, height: 10, bgcolor: "primary.main", borderRadius: "50%" }} />
-                      Calorías
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                      <Box component="span" sx={{ width: 10, height: 10, bgcolor: "warning.main", borderRadius: "50%" }} />
-                      TDEE
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                      gap: 1,
-                      alignItems: "end",
-                      minHeight: 170,
-                    }}
-                  >
-                    {last7HistoryChart.map((day) => {
-                      const caloriesHeight = Math.max(4, Math.round((day.calories / chartCaloriesMax) * 120));
-                      const tdeeHeight = Math.max(4, Math.round((day.tdee / chartCaloriesMax) * 120));
-                      return (
-                        <Box key={`cal-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
-                          <Box sx={{ display: "flex", gap: 0.5, alignItems: "end", minHeight: 124 }}>
-                            <Box
-                              title={`${day.date} calorías: ${Math.round(day.calories)} kcal`}
-                              sx={{ width: 10, height: caloriesHeight, bgcolor: "primary.main", borderRadius: 0.8 }}
-                            />
-                            <Box
-                              title={`${day.date} TDEE: ${Math.round(day.tdee)} kcal`}
-                              sx={{ width: 10, height: tdeeHeight, bgcolor: "warning.main", borderRadius: 0.8 }}
-                            />
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {day.shortDate}
-                          </Typography>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </CardContent>
-              </Card>
-
-              <Card variant="outlined">
-                <CardContent sx={{ display: "grid", gap: 1.1 }}>
-                  <Typography variant="h6">Macros por día (7 días)</Typography>
-                  <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-                    <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                      <Box component="span" sx={{ width: 10, height: 10, bgcolor: "success.main", borderRadius: "50%" }} />
-                      Proteína
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                      <Box component="span" sx={{ width: 10, height: 10, bgcolor: "info.main", borderRadius: "50%" }} />
-                      Carbohidratos
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                      <Box component="span" sx={{ width: 10, height: 10, bgcolor: "error.main", borderRadius: "50%" }} />
-                      Grasas
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                      gap: 1,
-                      alignItems: "end",
-                      minHeight: 170,
-                    }}
-                  >
-                    {last7HistoryChart.map((day) => {
-                      const total = Number(day.protein || 0) + Number(day.carbs || 0) + Number(day.fat || 0);
-                      const totalHeight = Math.max(4, Math.round((total / chartMacrosMax) * 120));
-                      const proteinH = total > 0 ? Math.max(2, Math.round((Number(day.protein || 0) / total) * totalHeight)) : 0;
-                      const carbsH = total > 0 ? Math.max(2, Math.round((Number(day.carbs || 0) / total) * totalHeight)) : 0;
-                      const fatH = total > 0 ? Math.max(2, totalHeight - proteinH - carbsH) : 0;
-                      return (
-                        <Box key={`mac-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
-                          <Box
-                            title={`${day.date} P:${Math.round(day.protein)} C:${Math.round(day.carbs)} G:${Math.round(day.fat)} g`}
-                            sx={{
-                              display: "flex",
-                              flexDirection: "column-reverse",
-                              width: 18,
-                              minHeight: 124,
-                              justifyContent: "flex-start",
-                            }}
-                          >
-                            <Box sx={{ height: fatH, bgcolor: "error.main", borderRadius: 0.6 }} />
-                            <Box sx={{ height: carbsH, bgcolor: "info.main", borderRadius: 0.6 }} />
-                            <Box sx={{ height: proteinH, bgcolor: "success.main", borderRadius: 0.6 }} />
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {day.shortDate}
-                          </Typography>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </CardContent>
-              </Card>
-
-              <Card variant="outlined">
-                <CardContent sx={{ display: "grid", gap: 1.2 }}>
-                  <Typography variant="h6">Evolución histórica por fecha</Typography>
-                  <TextField
-                    label="Fecha"
-                    type="date"
-                    value={historyDate || todayKey}
-                    onChange={(event) => setHistoryDate(event.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ maxWidth: 220 }}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    {historyDate === todayKey ? "Hoy" : historyDate ? `Fecha: ${historyDate}` : "Sin fecha"}
-                  </Typography>
-                  <Divider />
-                  <Typography variant="body1">Calorías: {Math.round(historyTotals.calories)} kcal</Typography>
-                  <Typography variant="body1">Proteína: {Math.round(historyTotals.protein)} g</Typography>
-                  <Typography variant="body1">Carbohidratos: {Math.round(historyTotals.carbs)} g</Typography>
-                  <Typography variant="body1">Grasas: {Math.round(historyTotals.fat)} g</Typography>
-                  <Typography variant="body1">
-                    Balance: {Math.round(historyBalance.balance)} kcal (TDEE {Math.round(historyTdee)} kcal)
-                  </Typography>
-                  <Typography variant="subtitle2" sx={{ mt: 0.8 }}>
-                    Comidas registradas: {historyTotals.mealsCount}
-                  </Typography>
-                  {historyMeals.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary">
-                      No hay comidas registradas para esa fecha.
-                    </Typography>
-                  ) : (
-                    <Box sx={{ display: "grid", gap: 0.5 }}>
-                      {historyMeals.map((meal) => (
-                        <Typography key={meal.id} variant="body2">
-                          {mealTypeLabel(meal?.mealType)} · {meal.name}
-                          {meal?.brand ? ` · ${meal.brand}` : ""} — {Math.round(Number(meal?.calories || 0))} kcal
+            <NutritionWorkspacePanel
+              eyebrow="Histórico"
+              title="Comparativa reciente"
+              description="Últimos 7 días y revisión puntual por fecha para detectar patrones repetidos."
+            >
+              <Box sx={statusWorkspaceSx}>
+                <Box sx={statusColumnSx}>
+                  <Box sx={historyChartsGridSx}>
+                    <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.1 })}>
+                      <Typography variant="subtitle1">Calorías vs TDEE</Typography>
+                      <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
+                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "primary.main", borderRadius: "50%" }} />
+                          Calorías
                         </Typography>
+                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
+                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "warning.main", borderRadius: "50%" }} />
+                          TDEE
+                        </Typography>
+                      </Box>
+                      <Box sx={historyScrollChartSx}>
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(7, minmax(48px, 1fr))",
+                            gap: 1,
+                            alignItems: "end",
+                            minHeight: 170,
+                          }}
+                        >
+                          {last7HistoryChart.map((day) => {
+                            const caloriesHeight = Math.max(4, Math.round((day.calories / chartCaloriesMax) * 120));
+                            const tdeeHeight = Math.max(4, Math.round((day.tdee / chartCaloriesMax) * 120));
+                            return (
+                              <Box key={`cal-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
+                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "end", minHeight: 124 }}>
+                                  <Box
+                                    title={`${day.date} calorías: ${Math.round(day.calories)} kcal`}
+                                    sx={{ width: 10, height: caloriesHeight, bgcolor: "primary.main", borderRadius: 0.8 }}
+                                  />
+                                  <Box
+                                    title={`${day.date} TDEE: ${Math.round(day.tdee)} kcal`}
+                                    sx={{ width: 10, height: tdeeHeight, bgcolor: "warning.main", borderRadius: 0.8 }}
+                                  />
+                                </Box>
+                                <Typography variant="caption" color="text.secondary">
+                                  {day.shortDate}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.1 })}>
+                      <Typography variant="subtitle1">Macros por día</Typography>
+                      <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
+                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "success.main", borderRadius: "50%" }} />
+                          Proteína
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
+                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "info.main", borderRadius: "50%" }} />
+                          Carbohidratos
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
+                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "error.main", borderRadius: "50%" }} />
+                          Grasas
+                        </Typography>
+                      </Box>
+                      <Box sx={historyScrollChartSx}>
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(7, minmax(48px, 1fr))",
+                            gap: 1,
+                            alignItems: "end",
+                            minHeight: 170,
+                          }}
+                        >
+                          {last7HistoryChart.map((day) => {
+                            const total = Number(day.protein || 0) + Number(day.carbs || 0) + Number(day.fat || 0);
+                            const totalHeight = Math.max(4, Math.round((total / chartMacrosMax) * 120));
+                            const proteinH = total > 0 ? Math.max(2, Math.round((Number(day.protein || 0) / total) * totalHeight)) : 0;
+                            const carbsH = total > 0 ? Math.max(2, Math.round((Number(day.carbs || 0) / total) * totalHeight)) : 0;
+                            const fatH = total > 0 ? Math.max(2, totalHeight - proteinH - carbsH) : 0;
+                            return (
+                              <Box key={`mac-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
+                                <Box
+                                  title={`${day.date} P:${Math.round(day.protein)} C:${Math.round(day.carbs)} G:${Math.round(day.fat)} g`}
+                                  sx={{
+                                    display: "flex",
+                                    flexDirection: "column-reverse",
+                                    width: 18,
+                                    minHeight: 124,
+                                    justifyContent: "flex-start",
+                                  }}
+                                >
+                                  <Box sx={{ height: fatH, bgcolor: "error.main", borderRadius: 0.6 }} />
+                                  <Box sx={{ height: carbsH, bgcolor: "info.main", borderRadius: 0.6 }} />
+                                  <Box sx={{ height: proteinH, bgcolor: "success.main", borderRadius: 0.6 }} />
+                                </Box>
+                                <Typography variant="caption" color="text.secondary">
+                                  {day.shortDate}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box sx={statusColumnSx}>
+                  <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.2 })}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        gap: 1.2,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Box sx={{ display: "grid", gap: 0.45, minWidth: 0 }}>
+                        <Typography variant="subtitle1">Detalle por fecha</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {historyDate === todayKey ? "Lectura de hoy" : historyDate ? `Fecha seleccionada: ${historyDate}` : "Sin fecha"}
+                        </Typography>
+                      </Box>
+                      <TextField
+                        label="Fecha"
+                        type="date"
+                        value={historyDate || todayKey}
+                        onChange={(event) => setHistoryDate(event.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ width: { xs: "100%", sm: 220 } }}
+                      />
+                    </Box>
+
+                    <Box sx={historySummaryGridSx}>
+                      {[
+                        { label: "Calorías", value: `${Math.round(historyTotals.calories)} kcal` },
+                        { label: "Proteína", value: `${Math.round(historyTotals.protein)} g` },
+                        { label: "Carbohidratos", value: `${Math.round(historyTotals.carbs)} g` },
+                        { label: "Grasas", value: `${Math.round(historyTotals.fat)} g` },
+                        { label: "Balance", value: `${Math.round(historyBalance.balance)} kcal` },
+                        { label: "Comidas", value: `${historyTotals.mealsCount}` },
+                      ].map((item) => (
+                        <Box
+                          key={item.label}
+                          sx={{
+                            p: 1,
+                            borderRadius: 1.6,
+                            border: "1px solid",
+                            borderColor: "divider",
+                            bgcolor: "background.paper",
+                            display: "grid",
+                            gap: 0.35,
+                            minWidth: 0,
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                            {item.label}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700, overflowWrap: "anywhere" }}>
+                            {item.value}
+                          </Typography>
+                        </Box>
                       ))}
                     </Box>
-                  )}
-                </CardContent>
-              </Card>
-            </Box>
+
+                    <Box
+                      sx={{
+                        p: 1.05,
+                        borderRadius: 1.8,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.paper",
+                        display: "grid",
+                        gap: 0.45,
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        TDEE estimado
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {Math.round(historyTdee)} kcal
+                      </Typography>
+                    </Box>
+
+                    <Divider />
+
+                    <Box sx={{ display: "grid", gap: 0.9 }}>
+                      <Typography variant="subtitle2">Comidas registradas</Typography>
+                      {historyMeals.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          No hay comidas registradas para esa fecha.
+                        </Typography>
+                      ) : (
+                        historyMeals.map((meal) => (
+                          <Box
+                            key={meal.id}
+                            sx={{
+                              display: "grid",
+                              gap: 0.25,
+                              p: 1,
+                              borderRadius: 1.6,
+                              border: "1px solid",
+                              borderColor: "divider",
+                              bgcolor: "background.paper",
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ fontWeight: 700, overflowWrap: "anywhere" }}>
+                              {mealTypeLabel(meal?.mealType)} · {meal.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                              {meal?.brand ? `${meal.brand} · ` : ""}
+                              {Math.round(Number(meal?.calories || 0))} kcal
+                            </Typography>
+                          </Box>
+                        ))
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+            </NutritionWorkspacePanel>
           )}
 
           {dailyStatusTab !== 2 && (
-            <Box>
+            <Box className="workspace-section">
               <Button variant="outlined" onClick={() => openAdaptiveDrawer("progreso")}>
                 Ver análisis adaptativo
               </Button>
@@ -1027,31 +1208,49 @@ export default function NutritionPage({
       )}
 
       {activeSection === "plan" && (
-        <Box sx={sectionStackSx}>
+        <Box className="workspace-section" sx={sectionStackSx}>
           <Suspense fallback={<NutritionSectionFallback rows={3} />}>
-            <DailyMealPlan
-              dailyCaloriesTarget={tdee}
-              recipes={recipes}
-              foodCatalog={foodCatalog}
-            />
-            <WeeklyMealPlanner
-              dailyCaloriesTarget={tdee}
-              recipes={recipes}
-              foodCatalog={foodCatalog}
-            />
-            <ShoppingListCard
-              dailyCaloriesTarget={tdee}
-              recipes={recipes}
-              foodCatalog={foodCatalog}
-            />
+            <NutritionWorkspacePanel
+              eyebrow="Planificación"
+              title="Plan diario"
+              description="Construye la jornada alimentaria con una vista priorizada para hoy."
+            >
+              <DailyMealPlan
+                dailyCaloriesTarget={tdee}
+                recipes={recipes}
+                foodCatalog={foodCatalog}
+              />
+            </NutritionWorkspacePanel>
+            <NutritionWorkspacePanel
+              eyebrow="Semana"
+              title="Plan semanal y compras"
+              description="Organiza la semana y deriva una lista de compra desde el mismo bloque."
+            >
+              <WeeklyMealPlanner
+                dailyCaloriesTarget={tdee}
+                recipes={recipes}
+                foodCatalog={foodCatalog}
+              />
+              <ShoppingListCard
+                dailyCaloriesTarget={tdee}
+                recipes={recipes}
+                foodCatalog={foodCatalog}
+              />
+            </NutritionWorkspacePanel>
           </Suspense>
         </Box>
       )}
 
       {activeSection === "work" && (
-        <Box sx={sectionStackSx}>
+        <Box className="workspace-section" sx={sectionStackSx}>
           <Suspense fallback={<NutritionSectionFallback rows={2} />}>
-            <NutritionTools profileId={profileId} />
+            <NutritionWorkspacePanel
+              eyebrow="Contexto laboral"
+              title="Nutrición en el trabajo"
+              description="Herramientas prácticas para decidir, planificar y resolver comidas fuera de casa."
+            >
+              <NutritionTools profileId={profileId} />
+            </NutritionWorkspacePanel>
           </Suspense>
         </Box>
       )}

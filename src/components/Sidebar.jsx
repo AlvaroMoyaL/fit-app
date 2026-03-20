@@ -1,5 +1,6 @@
 import LocalDbStatus from "./LocalDbStatus";
 import GifDbStatus from "./GifDbStatus";
+import EmptyState from "./EmptyState";
 import { getLevelProgress } from "../utils/levelProgress";
 import { buildDayFocusLabel } from "../utils/dayFocus";
 import { getMeals } from "../utils/nutritionStorage";
@@ -104,26 +105,6 @@ export default function Sidebar({
     { key: "stats", label: "Métricas", short: "MT", helper: "Salud y tendencias" },
     { key: "nutrition", label: "Nutrición", short: "NU", helper: "Balance diario" },
   ];
-  const brandTitle =
-    activeTab === "nutrition"
-      ? "Nutrición diaria"
-      : activeTab === "stats"
-      ? "Rendimiento y salud"
-      : activeTab === "history"
-      ? "Historial y adherencia"
-      : activeTab === "plan"
-      ? "Plan semanal"
-      : "Perfil y objetivos";
-  const brandLead =
-    activeTab === "nutrition"
-      ? "Registro, balance y decisiones del día."
-      : activeTab === "stats"
-      ? "Métricas clave, tendencias y carga."
-      : activeTab === "history"
-      ? "Consistencia, volumen y semanas previas."
-      : activeTab === "plan"
-      ? "Ejecución semanal y progreso actual."
-      : "Datos base para personalizar el sistema.";
 
   const trend = (key) => {
     if (!lastMetric || !prevMetric) return "";
@@ -274,8 +255,8 @@ export default function Sidebar({
         <div className="sidebar-brand-mark">FA</div>
         <div className="sidebar-brand-copy">
           <span>Fit App</span>
-          <strong>{brandTitle}</strong>
-          <small>{brandLead}</small>
+          <strong>Sistema personal</strong>
+          <small>Plan, métricas y nutrición sobre una sola base.</small>
         </div>
       </div>
       <div className="sidebar-section">
@@ -462,7 +443,16 @@ export default function Sidebar({
                 </div>
               </div>
             ) : (
-              <p className="note">Sin métricas aún.</p>
+              <EmptyState
+                compact
+                eyebrow={lang === "en" ? "No metrics yet" : "Sin métricas"}
+                title={lang === "en" ? "Add your first health entry" : "Registra tu primer dato"}
+                description={
+                  lang === "en"
+                    ? "Weight, waist or resting heart rate will appear here as soon as you log them."
+                    : "Peso, cintura o FC de reposo aparecerán aquí apenas registres una entrada."
+                }
+              />
             )}
           </div>
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { toLocalDateKey } from "../utils/dateKey";
 
 function toNum(v) {
   const n = Number(v);
@@ -29,7 +30,7 @@ function startOfWeek(dateStr) {
   const diff = (day === 0 ? -6 : 1) - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
-  return toDateKey(d.toISOString().slice(0, 10));
+  return toLocalDateKey(d);
 }
 
 function weeklyAverages(entries, key) {

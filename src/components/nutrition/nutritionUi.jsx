@@ -219,20 +219,23 @@ export const nutritionCompactTabsSx = (theme, options = {}) => ({
   },
 });
 
-export const nutritionNavButtonSx = (theme, isActive) => ({
+export const nutritionNavButtonSx = (theme, isActive, options = {}) => ({
   flex: { xs: "0 0 auto", sm: "1 1 auto" },
-  minWidth: { xs: 148, sm: 0 },
-  minHeight: 52,
-  px: 1.5,
-  py: 1.1,
+  minWidth: { xs: options.mobileMinWidth || 148, sm: 0 },
+  minHeight: options.minHeight || 52,
+  px: options.px || 1.5,
+  py: options.py || 1.1,
   borderRadius: 3,
   justifyContent: "flex-start",
   textAlign: "left",
-  whiteSpace: { xs: "nowrap", sm: "normal" },
+  alignItems: "flex-start",
+  whiteSpace: { xs: options.mobileWhiteSpace || "nowrap", sm: options.desktopWhiteSpace || "normal" },
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
   textTransform: "none",
   fontWeight: 700,
   lineHeight: 1.2,
-  fontSize: { xs: "0.92rem", sm: "0.94rem" },
+  fontSize: { xs: options.mobileFontSize || "0.92rem", sm: options.desktopFontSize || "0.94rem" },
   border: "1px solid",
   borderColor: isActive
     ? alpha(theme.palette.primary.main, 0.24)
@@ -259,5 +262,9 @@ export const nutritionNavButtonSx = (theme, isActive) => ({
       ? alpha(theme.palette.primary.main, 0.28)
       : alpha(theme.palette.divider, 0.95),
     boxShadow: isActive ? nutritionSurfaceShadow(theme, "hero") : nutritionSurfaceShadow(theme),
+  },
+  "& .nutrition-nav-button-label": {
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
   },
 });

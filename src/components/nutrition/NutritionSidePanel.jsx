@@ -6,11 +6,39 @@ import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtil
 import { calculateTDEEDynamic } from "../../utils/metabolism";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
+import NutritionSectionNav from "./NutritionSectionNav";
 import {
   getNutritionInformationalMetricState,
   getNutritionMetricState,
   nutritionSurfaceSx,
 } from "./nutritionUi";
+
+const SECTION_META = {
+  registro: {
+    label: "Registro",
+    title: "Captura del día",
+    description: "Entrada rápida de comidas, edición y revisión del detalle nutricional en un solo flujo.",
+    note: "Primero carga la ingesta real; después revisa el estado con datos completos.",
+  },
+  estado: {
+    label: "Estado",
+    title: "Lectura del día",
+    description: "Balance, alertas y tendencia del día antes de pasar a acciones más tácticas.",
+    note: "Úsalo como vista principal para decidir si necesitas corregir calorías o macros.",
+  },
+  plan: {
+    label: "Plan",
+    title: "Planificación",
+    description: "Construcción de la jornada y coordinación semanal desde una estructura más operativa.",
+    note: "Conviene entrar aquí cuando ya validaste tu balance y quieres preparar el siguiente bloque.",
+  },
+  work: {
+    label: "Trabajo",
+    title: "Herramientas prácticas",
+    description: "Resolución rápida para comer fuera de casa o decidir dentro del contexto laboral.",
+    note: "Es una sección táctica: resuelve decisiones concretas sin salir del módulo.",
+  },
+};
 
 function getTodayDateKey() {
   const now = new Date();
@@ -67,6 +95,36 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
       </Box>
       <Typography variant="caption" color="text.secondary">
         {helperText}
+      </Typography>
+    </Box>
+  );
+}
+
+function NutritionQuickCard({ label, value, helper }) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gap: 0.45,
+        p: 1.1,
+        borderRadius: 2.6,
+        border: "1px solid",
+        borderColor: "divider",
+        bgcolor: "background.paper",
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}
+      >
+        {label}
+      </Typography>
+      <Typography variant="subtitle1" sx={{ lineHeight: 1.08 }}>
+        {value}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        {helper}
       </Typography>
     </Box>
   );
@@ -134,7 +192,13 @@ function enrichMealsWithStoredNutrients(meals, foodLookup) {
   return { changed, meals: nextMeals };
 }
 
-export default function NutritionSidePanel({ profileId, profile, metricsLog = [] }) {
+export default function NutritionSidePanel({
+  profileId,
+  profile,
+  metricsLog = [],
+  activeSection = "estado",
+  onChangeSection,
+}) {
   const theme = useTheme();
   const [meals, setMeals] = useState([]);
   const todayKey = useMemo(() => getTodayDateKey(), []);
@@ -220,44 +284,107 @@ export default function NutritionSidePanel({ profileId, profile, metricsLog = []
     () => getNutritionMetricState(theme, totalsToday.mealsCount, 4, { lowWarnRatio: 0.5, overWarnRatio: 1.5 }),
     [theme, totalsToday.mealsCount]
   );
+  const currentWeight = Number(
+    latestRecordedWeight || nutritionProfile?.weight || nutritionProfile?.peso || 0
+  );
+  const calorieDelta = Math.round(Number(totalsToday.calories || 0) - Number(tdee || 0));
+  const sectionMeta = SECTION_META[activeSection] || SECTION_META.estado;
   const surfaceSx = (muiTheme) => ({
     ...nutritionSurfaceSx(muiTheme),
-    p: 1.2,
+    p: 0,
     display: "grid",
     gap: 1.1,
   });
 
   return (
     <Box
-      sx={(muiTheme) => ({
+      className="nutrition-side-panel-stack"
+      sx={{
         display: "grid",
         gap: 1.4,
         position: { xs: "static", lg: "sticky" },
-        top: { lg: 88 },
+        top: { lg: 20 },
         width: "100%",
         minWidth: 0,
-        p: { xs: 0, xl: 1.2 },
-        borderRadius: { xl: "24px" },
-        bgcolor: { xl: muiTheme.palette.background.paper },
-        border: { xl: `1px solid ${muiTheme.palette.divider}` },
-        boxShadow: {
-          xl:
-            muiTheme.palette.mode === "dark"
-              ? "0 12px 28px rgba(0, 0, 0, 0.18)"
-              : "0 10px 24px rgba(15, 23, 42, 0.045)",
-        },
-      })}
+      }}
     >
-      <Box sx={surfaceSx}>
-        <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}>
-          KPIs de apoyo
-        </Typography>
-        <HeroMetricCard label="Comidas" valueText={`${Math.round(totalsToday.mealsCount || 0)}`} helperText="bloques lógicos del día" state={mealsState} />
-        <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} helperText={`objetivo FDA: ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} />
-        <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} helperText={`límite diario: ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} />
-        <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} helperText={`referencia flexible: ${Math.round(sugarReference || 0)} g · incluye fruta y lácteos`} state={sugarsState} />
-        <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} helperText={`límite aprox.: ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} />
-        <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg · hoy se prioriza más la grasa saturada`} state={cholesterolState} />
+      <Box className="workspace-panel" sx={surfaceSx}>
+        <Box sx={{ p: 1.2, display: "grid", gap: 0.8 }}>
+          <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}>
+            Flujo del módulo
+          </Typography>
+          <Typography variant="h6" sx={{ lineHeight: 1.08 }}>
+            Navegación y foco
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {sectionMeta.description}
+          </Typography>
+        </Box>
+        <Box sx={{ px: 1.2, display: "grid", gap: 1.1 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 0.9 }}>
+            <NutritionQuickCard
+              label="Sección"
+              value={sectionMeta.label}
+              helper={sectionMeta.title}
+            />
+            <NutritionQuickCard
+              label="Balance"
+              value={`${calorieDelta > 0 ? "+" : ""}${calorieDelta} kcal`}
+              helper={`ingesta ${Math.round(totalsToday.calories || 0)} vs TDEE ${Math.round(tdee || 0)}`}
+            />
+            <NutritionQuickCard
+              label="Comidas"
+              value={`${Math.round(totalsToday.mealsCount || 0)}`}
+              helper="bloques registrados hoy"
+            />
+            <NutritionQuickCard
+              label="Peso"
+              value={currentWeight ? `${currentWeight.toFixed(1)} kg` : "Sin dato"}
+              helper={currentWeight ? "último registro disponible" : "añade peso para afinar TDEE"}
+            />
+          </Box>
+          <NutritionSectionNav
+            activeSection={activeSection}
+            onChangeSection={onChangeSection}
+            note={sectionMeta.note}
+            showHeader={false}
+            showNote={false}
+            compact
+          />
+          <Typography variant="caption" color="text.secondary">
+            {sectionMeta.note}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box className="workspace-panel" sx={surfaceSx}>
+        <Box sx={{ p: 1.2, display: "grid", gap: 0.8 }}>
+          <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}>
+            Soporte nutricional
+          </Typography>
+          <Typography variant="h6" sx={{ lineHeight: 1.08 }}>
+            KPIs de apoyo
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Señales secundarias para interpretar calidad, densidad y desviaciones del día.
+          </Typography>
+          <Box sx={{ display: "grid", gap: 0.4 }}>
+            <Typography variant="caption" color="text.secondary">
+              TDEE estimado: {Math.round(tdee || 0)} kcal
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Calorías registradas: {Math.round(totalsToday.calories || 0)} kcal
+            </Typography>
+          </Box>
+        </Box>
+        <Box sx={{ px: 1.2, pb: 1.2, display: "grid", gap: 1.1 }}>
+          <HeroMetricCard label="Comidas" valueText={`${Math.round(totalsToday.mealsCount || 0)}`} helperText="bloques lógicos del día" state={mealsState} />
+          <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} helperText={`objetivo FDA: ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} />
+          <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} helperText={`límite diario: ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} />
+          <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} helperText={`referencia flexible: ${Math.round(sugarReference || 0)} g · incluye fruta y lácteos`} state={sugarsState} />
+          <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} helperText={`límite aprox.: ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} />
+          <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg · hoy se prioriza más la grasa saturada`} state={cholesterolState} />
+        </Box>
       </Box>
     </Box>
   );

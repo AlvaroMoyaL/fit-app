@@ -1,4 +1,5 @@
 import { Card, CardContent, Typography, Stack, Grid, Box } from "@mui/material";
+import { nutritionSurfaceSx } from "./nutritionUi";
 
 function toNumber(value) {
   const n = Number(value);
@@ -29,6 +30,7 @@ export default function NutritionInsights({
   macroAnalysis,
   proteinAnalysis,
   vegetableAnalysis,
+  embedded = false,
 }) {
   const score = toNumber(nutritionScore?.score);
   const proteinPercent = toNumber(macroAnalysis?.protein?.percent);
@@ -39,47 +41,61 @@ export default function NutritionInsights({
   const missingProtein = toNumber(proteinAnalysis?.missingProtein);
   const vegetableServings = toNumber(vegetableAnalysis?.servings);
 
+  const content = (
+    <>
+      <Typography variant={embedded ? "subtitle1" : "h6"}>Insights nutricionales</Typography>
+
+      <Grid container spacing={1.4}>
+        <Grid item xs={12} md={6}>
+          <InsightSection title="Score diario">
+            <Typography variant="body2">{`${score} / 100`}</Typography>
+          </InsightSection>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <InsightSection title="Balance de macros">
+            <Stack spacing={0.6}>
+              <Typography variant="body2">{`Proteínas: ${proteinPercent} %`}</Typography>
+              <Typography variant="body2">{`Carbohidratos: ${carbPercent} %`}</Typography>
+              <Typography variant="body2">{`Grasas: ${fatPercent} %`}</Typography>
+            </Stack>
+          </InsightSection>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <InsightSection title="Proteína">
+            <Stack spacing={0.6}>
+              <Typography variant="body2">{`Consumidas: ${proteinConsumed} g`}</Typography>
+              <Typography variant="body2">{`Objetivo: ${proteinTarget} g`}</Typography>
+              <Typography variant="body2">{`Faltan: ${missingProtein} g`}</Typography>
+            </Stack>
+          </InsightSection>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <InsightSection title="Vegetales">
+            <Stack spacing={0.6}>
+              <Typography variant="body2">Porciones hoy</Typography>
+              <Typography variant="body2">{vegetableServings}</Typography>
+            </Stack>
+          </InsightSection>
+        </Grid>
+      </Grid>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={(theme) => ({ ...nutritionSurfaceSx(theme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.4 })}>
+        {content}
+      </Box>
+    );
+  }
+
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: "grid", gap: 2 }}>
-        <Typography variant="h6">Insights nutricionales</Typography>
-
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <InsightSection title="Daily Nutrition Score">
-              <Typography variant="body2">{`${score} / 100`}</Typography>
-            </InsightSection>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InsightSection title="Balance de macros">
-              <Stack spacing={0.6}>
-                <Typography variant="body2">{`Proteínas: ${proteinPercent} %`}</Typography>
-                <Typography variant="body2">{`Carbohidratos: ${carbPercent} %`}</Typography>
-                <Typography variant="body2">{`Grasas: ${fatPercent} %`}</Typography>
-              </Stack>
-            </InsightSection>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InsightSection title="Proteína">
-              <Stack spacing={0.6}>
-                <Typography variant="body2">{`Consumidas: ${proteinConsumed} g`}</Typography>
-                <Typography variant="body2">{`Objetivo: ${proteinTarget} g`}</Typography>
-                <Typography variant="body2">{`Faltan: ${missingProtein} g`}</Typography>
-              </Stack>
-            </InsightSection>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InsightSection title="Vegetales">
-              <Stack spacing={0.6}>
-                <Typography variant="body2">Porciones hoy:</Typography>
-                <Typography variant="body2">{vegetableServings}</Typography>
-              </Stack>
-            </InsightSection>
-          </Grid>
-        </Grid>
+        {content}
       </CardContent>
     </Card>
   );

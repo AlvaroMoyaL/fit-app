@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toLocalDateKey } from "../utils/dateKey";
 
 const AUTO_COMPARE_VALUE = "__auto__";
 const CHART_WINDOW_SIZE = 30;
@@ -631,7 +632,7 @@ export default function StatsMetricDrawer({
   onAddEntry,
 }) {
   const [activeTooltip, setActiveTooltip] = useState(null);
-  const [manualDate, setManualDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [manualDate, setManualDate] = useState(() => toLocalDateKey());
   const [manualValue, setManualValue] = useState("");
   const [manualStatus, setManualStatus] = useState("");
   const meta = METRIC_META[metricKey] || { label: metricKey || "Métrica", unit: "", related: [] };

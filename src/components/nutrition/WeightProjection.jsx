@@ -1,5 +1,6 @@
-import { Card, CardContent, Typography } from "@mui/material";
+import { Box, Card, CardContent, Typography } from "@mui/material";
 import { projectWeightChange } from "../../utils/weightProjection";
+import { nutritionSurfaceSx } from "./nutritionUi";
 
 function toNumber(value) {
   const n = Number(value);
@@ -12,12 +13,6 @@ function projectionColor(change) {
   return "warning.main";
 }
 
-function projectionIcon(change) {
-  if (change < 0) return "v";
-  if (change > 0) return "^";
-  return "-";
-}
-
 function projectionSign(change) {
   const rounded = Number(change.toFixed(2));
   if (rounded > 0) return `+${rounded}`;
@@ -28,7 +23,7 @@ function formatWeight(weight) {
   return Number(weight).toFixed(1);
 }
 
-export default function WeightProjection({ currentWeight, dailyBalance }) {
+export default function WeightProjection({ currentWeight, dailyBalance, embedded = false }) {
   const weight = toNumber(currentWeight);
   const projections = projectWeightChange(dailyBalance);
   const rows = [
@@ -41,19 +36,42 @@ export default function WeightProjection({ currentWeight, dailyBalance }) {
     },
   ];
 
+  const content = (
+    <>
+      <Typography variant={embedded ? "subtitle1" : "h6"}>Proyección de peso</Typography>
+      <Typography variant="body1">
+        Peso actual: <strong>{formatWeight(weight)} kg</strong>
+      </Typography>
+      <Box sx={{ display: "grid", gap: 0.9 }}>
+        {rows.map((row) => (
+          <Box key={row.label} sx={{ display: "grid", gap: 0.15 }}>
+            <Typography variant="body2" sx={{ color: projectionColor(row.change), fontWeight: 700 }}>
+              {row.label}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Cambio estimado: {projectionSign(row.change)} kg
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Peso proyectado: {formatWeight(row.projectedWeight)} kg
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <Box sx={(theme) => ({ ...nutritionSurfaceSx(theme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.2 })}>
+        {content}
+      </Box>
+    );
+  }
+
   return (
     <Card variant="outlined">
       <CardContent sx={{ display: "grid", gap: 1.5 }}>
-        <Typography variant="h6">Proyección de peso</Typography>
-        <Typography variant="body1">
-          Peso actual: <strong>{formatWeight(weight)} kg</strong>
-        </Typography>
-        {rows.map((row) => (
-          <Typography key={row.label} variant="body2" sx={{ color: projectionColor(row.change) }}>
-            {row.label} | Cambio: {projectionIcon(row.change)} {projectionSign(row.change)} kg | Peso estimado:{" "}
-            {formatWeight(row.projectedWeight)} kg
-          </Typography>
-        ))}
+        {content}
       </CardContent>
     </Card>
   );

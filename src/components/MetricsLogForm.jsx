@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toLocalDateKey } from "../utils/dateKey";
 
 const METRIC_FIELDS = [
   { name: "weight", min: 20, max: 300, step: "0.1", labelEs: "Peso (kg)", labelEn: "Weight (kg)" },
@@ -47,7 +48,7 @@ export default function MetricsLogForm({ metricsLog, onAddEntry, onDeleteEntry, 
     return clamp(min, max, n);
   };
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: toLocalDateKey(),
     ...METRIC_FIELDS.reduce((acc, field) => ({ ...acc, [field.name]: "" }), {}),
     notes: "",
   });

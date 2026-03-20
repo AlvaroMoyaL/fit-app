@@ -15,6 +15,8 @@ import Plan from "./components/Plan";
 import Sidebar from "./components/Sidebar";
 import SessionRunner from "./components/SessionRunner";
 import MetricsLogForm from "./components/MetricsLogForm";
+import WorkspaceHeader from "./components/WorkspaceHeader";
+import { toLocalDateKey } from "./utils/dateKey";
 import { getLevelProgress } from "./utils/levelProgress";
 import {
   countExercises,
@@ -499,7 +501,7 @@ function computeAdjustDelta(history, form) {
   const now = new Date();
   const start = new Date(now);
   start.setDate(start.getDate() - 6);
-  const keyFrom = start.toISOString().slice(0, 10);
+  const keyFrom = toLocalDateKey(start);
   let xp = 0;
   let minutes = 0;
   Object.keys(history || {}).forEach((key) => {
@@ -782,6 +784,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   const [error, setError] = useState("");
   const [detailEx, setDetailEx] = useState(null);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [isWideDesktop, setIsWideDesktop] = useState(false);
   const [completed, setCompleted] = useState({});
   const [completedDetails, setCompletedDetails] = useState({});
   const [history, setHistory] = useState({});
@@ -933,6 +936,23 @@ export default function App({ themeMode = "light", onToggleTheme }) {
       </button>
     );
   };
+  const scrollToSection = (id) => {
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+  const latestMetricsDateLabel = useMemo(() => {
+    if (!lastMetric?.date) return "Sin datos";
+    const parsed = new Date(`${lastMetric.date}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return lastMetric.date;
+    return parsed.toLocaleDateString(lang === "en" ? "en-US" : "es-ES", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }, [lang, lastMetric?.date]);
   const allExercises = useMemo(() => {
     if (!plan) return [];
     return plan.days.flatMap((d) => d.exercises);
@@ -965,11 +985,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     XP_BASE + (ex.prescription?.type === "time" ? XP_TIME_BONUS : 0);
 
   const todayKey = () => {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+    return toLocalDateKey();
   };
 
   const getDetailSnapshot = (dayTitle, ex) => {
@@ -1124,15 +1140,27 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   }, [plan]);
 
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const update = () => setIsDesktop(mq.matches);
+    const desktopMq = window.matchMedia("(min-width: 1024px)");
+    const wideDesktopMq = window.matchMedia("(min-width: 1440px)");
+    const update = () => {
+      setIsDesktop(desktopMq.matches);
+      setIsWideDesktop(wideDesktopMq.matches);
+    };
     update();
-    if (mq.addEventListener) {
-      mq.addEventListener("change", update);
-      return () => mq.removeEventListener("change", update);
+    if (desktopMq.addEventListener && wideDesktopMq.addEventListener) {
+      desktopMq.addEventListener("change", update);
+      wideDesktopMq.addEventListener("change", update);
+      return () => {
+        desktopMq.removeEventListener("change", update);
+        wideDesktopMq.removeEventListener("change", update);
+      };
     }
-    mq.addListener(update);
-    return () => mq.removeListener(update);
+    desktopMq.addListener(update);
+    wideDesktopMq.addListener(update);
+    return () => {
+      desktopMq.removeListener(update);
+      wideDesktopMq.removeListener(update);
+    };
   }, []);
 
   useEffect(() => {
@@ -2029,7 +2057,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
     if (!form.reminderEnabled || !form.reminderTime) return;
     const check = () => {
       const now = new Date();
-      const key = now.toISOString().slice(0, 10);
+      const key = toLocalDateKey(now);
       if (lastReminderDate === key) return;
       const [h, m] = form.reminderTime.split(":").map(Number);
       if (Number.isNaN(h) || Number.isNaN(m)) return;
@@ -3515,17 +3543,18 @@ export default function App({ themeMode = "light", onToggleTheme }) {
   };
   const backupLastLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_KEY));
   const backupPrevLabel = formatBackupDate(localStorage.getItem(AUTO_BACKUP_PREV_KEY));
-  const showNutritionSidePanel = sidebarTab === "nutrition" && isDesktop;
+  const showNutritionSidePanel = sidebarTab === "nutrition" && isWideDesktop;
+  const showPersistentExerciseDrawer = Boolean(detailEx?.ex) && isDesktop;
   const mobileNavItems = [
-    { key: "profile", label: "Perfil", short: "PF" },
-    { key: "plan", label: "Plan", short: "PL" },
-    { key: "history", label: "Historial", short: "HI" },
-    { key: "stats", label: "Métricas", short: "MT" },
-    { key: "nutrition", label: "Nutrición", short: "NU" },
+    { key: "profile", label: "Perfil", short: "PF", helper: "Base" },
+    { key: "plan", label: "Plan", short: "PL", helper: "Semana" },
+    { key: "history", label: "Historial", short: "HI", helper: "Registro" },
+    { key: "stats", label: "Métricas", short: "MT", helper: "Salud" },
+    { key: "nutrition", label: "Nutrición", short: "NU", helper: "Balance" },
   ];
 
   return (
-    <div className={`app-shell ${showNutritionSidePanel ? "nutrition-layout" : ""}`}>
+    <div className="app-shell">
       <Sidebar
         profiles={profiles}
         activeProfileId={activeProfileId}
@@ -3596,7 +3625,15 @@ export default function App({ themeMode = "light", onToggleTheme }) {
         onToggleTheme={onToggleTheme}
       />
 
-      <div className={`page ${showNutritionSidePanel ? "nutrition-page" : ""}`}>
+      <div
+        className={[
+          "page",
+          sidebarTab === "nutrition" ? "nutrition-page" : "",
+          showPersistentExerciseDrawer ? "page-with-drawer" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div className="card">
           {reminderPrompt && (
             <div className="reminder-banner">
@@ -3624,30 +3661,21 @@ export default function App({ themeMode = "light", onToggleTheme }) {
             </div>
           )}
           {sidebarTab === "profile" && (
-            <>
-              <div className="page-hero">
-                <div className="page-hero-main">
-                  <p className="section-eyebrow">Base del sistema</p>
-                  <h1>Perfil y objetivos</h1>
-                  <p className="page-hero-lead">
-                    Define tu contexto físico y de entrenamiento para que el plan y las métricas tengan una base real.
-                  </p>
-                </div>
-                <div className="page-hero-kpis">
-                  <div>
-                    <span>Perfil activo</span>
-                    <strong>{activeProfileName || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Nivel</span>
-                    <strong>{level}</strong>
-                  </div>
-                  <div>
-                    <span>TDEE</span>
-                    <strong>{metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—"}</strong>
-                  </div>
-                </div>
-              </div>
+            <div className="workspace-view">
+              <WorkspaceHeader
+                eyebrow="Base del sistema"
+                title="Perfil y objetivos"
+                description="Define tu contexto físico y de entrenamiento para que el plan, las métricas y la nutrición partan de una misma base."
+                stats={[
+                  { key: "profile", label: "Perfil activo", value: activeProfileName || "—" },
+                  { key: "level", label: "Nivel", value: level },
+                  {
+                    key: "tdee",
+                    label: "TDEE",
+                    value: metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—",
+                  },
+                ]}
+              />
 
               {!plan && (
                 <p className="note">
@@ -3715,7 +3743,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                   </>,
                   { desktopOpen: true, mobileOpen: true }
                 )}
-            </>
+            </div>
           )}
 
           {sidebarTab === "plan" && (
@@ -3731,7 +3759,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                 onToggleQuiet={onToggleQuiet}
                 onChangeDayEquipment={onChangeDayEquipment}
                 onSelectExercise={onSelectExercise}
-              completedMap={completed}
+                completedMap={completed}
                 getExerciseKey={getExerciseKey}
                 getExerciseXp={getExerciseXp}
                 earnedXp={earnedXpTotal}
@@ -3758,267 +3786,345 @@ export default function App({ themeMode = "light", onToggleTheme }) {
 
           {sidebarTab === "history" && (
             <Suspense fallback={<LazyBlockFallback message="Cargando historial..." />}>
-              <>
-                <div className="page-hero page-hero-history">
-                  <div className="page-hero-main">
-                    <p className="section-eyebrow">Seguimiento</p>
-                    <h1>Historial y adherencia</h1>
-                    <p className="page-hero-lead">
-                      Revisa consistencia, carga semanal y registros anteriores sin perder el contexto del plan.
-                    </p>
+              <div className="workspace-view history-view">
+                <WorkspaceHeader
+                  eyebrow="Seguimiento"
+                  title="Historial y adherencia"
+                  description="Revisa consistencia, carga semanal y sesiones previas con la misma estructura que el resto de la app."
+                  stats={[
+                    { key: "trained-total", label: "Días entrenados", value: trainedDaysTotal || 0 },
+                    { key: "trained-month", label: "Este mes", value: trainedDaysThisMonth || 0 },
+                    { key: "streak", label: "Racha", value: trainingStreak || 0 },
+                  ]}
+                />
+                <div className="workspace-layout history-workspace">
+                  <div className="workspace-main">
+                    <WeeklyCharts
+                      history={history}
+                      lang={lang}
+                      goals={form}
+                      onGoToPlanDay={(dayIndex) => {
+                        setSidebarTab("plan");
+                        setSelectedPlanDayIndex(dayIndex);
+                      }}
+                    />
+                    <HistoryWeek
+                      history={history}
+                      lang={lang}
+                      plan={plan}
+                      onRegisterPastExercise={onRegisterPastExercise}
+                      onPreviewExercise={onSelectExercise}
+                    />
                   </div>
-                  <div className="page-hero-kpis">
-                    <div>
-                      <span>Días entrenados</span>
-                      <strong>{trainedDaysTotal || 0}</strong>
-                    </div>
-                    <div>
-                      <span>Este mes</span>
-                      <strong>{trainedDaysThisMonth || 0}</strong>
-                    </div>
-                    <div>
-                      <span>Racha</span>
-                      <strong>{trainingStreak || 0}</strong>
-                    </div>
-                  </div>
+
+                  <aside className="workspace-aside history-aside">
+                    <section className="workspace-panel workspace-panel-sticky history-muscle-panel">
+                      <div className="workspace-section-head">
+                        <div>
+                          <p className="workspace-section-kicker">Cobertura muscular</p>
+                          <h3>Resumen muscular</h3>
+                          <p className="workspace-section-copy">
+                            Músculos y ejercicios que más se repiten para detectar sesgos,
+                            sobreuso o huecos de trabajo semanal.
+                          </p>
+                        </div>
+                      </div>
+                      <MuscleSummary history={history} lang={lang} embedded />
+                    </section>
+                  </aside>
                 </div>
-                {renderCollapsible(
-                  "history-muscle",
-                  "Resumen muscular",
-                  <MuscleSummary history={history} lang={lang} />,
-                  { desktopOpen: false, mobileOpen: false }
-                )}
-                {renderCollapsible(
-                  "history-weekly",
-                  "Resumen semanal",
-                  <WeeklyCharts
-                    history={history}
-                    lang={lang}
-                    goals={form}
-                    onGoToPlanDay={(dayIndex) => {
-                      setSidebarTab("plan");
-                      setSelectedPlanDayIndex(dayIndex);
-                    }}
-                  />,
-                  { desktopOpen: false, mobileOpen: false }
-                )}
-                {renderCollapsible(
-                  "history-log",
-                  "Historial de entrenamientos",
-                  <HistoryWeek
-                    history={history}
-                    lang={lang}
-                    plan={plan}
-                    onRegisterPastExercise={onRegisterPastExercise}
-                    onPreviewExercise={onSelectExercise}
-                  />,
-                  { desktopOpen: false, mobileOpen: false }
-                )}
-              </>
+              </div>
             </Suspense>
           )}
 
           {sidebarTab === "stats" && (
-            <>
-              <div className="stats-hero">
-                <div className="stats-hero-main">
-                  <p className="section-eyebrow">Rendimiento y salud</p>
-                  <h2>Dashboard de salud</h2>
-                  <p className="stats-hero-lead">
-                    Métricas clave, tendencias y datos Garmin en una vista pensada para revisar rápido y decidir mejor.
-                  </p>
-                </div>
-                <div className="stats-hero-kpis">
-                  <div>
-                    <span>Peso actual</span>
-                    <strong>
-                      {lastMetric?.weight ? `${lastMetric.weight} kg` : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>FC reposo</span>
-                    <strong>
-                      {getLatestMetricValue("restHr")
-                        ? `${getLatestMetricValue("restHr")} bpm`
-                        : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Pasos</span>
-                    <strong>{getLatestMetricValue("steps") || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Readiness</span>
-                    <strong>{getLatestMetricValue("readiness") || "—"}</strong>
-                  </div>
-                </div>
-              </div>
-              <div className="sidebar-actions" style={{ marginBottom: 10 }}>
-                <button
-                  type="button"
-                  className="tiny"
-                  onClick={() =>
-                    document
-                      .getElementById("metrics-log-stats")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                >
-                  Agregar dato manual
-                </button>
-              </div>
-              {renderCollapsible(
-                "stats-garmin",
-                "Importar Garmin",
-                <div className="metrics-log">
-                  <p className="note">
-                    Carga aquí export Garmin en JSON (incluye `fit-export.json` generado) y aplícalo directo a métricas.
-                  </p>
-                  <div className="sidebar-actions">
-                    <button
-                      type="button"
-                      className="tiny"
-                      onClick={() => document.getElementById("garmin-import-input")?.click()}
-                    >
-                      Seleccionar archivos
-                    </button>
-                    {garminFiles.length > 0 && (
-                      <button
-                        type="button"
-                        className="tiny"
-                        onClick={onImportGarminFiles}
-                        disabled={garminImporting}
-                      >
-                        {garminImporting ? "Importando..." : "Procesar e importar"}
-                      </button>
-                    )}
-                    {garminFiles.length > 0 && (
-                      <button
-                        type="button"
-                        className="tiny"
-                        onClick={() => {
-                          setGarminFiles([]);
-                          setGarminImportNote("");
-                        }}
-                      >
-                        Limpiar
-                      </button>
-                    )}
-                    <input
-                      id="garmin-import-input"
-                      type="file"
-                      accept=".json,.zip,.csv,.fit,.tcx,.gpx"
-                      multiple
-                      onChange={onSelectGarminFiles}
-                      style={{ display: "none" }}
-                    />
-                  </div>
-                  {garminImportNote && <p className="note">{garminImportNote}</p>}
-                  {garminFiles.length > 0 && (
-                    <ul className="history-list">
-                      {garminFiles.slice(0, 10).map((f) => (
-                        <li key={`${f.name}-${f.size}`}>
-                          <strong>{f.name}</strong>
-                          <span>{Math.round(f.size / 1024)} KB</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {garminFiles.length > 10 && (
-                    <p className="note">+{garminFiles.length - 10} archivo(s) más…</p>
-                  )}
-                  <p className="note">
-                    Campos soportados: pasos, FC reposo, sueño, sleep score, readiness, HRV,
-                    body battery, estrés, SpO2, respiración, carga y actividad diaria.
-                  </p>
-                </div>,
-                { desktopOpen: false, mobileOpen: false }
-              )}
-              {renderCollapsible(
-                "stats-groups",
-                "Estadísticas por tipo",
-                <div className="stats-groups">
-                  <section className="stats-group">
-                    <h4>Recuperación y sueño</h4>
-                    <div className="metrics-grid">
-                      {renderStatsCard(
-                        "Sueño (h)",
-                        getLatestMetricValue("sleepHours")
-                          ? `${getLatestMetricValue("sleepHours")} h`
-                          : "—",
-                        "sleepHours",
-                        "restHr"
-                      )}
-                      {renderStatsCard(
-                        "Sleep score",
-                        getLatestMetricValue("sleepScore") || "—",
-                        "sleepScore",
-                        "readiness"
-                      )}
-                      {renderStatsCard(
-                        "Estrés sueño",
-                        getLatestMetricValue("sleepStress", 0, true) !== undefined
-                          ? getLatestMetricValue("sleepStress", 0, true)
-                          : "—",
-                        "sleepStress",
-                        "sleepScore"
-                      )}
-                      {renderStatsCard(
-                        "HRV nocturna",
-                        getLatestMetricValue("hrv")
-                          ? `${getLatestMetricValue("hrv")} ms`
-                          : "—",
-                        "hrv",
-                        "restHr"
-                      )}
-                      {renderStatsCard(
-                        "Body Battery AM",
-                        getLatestMetricValue("bodyBattery") || "—",
-                        "bodyBattery",
-                        "sleepHours"
-                      )}
-                      {renderStatsCard(
-                        "Readiness",
-                        getLatestMetricValue("readiness") || "—",
-                        "readiness",
-                        "sleepHours"
-                      )}
-                      {renderStatsCard(
-                        "Estrés diario",
-                        getLatestMetricValue("stress") || "—",
-                        "stress",
-                        "sleepHours"
-                      )}
-                      {renderStatsCard(
-                        "SpO2 promedio",
-                        getLatestMetricValue("spo2") ? `${getLatestMetricValue("spo2")}%` : "—",
-                        "spo2",
-                        "restHr"
-                      )}
-                      {renderStatsCard(
-                        "Respiración",
-                        getLatestMetricValue("respiration")
-                          ? `${getLatestMetricValue("respiration")} rpm`
-                          : "—",
-                        "respiration",
-                        "sleepHours"
-                      )}
+            <div className="workspace-view">
+              <WorkspaceHeader
+                eyebrow="Rendimiento y salud"
+                title="Dashboard de salud"
+                titleTag="h1"
+                description="Métricas clave, tendencias y datos Garmin en una vista más sobria y consistente con el resto del sistema."
+                stats={[
+                  {
+                    key: "weight",
+                    label: "Peso actual",
+                    value: lastMetric?.weight ? `${lastMetric.weight} kg` : "—",
+                  },
+                  {
+                    key: "restHr",
+                    label: "FC reposo",
+                    value: getLatestMetricValue("restHr")
+                      ? `${getLatestMetricValue("restHr")} bpm`
+                      : "—",
+                  },
+                  { key: "steps", label: "Pasos", value: getLatestMetricValue("steps") || "—" },
+                  {
+                    key: "readiness",
+                    label: "Readiness",
+                    value: getLatestMetricValue("readiness") || "—",
+                  },
+                ]}
+              />
+              <div className="workspace-layout stats-workspace">
+                <div className="workspace-main">
+                  <section className="workspace-section" id="stats-overview-panel">
+                    <div className="workspace-section-head">
+                      <div>
+                        <p className="workspace-section-kicker">Vista clínica</p>
+                        <h3>Estado por área</h3>
+                        <p className="workspace-section-copy">
+                          Recuperación, cardio, composición y metabolismo agrupados con el mismo patrón de lectura.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="stats-groups">
+                      <section className="stats-group">
+                        <h4>Recuperación y sueño</h4>
+                        <div className="metrics-grid">
+                          {renderStatsCard(
+                            "Sueño (h)",
+                            getLatestMetricValue("sleepHours")
+                              ? `${getLatestMetricValue("sleepHours")} h`
+                              : "—",
+                            "sleepHours"
+                          )}
+                          {renderStatsCard("Sleep score", getLatestMetricValue("sleepScore") || "—", "sleepScore")}
+                          {renderStatsCard(
+                            "Estrés sueño",
+                            getLatestMetricValue("sleepStress", 0, true) !== undefined
+                              ? getLatestMetricValue("sleepStress", 0, true)
+                              : "—",
+                            "sleepStress"
+                          )}
+                          {renderStatsCard(
+                            "HRV nocturna",
+                            getLatestMetricValue("hrv")
+                              ? `${getLatestMetricValue("hrv")} ms`
+                              : "—",
+                            "hrv"
+                          )}
+                          {renderStatsCard("Body Battery AM", getLatestMetricValue("bodyBattery") || "—", "bodyBattery")}
+                          {renderStatsCard("Readiness", getLatestMetricValue("readiness") || "—", "readiness")}
+                          {renderStatsCard("Estrés diario", getLatestMetricValue("stress") || "—", "stress")}
+                          {renderStatsCard(
+                            "SpO2 promedio",
+                            getLatestMetricValue("spo2") ? `${getLatestMetricValue("spo2")}%` : "—",
+                            "spo2"
+                          )}
+                          {renderStatsCard(
+                            "Respiración",
+                            getLatestMetricValue("respiration")
+                              ? `${getLatestMetricValue("respiration")} rpm`
+                              : "—",
+                            "respiration"
+                          )}
+                        </div>
+                      </section>
+                      <section className="stats-group">
+                        <h4>Cardio y carga</h4>
+                        <div className="metrics-grid">
+                          {renderStatsCard(
+                            "FC reposo",
+                            getLatestMetricValue("restHr")
+                              ? `${getLatestMetricValue("restHr")} bpm`
+                              : "—",
+                            "restHr"
+                          )}
+                          {renderStatsCard("VO2 max", getLatestMetricValue("vo2max") || "—", "vo2max")}
+                          {renderStatsCard(
+                            "Carga 7d / 28d",
+                            getLatestMetricValue("loadRatio", 0, true) !== undefined
+                              ? getLatestMetricValue("loadRatio", 0, true)
+                              : "—",
+                            "loadRatio"
+                          )}
+                          {renderStatsCard(
+                            "Carga aguda",
+                            getLatestMetricValue("acuteLoad", 0, true) !== undefined
+                              ? getLatestMetricValue("acuteLoad", 0, true)
+                              : "—",
+                            "acuteLoad"
+                          )}
+                          {renderStatsCard(
+                            "Carga crónica",
+                            getLatestMetricValue("chronicLoad", 0, true) !== undefined
+                              ? getLatestMetricValue("chronicLoad", 0, true)
+                              : "—",
+                            "chronicLoad"
+                          )}
+                          {renderStatsCard("Pasos", getLatestMetricValue("steps") || "—", "steps")}
+                          {renderStatsCard(
+                            "Kcal activas",
+                            getLatestMetricValue("activeKcal", 0, true) !== undefined
+                              ? `${getLatestMetricValue("activeKcal", 0, true)} kcal`
+                              : "—",
+                            "activeKcal"
+                          )}
+                          {renderStatsCard(
+                            "Kcal totales",
+                            getLatestMetricValue("totalKcal", 0, true) !== undefined
+                              ? `${getLatestMetricValue("totalKcal", 0, true)} kcal`
+                              : "—",
+                            "totalKcal"
+                          )}
+                          {renderStatsCard(
+                            "Distancia",
+                            getLatestMetricValue("distanceKm", 0, true) !== undefined
+                              ? `${getLatestMetricValue("distanceKm", 0, true)} km`
+                              : "—",
+                            "distanceKm"
+                          )}
+                          {renderStatsCard(
+                            "Min activos",
+                            getLatestMetricValue("activeMinutes", 0, true) !== undefined
+                              ? getLatestMetricValue("activeMinutes", 0, true)
+                              : "—",
+                            "activeMinutes"
+                          )}
+                          {renderStatsCard("Días entrenados (mes)", trainedDaysThisMonth, "")}
+                          {renderStatsCard("Racha actual", trainingStreak, "")}
+                        </div>
+                      </section>
+                      <section className="stats-group">
+                        <h4>Composición corporal</h4>
+                        <div className="metrics-grid">
+                          {renderStatsCard("Peso", lastMetric?.weight ? `${lastMetric.weight} kg` : "—", "weight")}
+                          {renderStatsCard("Cintura", lastMetric?.waist ? `${lastMetric.waist} cm` : "—", "waist")}
+                          {renderStatsCard("IMC", metrics?.bmi ? metrics.bmi.toFixed(1) : "—", "bmi")}
+                          {renderStatsCard("Categoría IMC", metrics?.bmiCat || "—", "")}
+                          {renderStatsCard("WHtR", metrics?.whtr ? metrics.whtr.toFixed(2) : "—", "whtr")}
+                          {renderStatsCard("WHR", metrics?.whr ? metrics.whr.toFixed(2) : "—", "whr")}
+                          {renderStatsCard(
+                            "% Grasa",
+                            metrics?.bodyFat ? `${metrics.bodyFat.toFixed(1)}%` : "—",
+                            "bodyFat"
+                          )}
+                          {renderStatsCard(
+                            "Masa magra",
+                            metrics?.leanMass ? `${metrics.leanMass.toFixed(1)} kg` : "—",
+                            "leanMass"
+                          )}
+                          {renderStatsCard("FFMI", metrics?.ffmi ? metrics.ffmi.toFixed(1) : "—", "ffmi")}
+                        </div>
+                      </section>
+                      <section className="stats-group">
+                        <h4>Metabolismo y tendencia</h4>
+                        <div className="metrics-grid">
+                          {renderStatsCard(
+                            "TMB (BMR)",
+                            metrics?.bmr ? `${Math.round(metrics.bmr)} kcal` : "—",
+                            ""
+                          )}
+                          {renderStatsCard(
+                            "TDEE",
+                            metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—",
+                            ""
+                          )}
+                          {renderStatsCard("Tendencia peso", trendSymbol("weight"), "weight")}
+                          {renderStatsCard("Tendencia cintura", trendSymbol("waist"), "waist")}
+                        </div>
+                      </section>
                     </div>
                   </section>
-                  <section className="stats-group">
-                    <h4>Cardio y carga</h4>
-                    <div className="metrics-grid">
+
+                  <section className="workspace-section" id="stats-trends-panel">
+                    <div className="workspace-section-head">
+                      <div>
+                        <p className="workspace-section-kicker">Series</p>
+                        <h3>Tendencia de métricas</h3>
+                        <p className="workspace-section-copy">
+                          Evolución temporal para validar dirección, no solo el último valor.
+                        </p>
+                      </div>
+                    </div>
+                    <Suspense fallback={<LazyBlockFallback message="Cargando tendencias..." />}>
+                      <MetricsCharts metricsLog={metricsLog} lang={lang} />
+                    </Suspense>
+                  </section>
+
+                  <section className="workspace-section" id="stats-log-panel">
+                    <div className="workspace-section-head">
+                      <div>
+                        <p className="workspace-section-kicker">Entrada manual</p>
+                        <h3>Registrar métricas</h3>
+                        <p className="workspace-section-copy">
+                          Alta rápida para peso, cintura y variables clave sin perder el contexto del dashboard.
+                        </p>
+                      </div>
+                    </div>
+                    <div id="metrics-log-stats">
+                      <MetricsLogForm
+                        metricsLog={metricsLog}
+                        onAddEntry={onAddMetricsEntry}
+                        onDeleteEntry={onDeleteMetricsEntry}
+                        lang={lang}
+                      />
+                    </div>
+                  </section>
+                </div>
+
+                <aside className="workspace-aside stats-aside">
+                  <section className="workspace-panel workspace-panel-sticky">
+                    <div className="workspace-section-head">
+                      <div>
+                        <p className="workspace-section-kicker">Control rápido</p>
+                        <h3>Resumen operativo</h3>
+                        <p className="workspace-section-copy">
+                          Acciones directas y señales rápidas para no perderte dentro del módulo.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="workspace-action-stack">
+                      <button
+                        type="button"
+                        className="tiny primary-btn"
+                        onClick={() => scrollToSection("stats-log-panel")}
+                      >
+                        Agregar dato manual
+                      </button>
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={() => scrollToSection("stats-trends-panel")}
+                      >
+                        Ver tendencias
+                      </button>
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={() => scrollToSection("stats-import-panel")}
+                      >
+                        Importar Garmin
+                      </button>
+                    </div>
+
+                    <div className="stats-summary-grid">
+                      <div className="stats-summary-card">
+                        <span>Último registro</span>
+                        <strong>{latestMetricsDateLabel}</strong>
+                        <small>{metricsLog.length || 0} entradas en historial</small>
+                      </div>
+                      <div className="stats-summary-card">
+                        <span>Composición</span>
+                        <strong>{metrics?.bmiCat || "—"}</strong>
+                        <small>{metrics?.bmi ? `IMC ${metrics.bmi.toFixed(1)}` : "Sin IMC calculado"}</small>
+                      </div>
+                      <div className="stats-summary-card">
+                        <span>Objetivo energético</span>
+                        <strong>{metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—"}</strong>
+                        <small>{metrics?.bmr ? `TMB ${Math.round(metrics.bmr)} kcal` : "Sin TMB calculada"}</small>
+                      </div>
+                    </div>
+
+                    <div className="stats-focus-grid">
+                      {renderStatsCard("Sleep score", getLatestMetricValue("sleepScore") || "—", "sleepScore")}
+                      {renderStatsCard("Readiness", getLatestMetricValue("readiness") || "—", "readiness")}
                       {renderStatsCard(
                         "FC reposo",
                         getLatestMetricValue("restHr")
                           ? `${getLatestMetricValue("restHr")} bpm`
                           : "—",
-                        "restHr",
-                        "sleepHours"
-                      )}
-                      {renderStatsCard(
-                        "VO2 max",
-                        getLatestMetricValue("vo2max") || "—",
-                        "vo2max",
                         "restHr"
                       )}
                       {renderStatsCard(
@@ -4026,197 +4132,121 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                         getLatestMetricValue("loadRatio", 0, true) !== undefined
                           ? getLatestMetricValue("loadRatio", 0, true)
                           : "—",
-                        "loadRatio",
-                        "steps"
-                      )}
-                      {renderStatsCard(
-                        "Carga aguda",
-                        getLatestMetricValue("acuteLoad", 0, true) !== undefined
-                          ? getLatestMetricValue("acuteLoad", 0, true)
-                          : "—",
-                        "acuteLoad",
                         "loadRatio"
                       )}
-                      {renderStatsCard(
-                        "Carga crónica",
-                        getLatestMetricValue("chronicLoad", 0, true) !== undefined
-                          ? getLatestMetricValue("chronicLoad", 0, true)
-                          : "—",
-                        "chronicLoad",
-                        "loadRatio"
-                      )}
-                      {renderStatsCard(
-                        "Pasos",
-                        getLatestMetricValue("steps") || "—",
-                        "steps",
-                        "sleepHours"
-                      )}
-                      {renderStatsCard(
-                        "Kcal activas",
-                        getLatestMetricValue("activeKcal", 0, true) !== undefined
-                          ? `${getLatestMetricValue("activeKcal", 0, true)} kcal`
-                          : "—",
-                        "activeKcal",
-                        "steps"
-                      )}
-                      {renderStatsCard(
-                        "Kcal totales",
-                        getLatestMetricValue("totalKcal", 0, true) !== undefined
-                          ? `${getLatestMetricValue("totalKcal", 0, true)} kcal`
-                          : "—",
-                        "totalKcal",
-                        "activeKcal"
-                      )}
-                      {renderStatsCard(
-                        "Distancia",
-                        getLatestMetricValue("distanceKm", 0, true) !== undefined
-                          ? `${getLatestMetricValue("distanceKm", 0, true)} km`
-                          : "—",
-                        "distanceKm",
-                        "steps"
-                      )}
-                      {renderStatsCard(
-                        "Min activos",
-                        getLatestMetricValue("activeMinutes", 0, true) !== undefined
-                          ? getLatestMetricValue("activeMinutes", 0, true)
-                          : "—",
-                        "activeMinutes",
-                        "steps"
-                      )}
-                      {renderStatsCard("Días entrenados (mes)", trainedDaysThisMonth, "")}
-                      {renderStatsCard("Racha actual", trainingStreak, "")}
                     </div>
                   </section>
-                  <section className="stats-group">
-                    <h4>Composición corporal</h4>
-                    <div className="metrics-grid">
-                      {renderStatsCard(
-                        "Peso",
-                        lastMetric?.weight ? `${lastMetric.weight} kg` : "—",
-                        "weight",
-                        "waist"
-                      )}
-                      {renderStatsCard(
-                        "Cintura",
-                        lastMetric?.waist ? `${lastMetric.waist} cm` : "—",
-                        "waist",
-                        "weight"
-                      )}
-                      {renderStatsCard(
-                        "IMC",
-                        metrics?.bmi ? metrics.bmi.toFixed(1) : "—",
-                        "bmi",
-                        "weight"
-                      )}
-                      {renderStatsCard("Categoría IMC", metrics?.bmiCat || "—", "")}
-                      {renderStatsCard(
-                        "WHtR",
-                        metrics?.whtr ? metrics.whtr.toFixed(2) : "—",
-                        "whtr",
-                        "waist"
-                      )}
-                      {renderStatsCard(
-                        "WHR",
-                        metrics?.whr ? metrics.whr.toFixed(2) : "—",
-                        "whr",
-                        "waist"
-                      )}
-                      {renderStatsCard(
-                        "% Grasa",
-                        metrics?.bodyFat ? `${metrics.bodyFat.toFixed(1)}%` : "—",
-                        "bodyFat",
-                        "waist"
-                      )}
-                      {renderStatsCard(
-                        "Masa magra",
-                        metrics?.leanMass ? `${metrics.leanMass.toFixed(1)} kg` : "—",
-                        "leanMass",
-                        "weight"
-                      )}
-                      {renderStatsCard(
-                        "FFMI",
-                        metrics?.ffmi ? metrics.ffmi.toFixed(1) : "—",
-                        "ffmi",
-                        "leanMass"
-                      )}
+
+                  <section className="workspace-panel" id="stats-import-panel">
+                    <div className="workspace-section-head">
+                      <div>
+                        <p className="workspace-section-kicker">Importación</p>
+                        <h3>Garmin</h3>
+                        <p className="workspace-section-copy">
+                          Carga archivos y aplica datos directamente a métricas.
+                        </p>
+                      </div>
                     </div>
-                  </section>
-                  <section className="stats-group">
-                    <h4>Metabolismo y tendencia</h4>
-                    <div className="metrics-grid">
-                      {renderStatsCard(
-                        "TMB (BMR)",
-                        metrics?.bmr ? `${Math.round(metrics.bmr)} kcal` : "—",
-                        ""
+
+                    <div className="workspace-action-stack workspace-action-inline">
+                      <button
+                        type="button"
+                        className="tiny"
+                        onClick={() => document.getElementById("garmin-import-input")?.click()}
+                      >
+                        Seleccionar archivos
+                      </button>
+                      {garminFiles.length > 0 && (
+                        <button
+                          type="button"
+                          className="tiny"
+                          onClick={onImportGarminFiles}
+                          disabled={garminImporting}
+                        >
+                          {garminImporting ? "Importando..." : "Procesar e importar"}
+                        </button>
                       )}
-                      {renderStatsCard(
-                        "TDEE",
-                        metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—",
-                        ""
+                      {garminFiles.length > 0 && (
+                        <button
+                          type="button"
+                          className="tiny"
+                          onClick={() => {
+                            setGarminFiles([]);
+                            setGarminImportNote("");
+                          }}
+                        >
+                          Limpiar
+                        </button>
                       )}
-                      {renderStatsCard("Tendencia peso", trendSymbol("weight"), "weight", "waist")}
-                      {renderStatsCard("Tendencia cintura", trendSymbol("waist"), "waist", "weight")}
+                      <input
+                        id="garmin-import-input"
+                        type="file"
+                        accept=".json,.zip,.csv,.fit,.tcx,.gpx"
+                        multiple
+                        onChange={onSelectGarminFiles}
+                        style={{ display: "none" }}
+                      />
                     </div>
+                    {garminImportNote && <p className="note">{garminImportNote}</p>}
+                    {garminFiles.length > 0 && (
+                      <ul className="history-list">
+                        {garminFiles.slice(0, 10).map((f) => (
+                          <li key={`${f.name}-${f.size}`}>
+                            <strong>{f.name}</strong>
+                            <span>{Math.round(f.size / 1024)} KB</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {garminFiles.length > 10 && (
+                      <p className="note">+{garminFiles.length - 10} archivo(s) más…</p>
+                    )}
+                    <p className="note">
+                      Campos soportados: pasos, FC reposo, sueño, sleep score, readiness, HRV,
+                      body battery, estrés, SpO2, respiración, carga y actividad diaria.
+                    </p>
                   </section>
-                </div>,
-                { desktopOpen: true, mobileOpen: false }
-              )}
-              {renderCollapsible(
-                "stats-trends",
-                "Tendencia de métricas",
-                <Suspense fallback={<LazyBlockFallback message="Cargando tendencias..." />}>
-                  <MetricsCharts metricsLog={metricsLog} lang={lang} />
-                </Suspense>,
-                { desktopOpen: false, mobileOpen: false }
-              )}
-              {renderCollapsible(
-                "stats-log",
-                "Registrar métricas",
-                <div id="metrics-log-stats">
-                  <MetricsLogForm
-                    metricsLog={metricsLog}
-                    onAddEntry={onAddMetricsEntry}
-                    onDeleteEntry={onDeleteMetricsEntry}
-                    lang={lang}
-                  />
-                </div>,
-                { desktopOpen: false, mobileOpen: false }
-              )}
-            </>
+                </aside>
+              </div>
+            </div>
           )}
 
           {sidebarTab === "nutrition" && (
             <Suspense fallback={<LazyBlockFallback message="Cargando nutrición..." />}>
               <MuiThemeBoundary mode={themeMode}>
                 <div className="nutrition-main-shell">
-                  <NutritionPage
-                    profileId={activeProfileId}
-                    profile={effectiveProfile}
-                    metricsLog={metricsLog}
-                    activeSection={nutritionSection}
-                    onChangeActiveSection={setNutritionSection}
-                    onNutritionDataChange={touchLocalChange}
-                  />
+                  <div className={showNutritionSidePanel ? "workspace-layout nutrition-workspace" : undefined}>
+                    <div className={showNutritionSidePanel ? "workspace-main" : undefined}>
+                      <NutritionPage
+                        profileId={activeProfileId}
+                        profile={effectiveProfile}
+                        metricsLog={metricsLog}
+                        activeSection={nutritionSection}
+                        onChangeActiveSection={setNutritionSection}
+                        onNutritionDataChange={touchLocalChange}
+                        showInlineSectionNav={!showNutritionSidePanel}
+                      />
+                    </div>
+                    {showNutritionSidePanel ? (
+                      <aside className="workspace-aside nutrition-workspace-aside">
+                        <Suspense fallback={null}>
+                          <NutritionSidePanel
+                            profileId={activeProfileId}
+                            profile={effectiveProfile}
+                            metricsLog={metricsLog}
+                            activeSection={nutritionSection}
+                            onChangeSection={setNutritionSection}
+                          />
+                        </Suspense>
+                      </aside>
+                    ) : null}
+                  </div>
                 </div>
               </MuiThemeBoundary>
             </Suspense>
           )}
         </div>
       </div>
-
-      {showNutritionSidePanel ? (
-        <div className="nutrition-side-rail">
-          <Suspense fallback={null}>
-            <MuiThemeBoundary mode={themeMode}>
-              <NutritionSidePanel
-                profileId={activeProfileId}
-                profile={effectiveProfile}
-                metricsLog={metricsLog}
-              />
-            </MuiThemeBoundary>
-          </Suspense>
-        </div>
-      ) : null}
 
       <Suspense fallback={null}>
         <MetricsInfoModal
@@ -4275,6 +4305,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
         completedMap={completed}
         completedDetails={completedDetails}
         onUpdateDetail={onUpdateDetail}
+        onRequestGif={onRequestGif}
       />
 
       {summaryOpen && summaryData && (
@@ -4325,27 +4356,34 @@ export default function App({ themeMode = "light", onToggleTheme }) {
           </div>
         </div>
       )}
-      <nav className="mobile-nav">
+      <nav className="mobile-nav" aria-label="Navegación principal móvil">
         <button
           type="button"
           className="menu-btn"
           onClick={() => setMobileMenuOpen(true)}
         >
           <span className="mobile-nav-chip">MN</span>
-          <span>Menú</span>
+          <span className="mobile-nav-copy">
+            <strong>Panel</strong>
+            <small>Perfiles y ajustes</small>
+          </span>
         </button>
         {mobileNavItems.map((item) => (
           <button
             key={item.key}
             type="button"
             className={sidebarTab === item.key ? "active" : ""}
+            aria-current={sidebarTab === item.key ? "page" : undefined}
             onClick={() => {
               setSidebarTab(item.key);
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           >
             <span className="mobile-nav-chip">{item.short}</span>
-            <span>{item.label}</span>
+            <span className="mobile-nav-copy">
+              <strong>{item.label}</strong>
+              <small>{item.helper}</small>
+            </span>
           </button>
         ))}
       </nav>

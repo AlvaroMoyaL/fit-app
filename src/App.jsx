@@ -145,6 +145,91 @@ function mergeMetricEntry(base, patch) {
   return out;
 }
 
+function readUint16(view, offset) {
+  return view.getUint16(offset, true);
+}
+
+function readUint32(view, offset) {
+  return view.getUint32(offset, true);
+}
+
+function decodeZipText(bytes) {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+async function inflateZipEntry(bytes, compressionMethod) {
+  if (compressionMethod === 0) return bytes;
+  if (compressionMethod !== 8) {
+    throw new Error(`Metodo ZIP no soportado: ${compressionMethod}`);
+  }
+
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("Este navegador no soporta descompresion ZIP directa.");
+  }
+
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  const response = new Response(stream);
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+async function extractJsonFilesFromZip(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  const files = [];
+
+  let eocdOffset = -1;
+  const minEocdOffset = Math.max(0, bytes.length - 65557);
+  for (let i = bytes.length - 22; i >= minEocdOffset; i -= 1) {
+    if (readUint32(view, i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset < 0) {
+    throw new Error("No se encontro el indice del ZIP.");
+  }
+
+  const centralDirectorySize = readUint32(view, eocdOffset + 12);
+  const centralDirectoryOffset = readUint32(view, eocdOffset + 16);
+  const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
+
+  let offset = centralDirectoryOffset;
+  while (offset < centralDirectoryEnd) {
+    if (readUint32(view, offset) !== 0x02014b50) break;
+
+    const compressionMethod = readUint16(view, offset + 10);
+    const compressedSize = readUint32(view, offset + 20);
+    const fileNameLength = readUint16(view, offset + 28);
+    const extraLength = readUint16(view, offset + 30);
+    const commentLength = readUint16(view, offset + 32);
+    const localHeaderOffset = readUint32(view, offset + 42);
+    const fileNameBytes = bytes.slice(offset + 46, offset + 46 + fileNameLength);
+    const fileName = decodeZipText(fileNameBytes);
+
+    offset += 46 + fileNameLength + extraLength + commentLength;
+
+    if (!/\.json$/i.test(fileName) || /\/$/.test(fileName)) continue;
+    if (readUint32(view, localHeaderOffset) !== 0x04034b50) continue;
+
+    const localNameLength = readUint16(view, localHeaderOffset + 26);
+    const localExtraLength = readUint16(view, localHeaderOffset + 28);
+    const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+    const compressedBytes = bytes.slice(dataStart, dataStart + compressedSize);
+
+    const inflated = await inflateZipEntry(compressedBytes, compressionMethod);
+    files.push({
+      name: fileName.split("/").pop() || fileName,
+      path: fileName,
+      text: decodeZipText(inflated),
+    });
+  }
+
+  return files;
+}
+
 function parseGarminJsonEntries(payload, fileName) {
   const name = String(fileName || "").toLowerCase();
   const toDateKeyLoose = (value) => {
@@ -2298,30 +2383,59 @@ export default function App({ themeMode = "light", onToggleTheme }) {
       const perDate = new Map();
       let usedFiles = 0;
       let jsonFiles = 0;
+      let zipFiles = 0;
+      let extractedJsonFiles = 0;
 
       for (const file of garminFiles) {
-        if (!/\.json$/i.test(file.name)) continue;
-        jsonFiles += 1;
-        let parsed = null;
-        try {
-          parsed = JSON.parse(await file.text());
-        } catch {
+        const importSources = [];
+
+        if (/\.json$/i.test(file.name)) {
+          jsonFiles += 1;
+          importSources.push({
+            name: file.name,
+            text: await file.text(),
+          });
+        } else if (/\.zip$/i.test(file.name)) {
+          zipFiles += 1;
+          try {
+            const extracted = await extractJsonFilesFromZip(file);
+            extractedJsonFiles += extracted.length;
+            importSources.push(...extracted);
+          } catch {
+            continue;
+          }
+        } else {
           continue;
         }
-        const entries = parseGarminJsonEntries(parsed, file.name);
-        if (!entries.length) continue;
-        usedFiles += 1;
-        entries.forEach((entry) => {
-          if (!isValidDateKey(entry?.date)) return;
-          const prev = perDate.get(entry.date) || { date: entry.date };
-          perDate.set(entry.date, mergeMetricEntry(prev, entry));
-        });
+
+        let fileProducedEntries = false;
+
+        for (const source of importSources) {
+          let parsed = null;
+          try {
+            parsed = JSON.parse(source.text);
+          } catch {
+            continue;
+          }
+          const entries = parseGarminJsonEntries(parsed, source.name);
+          if (!entries.length) continue;
+          fileProducedEntries = true;
+          entries.forEach((entry) => {
+            if (!isValidDateKey(entry?.date)) return;
+            const prev = perDate.get(entry.date) || { date: entry.date };
+            perDate.set(entry.date, mergeMetricEntry(prev, entry));
+          });
+        }
+
+        if (fileProducedEntries) {
+          usedFiles += 1;
+        }
       }
 
       const incoming = [...perDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
       if (!incoming.length) {
         setGarminImportNote(
-          `No se detectaron métricas compatibles. JSON leídos: ${jsonFiles}. Usa archivos Garmin JSON o fit-export.json.`
+          `No se detectaron métricas compatibles. JSON directos: ${jsonFiles}. ZIP: ${zipFiles}. JSON extraidos: ${extractedJsonFiles}. Usa archivos Garmin JSON o ZIP con JSON.`
         );
         return;
       }
@@ -2342,7 +2456,7 @@ export default function App({ themeMode = "light", onToggleTheme }) {
       });
       touchLocalChange();
       setGarminImportNote(
-        `Importado Garmin ✓ ${incoming.length} fecha(s) desde ${usedFiles} archivo(s) JSON compatibles.`
+        `Importado Garmin ✓ ${incoming.length} fecha(s) desde ${usedFiles} archivo(s) compatibles. JSON directos: ${jsonFiles}. ZIP: ${zipFiles}. JSON extraidos: ${extractedJsonFiles}.`
       );
     } finally {
       setGarminImporting(false);

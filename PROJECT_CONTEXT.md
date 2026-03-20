@@ -164,6 +164,7 @@
   - recuperación de opción `Bola medicinal` en checklist y normalización de `medicine ball` en motor.
 - `Stats > Importar Garmin` ahora es funcional (no solo selector):
   - procesa importación directa desde JSON en UI (`fit-export.json` y archivos Garmin JSON),
+  - ahora también soporta importación directa de `.zip` Garmin en navegador, extrayendo automáticamente los `.json` internos antes de fusionarlos,
   - mapea/mezcla por fecha en `metricsLog` campos de `steps`, `restHr`, `sleepHours`, `sleepScore`, `readiness`, `hrv`,
   - mantiene merge no destructivo con métricas existentes del perfil activo.
 - Import Garmin sin duplicidad:

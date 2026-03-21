@@ -437,6 +437,22 @@ function describeTemplateIntent(templateKey) {
   }
 }
 
+function getRecoveryTypeFromTemplateKey(templateKey) {
+  switch (templateKey) {
+    case NUTRITION_RECOVERY_TEMPLATE_KEYS.HIGH_PROTEIN:
+      return "protein";
+    case NUTRITION_RECOVERY_TEMPLATE_KEYS.VEGETABLE_RECOVERY:
+      return "vegetables";
+    case NUTRITION_RECOVERY_TEMPLATE_KEYS.POST_EXCESS:
+      return "post_excess";
+    case NUTRITION_RECOVERY_TEMPLATE_KEYS.PORTABLE_WORKDAY:
+      return "portable_workday";
+    case NUTRITION_RECOVERY_TEMPLATE_KEYS.BALANCED:
+    default:
+      return "balanced";
+  }
+}
+
 function buildMealMatchingOptions(templateKey, nextDaySignals, options = {}) {
   return {
     preferPortable:
@@ -514,8 +530,11 @@ export function buildNextDayRecoveryPlan(input = {}) {
     ...plan,
     templateKey: template.key,
     templateName: template.name,
+    recoveryType: getRecoveryTypeFromTemplateKey(template.key),
     uiSummary: summarizeMealSlotPlan(plan),
     mealMatches,
+    slotMatches: mealMatches?.slotMatches || {},
+    mealOptionsBySlot: mealMatches?.mealOptionsBySlot || mealMatches?.slotMatches || {},
   };
 
   const status = patterns.daysAnalyzed > 0 ? "ok" : "insufficient_data";
@@ -524,10 +543,13 @@ export function buildNextDayRecoveryPlan(input = {}) {
     status,
     templateKey: template.key,
     templateName: template.name,
+    recoveryType: getRecoveryTypeFromTemplateKey(template.key),
     patterns,
     nextDaySignals,
     plan: normalizedPlan,
     mealMatches,
+    slotMatches: mealMatches?.slotMatches || {},
+    mealOptionsBySlot: mealMatches?.mealOptionsBySlot || mealMatches?.slotMatches || {},
     summary: buildSummary(status, patterns, normalizedPlan, portableOverride),
     reasoning: buildPlannerReasoning({
       patterns,

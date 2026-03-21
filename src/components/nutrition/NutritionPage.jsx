@@ -23,6 +23,7 @@ import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
 import { recipes } from "../../data/recipes";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
+import { getCustomRecipes } from "../../utils/customRecipesStorage";
 import WorkspaceHeader from "../WorkspaceHeader";
 import {
   getNutritionMetricState,
@@ -38,6 +39,8 @@ const ShoppingListCard = lazy(() => import("./ShoppingListCard"));
 const NutritionLog = lazy(() => import("./NutritionLog"));
 const AdaptiveInsightDrawer = lazy(() => import("./AdaptiveInsightDrawer"));
 const NutritionTools = lazy(() => import("./NutritionTools"));
+const CorrectiveDayPlan = lazy(() => import("./CorrectiveDayPlan"));
+const NextDayRecoveryCard = lazy(() => import("./NextDayRecoveryCard"));
 
 function getTodayDateKey() {
   const now = new Date();
@@ -288,6 +291,210 @@ function enrichMealsWithStoredNutrients(meals, foodLookup) {
   return { changed, meals: nextMeals };
 }
 
+function safeNumber(value, fallback = 0) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+function safeString(value, fallback = "") {
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim();
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getSafeArray(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function getFirstFiniteNumber(...values) {
+  for (const value of values) {
+    const next = Number(value);
+    if (Number.isFinite(next)) return next;
+  }
+  return 0;
+}
+
+function formatDateKey(dateLike) {
+  const date = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim();
+  }
+
+  return formatDateKey(value);
+}
+
+function inferMealTypeFromTime(entry) {
+  const timeValue = safeString(entry?.time || entry?.loggedTime || entry?.consumedTime);
+  const consumedAt = safeNumber(entry?.consumedAt || entry?.timestamp || entry?.createdAt, 0);
+
+  let hour = -1;
+  if (timeValue) {
+    const parsedHour = Number(timeValue.split(":")[0]);
+    if (Number.isFinite(parsedHour)) {
+      hour = parsedHour;
+    }
+  } else if (consumedAt > 0) {
+    hour = new Date(consumedAt).getHours();
+  }
+
+  if (hour >= 5 && hour < 11) return "breakfast";
+  if (hour >= 11 && hour < 17) return "lunch";
+  if (hour >= 17 && hour < 23) return "dinner";
+  if (hour >= 0) return "snack";
+  return "";
+}
+
+function normalizeMealType(value, entry) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const aliases = {
+    desayuno: "breakfast",
+    breakfast: "breakfast",
+    desayuno_pm: "breakfast",
+    almuerzo: "lunch",
+    lunch: "lunch",
+    comida: "lunch",
+    lunch_box: "lunch",
+    cena: "dinner",
+    dinner: "dinner",
+    supper: "dinner",
+    once: "dinner",
+    snack: "snack",
+    colacion: "snack",
+    merienda: "snack",
+    tentempie: "snack",
+  };
+
+  if (aliases[normalized]) return aliases[normalized];
+  if (normalized === "breakfast" || normalized === "lunch" || normalized === "dinner" || normalized === "snack") {
+    return normalized;
+  }
+
+  return inferMealTypeFromTime(entry) || "snack";
+}
+
+function getMealEntryDate(entry, fallbackDate = "") {
+  return (
+    normalizeDateValue(entry?.date) ||
+    normalizeDateValue(entry?.day) ||
+    normalizeDateValue(entry?.loggedDate) ||
+    normalizeDateValue(entry?.consumedDate) ||
+    normalizeDateValue(entry?.timestamp) ||
+    normalizeDateValue(entry?.consumedAt) ||
+    normalizeDateValue(entry?.createdAt) ||
+    safeString(fallbackDate)
+  );
+}
+
+function getMealEntryVegetableServings(entry) {
+  const nutrition = isObject(entry?.nutrition) ? entry.nutrition : {};
+  const servings = getFirstFiniteNumber(
+    entry?.vegetableServings,
+    entry?.vegetables,
+    entry?.vegetableCount,
+    entry?.vegetablePortions,
+    entry?.veggieServings,
+    nutrition?.vegetableServings,
+    nutrition?.vegetables
+  );
+
+  if (servings > 0) return servings;
+  return safeNumber(trackVegetableIntake([entry]).servings, 0);
+}
+
+function normalizeMealEntry(entry, fallbackDate = "") {
+  if (!isObject(entry)) return null;
+
+  const nutrition = isObject(entry?.nutrition) ? entry.nutrition : {};
+  const macros = isObject(entry?.macros) ? entry.macros : {};
+  const totals = isObject(entry?.totals) ? entry.totals : {};
+
+  return {
+    date: getMealEntryDate(entry, fallbackDate),
+    type: normalizeMealType(
+      entry?.mealType || entry?.type || entry?.slot || entry?.meal || entry?.category,
+      entry
+    ),
+    calories: getFirstFiniteNumber(
+      entry?.calories,
+      entry?.caloriesConsumed,
+      entry?.kcal,
+      entry?.energy,
+      nutrition?.calories,
+      nutrition?.kcal,
+      macros?.calories,
+      totals?.calories
+    ),
+    protein: getFirstFiniteNumber(
+      entry?.protein,
+      entry?.proteins,
+      nutrition?.protein,
+      nutrition?.proteins,
+      macros?.protein,
+      totals?.protein
+    ),
+    carbs: getFirstFiniteNumber(
+      entry?.carbs,
+      entry?.carbohydrates,
+      nutrition?.carbs,
+      nutrition?.carbohydrates,
+      macros?.carbs,
+      totals?.carbs
+    ),
+    fat: getFirstFiniteNumber(
+      entry?.fat,
+      entry?.fats,
+      nutrition?.fat,
+      nutrition?.fats,
+      macros?.fat,
+      totals?.fat
+    ),
+    vegetableServings: getMealEntryVegetableServings(entry),
+  };
+}
+
+function buildRecoveryInsights({
+  totals,
+  proteinAnalysis,
+  vegetableAnalysis,
+  macroAnalysis,
+  satiety,
+  calorieTarget,
+}) {
+  const calories = Number(totals?.calories || 0);
+  const targetCalories = Number(calorieTarget || 0);
+  const satietyScore = Number(satiety?.satietyScore || 0);
+
+  return {
+    lowProtein: proteinAnalysis?.status !== "optimal",
+    lowVegetables: ["low", "very_low"].includes(vegetableAnalysis?.status),
+    excessCalories: targetCalories > 0 ? calories > targetCalories * 1.08 : false,
+    poorMacroBalance:
+      macroAnalysis?.protein?.status === "low" ||
+      macroAnalysis?.carbs?.status === "high" ||
+      macroAnalysis?.fats?.status === "high",
+    lowSatiety: Boolean(satiety?.hasData) && satietyScore < 50,
+  };
+}
+
 export default function NutritionPage({
   profileId,
   profile,
@@ -368,6 +575,21 @@ export default function NutritionPage({
   const [historyDate, setHistoryDate] = useState("");
   const [nutritionReady, setNutritionReady] = useState(false);
   const todayKey = useMemo(() => getTodayDateKey(), []);
+  const customFoods = useMemo(
+    () => (profileId ? getCustomFoods(profileId) : []),
+    [profileId]
+  );
+  const customRecipes = useMemo(
+    () => (profileId ? getCustomRecipes(profileId) : []),
+    [profileId]
+  );
+  const recoveryMatchContext = useMemo(
+    () => ({
+      customFoods,
+      recipes: customRecipes,
+    }),
+    [customFoods, customRecipes]
+  );
 
   useEffect(() => {
     if (!profileId) {
@@ -380,12 +602,12 @@ export default function NutritionPage({
   }, [profileId]);
   useEffect(() => {
     if (!profileId || !nutritionReady) return;
-    const lookup = buildFoodLookup([...foodCatalog, ...getCustomFoods(profileId)]);
+    const lookup = buildFoodLookup([...foodCatalog, ...customFoods]);
     const enriched = enrichMealsWithStoredNutrients(meals, lookup);
     if (!enriched.changed) return;
     saveMeals(profileId, enriched.meals);
     setMeals(enriched.meals);
-  }, [meals, nutritionReady, profileId]);
+  }, [customFoods, meals, nutritionReady, profileId]);
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const availableMealDates = useMemo(() => {
@@ -637,6 +859,194 @@ export default function NutritionPage({
       }),
     [currentWeight, mealsToday, totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
   );
+  const normalizedMealHistory = useMemo(
+    () => getSafeArray(meals).map((entry) => normalizeMealEntry(entry)).filter(Boolean),
+    [meals]
+  );
+  const normalizedTodayMealHistory = useMemo(
+    () => normalizedMealHistory.filter((meal) => meal?.date === todayKey),
+    [normalizedMealHistory, todayKey]
+  );
+  const correctiveDeficits = useMemo(
+    () =>
+      buildRecoveryInsights({
+        totals: totalsToday,
+        proteinAnalysis,
+        vegetableAnalysis,
+        macroAnalysis,
+        satiety: hungerToday,
+        calorieTarget: tdee,
+      }),
+    [hungerToday, macroAnalysis, proteinAnalysis, tdee, totalsToday, vegetableAnalysis]
+  );
+  const nextDayRecoveryOptions = useMemo(() => {
+    const next = {};
+
+    if (safeNumber(tdee) > 0) {
+      next.dailyTargetCalories = safeNumber(tdee);
+    }
+    if (safeNumber(proteinAnalysis.proteinTarget) > 0) {
+      next.dailyTargetProtein = safeNumber(proteinAnalysis.proteinTarget);
+    }
+
+    return next;
+  }, [proteinAnalysis.proteinTarget, tdee]);
+  const recoveryRecentDays = useMemo(() => {
+    const metricsByDate = new Map(
+      getSafeArray(metricsLog)
+        .map((entry) => {
+          const key =
+            normalizeDateValue(entry?.date) ||
+            normalizeDateValue(entry?.day) ||
+            normalizeDateValue(entry?.loggedDate) ||
+            normalizeDateValue(entry?.timestamp) ||
+            normalizeDateValue(entry?.createdAt);
+          return key ? [key, entry] : null;
+        })
+        .filter(Boolean)
+    );
+
+    const uniqueDates = Array.from(
+      new Set([
+        ...normalizedMealHistory.map((meal) => meal?.date).filter(Boolean),
+        ...metricsByDate.keys(),
+      ])
+    )
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())
+      .slice(0, 7);
+
+    return uniqueDates
+      .map((date) => {
+        const mealsForDate = normalizedMealHistory.filter((meal) => meal?.date === date);
+        const totalsFromMeals = calculateDailyTotals(mealsForDate);
+        const metric = metricsByDate.get(date) || {};
+        const metricNutrition = isObject(metric?.nutrition) ? metric.nutrition : {};
+        const metricTotals = isObject(metric?.totals) ? metric.totals : {};
+        const caloriesForDate = getFirstFiniteNumber(
+          metric?.calories,
+          metric?.caloriesConsumed,
+          metric?.kcal,
+          metricNutrition?.calories,
+          metricNutrition?.kcal,
+          metricTotals?.calories,
+          totalsFromMeals.calories
+        );
+        const proteinForDate = getFirstFiniteNumber(
+          metric?.protein,
+          metric?.proteins,
+          metricNutrition?.protein,
+          metricNutrition?.proteins,
+          metricTotals?.protein,
+          totalsFromMeals.protein
+        );
+        const carbsForDate = getFirstFiniteNumber(
+          metric?.carbs,
+          metric?.carbohydrates,
+          metricNutrition?.carbs,
+          metricNutrition?.carbohydrates,
+          metricTotals?.carbs,
+          totalsFromMeals.carbs
+        );
+        const fatForDate = getFirstFiniteNumber(
+          metric?.fat,
+          metric?.fats,
+          metricNutrition?.fat,
+          metricNutrition?.fats,
+          metricTotals?.fat,
+          totalsFromMeals.fat
+        );
+        const trackedVegetables = trackVegetableIntake(mealsForDate);
+        const vegetableServingsForDate = getFirstFiniteNumber(
+          metric?.vegetableServings,
+          metric?.vegetables,
+          metricNutrition?.vegetableServings,
+          metricNutrition?.vegetables,
+          metricTotals?.vegetableServings,
+          trackedVegetables.servings
+        );
+        const hasMeaningfulData =
+          mealsForDate.length > 0 ||
+          caloriesForDate > 0 ||
+          proteinForDate > 0 ||
+          carbsForDate > 0 ||
+          fatForDate > 0 ||
+          vegetableServingsForDate > 0;
+
+        if (!hasMeaningfulData) return null;
+
+        const weightForDate = getFirstFiniteNumber(
+          metric?.weight,
+          metric?.peso,
+          currentWeight,
+          nutritionProfile?.weight,
+          nutritionProfile?.peso
+        );
+        const tdeeForDate = calculateTDEEDynamic(nutritionProfile, {
+          steps: safeNumber(metric?.steps),
+          activeKcal: safeNumber(metric?.activeKcal),
+        });
+        const macroForDate = analyzeMacroBalance({
+          proteinCalories: proteinForDate * 4,
+          carbCalories: carbsForDate * 4,
+          fatCalories: fatForDate * 9,
+          totalCalories: caloriesForDate,
+        });
+        const proteinForDay = analyzeProteinIntake({
+          proteinConsumedGrams: proteinForDate,
+          bodyWeightKg: weightForDate,
+        });
+        const satietyForDay = estimateHungerFromMeals(mealsForDate);
+        const nutritionScoreForDate = calculateDailyNutritionScore({
+          caloriesConsumed: caloriesForDate,
+          calorieTarget: tdeeForDate,
+          proteinGrams: proteinForDate,
+          proteinTarget: proteinForDay.proteinTarget,
+          macroDistribution: {
+            protein: macroForDate.protein?.percent,
+            carbs: macroForDate.carbs?.percent,
+            fat: macroForDate.fats?.percent,
+          },
+          vegetableServings: vegetableServingsForDate,
+          satietyScore: satietyForDay.satietyScore,
+        });
+
+        return {
+          date,
+          calories: caloriesForDate,
+          protein: proteinForDate,
+          carbs: carbsForDate,
+          fat: fatForDate,
+          vegetableServings: vegetableServingsForDate,
+          nutritionScore: nutritionScoreForDate,
+          alerts: generateNutritionAlerts({
+            proteinConsumedGrams: proteinForDate,
+            bodyWeightKg: weightForDate,
+            proteinCalories: proteinForDate * 4,
+            carbCalories: carbsForDate * 4,
+            fatCalories: fatForDate * 9,
+            totalCalories: caloriesForDate,
+            meals: mealsForDate,
+          }),
+          insights: buildRecoveryInsights({
+            totals: {
+              calories: caloriesForDate,
+              protein: proteinForDate,
+              carbs: carbsForDate,
+              fat: fatForDate,
+            },
+            proteinAnalysis: proteinForDay,
+            vegetableAnalysis: {
+              ...trackedVegetables,
+              servings: vegetableServingsForDate,
+            },
+            macroAnalysis: macroForDate,
+            satiety: satietyForDay,
+            calorieTarget: tdeeForDate,
+          }),
+        };
+      })
+      .filter(Boolean);
+  }, [currentWeight, metricsLog, normalizedMealHistory, nutritionProfile]);
   const calorieState = useMemo(
     () => getNutritionMetricState(theme, totalsToday.calories, macroTargets.calories, { lowWarnRatio: 0.5 }),
     [macroTargets.calories, theme, totalsToday.calories]
@@ -921,6 +1331,48 @@ export default function NutritionPage({
                   />
                   <NutritionEvaluation totals={totalsToday} profile={nutritionProfile} tdee={tdee} embedded />
                 </Box>
+              </Box>
+              <Box sx={{ display: "grid", gap: 1.05 }}>
+                <Box sx={{ display: "grid", gap: 0.35 }}>
+                  <Typography variant="subtitle1">Planning correctivo</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Cierra hoy y aterriza mañana en comidas concretas cuando hay matches reales con recetas o ideas del perfil.
+                  </Typography>
+                </Box>
+                <Suspense fallback={<NutritionSectionFallback rows={2} />}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
+                      gap: { xs: 1.2, md: 1.4 },
+                      alignItems: "start",
+                    }}
+                  >
+                    <CorrectiveDayPlan
+                      title="Plan correctivo del día"
+                      dailyTargetCalories={safeNumber(tdee)}
+                      dailyTargetProtein={safeNumber(proteinAnalysis?.proteinTarget)}
+                      dailyTargetCarbs={safeNumber(macroTargets?.carbs)}
+                      dailyTargetFat={safeNumber(macroTargets?.fat)}
+                      consumedCalories={safeNumber(totalsToday?.calories)}
+                      consumedProtein={safeNumber(totalsToday?.protein)}
+                      consumedCarbs={safeNumber(totalsToday?.carbs)}
+                      consumedFat={safeNumber(totalsToday?.fat)}
+                      vegetableServings={safeNumber(vegetableAnalysis?.servings)}
+                      deficits={correctiveDeficits}
+                      mealHistory={normalizedTodayMealHistory}
+                      context={recoveryMatchContext}
+                      compact
+                    />
+                    <NextDayRecoveryCard
+                      title="Plan sugerido para mañana"
+                      recentDays={recoveryRecentDays}
+                      options={nextDayRecoveryOptions}
+                      context={recoveryMatchContext}
+                      compact
+                    />
+                  </Box>
+                </Suspense>
               </Box>
             </NutritionWorkspacePanel>
           )}

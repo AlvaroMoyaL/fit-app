@@ -1,4 +1,5 @@
 import { matchRecoveryMealsForPlan } from "./recoveryMealMatcher.js";
+import { getNutritionRecoveryTemplate } from "./nutritionRecoveryTemplates.js";
 
 const DEFAULT_TARGETS = {
   calories: 2200,
@@ -533,6 +534,8 @@ function buildReasoning({
 function buildInsufficientDataResponse() {
   return {
     status: "insufficient_data",
+    templateKey: "",
+    templateName: "",
     summary: "No hay suficientes datos para construir un plan correctivo del resto del dia.",
     goals: {
       caloriesToUse: 0,
@@ -550,9 +553,11 @@ function buildInsufficientDataResponse() {
 }
 
 function buildCorrectiveMealMatchPlan(recoveryType, suggestedMeals = []) {
+  const template = getNutritionRecoveryTemplate(getTemplateKeyFromRecoveryType(recoveryType));
+
   return {
-    templateKey: getTemplateKeyFromRecoveryType(recoveryType),
-    templateName: recoveryType,
+    templateKey: template.key,
+    templateName: template.name,
     slots: uniqueStrings((Array.isArray(suggestedMeals) ? suggestedMeals : []).map((meal) => meal?.slot)).reduce(
       (acc, slot) => {
         const meal = (Array.isArray(suggestedMeals) ? suggestedMeals : []).find(
@@ -629,6 +634,7 @@ export function buildCorrectiveDayPlan(input = {}) {
     mealTotals
   );
   const recoveryType = resolveRecoveryType(deficits, goals);
+  const recoveryTemplate = getNutritionRecoveryTemplate(getTemplateKeyFromRecoveryType(recoveryType));
   const suggestedMeals = buildMealSuggestions({
     mealHistory: input?.mealHistory,
     deficits,
@@ -653,6 +659,8 @@ export function buildCorrectiveDayPlan(input = {}) {
 
   return {
     status: "ok",
+    templateKey: recoveryTemplate.key,
+    templateName: recoveryTemplate.name,
     summary: buildSummary({
       recoveryType,
       suggestedMeals,

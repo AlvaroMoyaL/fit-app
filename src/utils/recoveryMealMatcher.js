@@ -636,6 +636,7 @@ export function matchRecoveryMealsForPlan(input = {}) {
   return {
     templateKey: String(plan?.templateKey || "").trim().toLowerCase(),
     slotMatches,
+    mealOptionsBySlot: slotMatches,
     reasoning: uniqueStrings([
       enabledSlots.length
         ? `Se aterrizaron ${enabledSlots.length} slots del plan en propuestas concretas.`

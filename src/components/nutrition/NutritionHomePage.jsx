@@ -1,6 +1,7 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
-import { Box, Tabs, Tab, Typography } from "@mui/material";
+import { Box, Chip, Divider, Stack, Tabs, Tab, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 import NutritionDashboard from "./NutritionDashboard";
 import NutritionSectionNav from "./NutritionSectionNav";
@@ -19,6 +20,24 @@ import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateTDEEDynamic } from "../../utils/metabolism";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
+import { getCustomFoods } from "../../utils/customFoodsStorage";
+import { getCustomRecipes } from "../../utils/customRecipesStorage";
+import { buildCorrectiveDayPlan } from "../../utils/correctiveDayBuilder";
+import { buildNextDayRecoveryPlan } from "../../utils/nextDayRecoveryPlanner";
+import {
+  NUTRITION_RECOVERY_PLAN_TYPES,
+  NUTRITION_RECOVERY_STATUSES,
+  getNutritionRecoveryStateEntryKey,
+  inferNutritionRecoveryTypeFromTemplateKey,
+  loadNutritionRecoveryState,
+  saveCurrentDayRecoveryPlan,
+  saveNextDayRecoveryPlan,
+  updateRecoveryPlanStatus,
+} from "../../utils/nutritionRecoveryStorage";
+import {
+  NUTRITION_RECOVERY_ACTIONS,
+  trackRecoveryPlanEvent,
+} from "../../utils/nutritionRecoveryAnalytics";
 
 const SmartFoodInput = lazy(() => import("./SmartFoodInput"));
 const CookWithWhatIHave = lazy(() => import("./CookWithWhatIHave"));
@@ -31,6 +50,13 @@ function getTodayDateKey() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const base = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return dateKey;
+  base.setDate(base.getDate() + days);
+  return formatDateKey(base);
 }
 
 function safeNumber(value, fallback = 0) {
@@ -453,6 +479,48 @@ function buildRecoveryInsights({
   };
 }
 
+function getRecoveryPlanTemplateKey(plan) {
+  return safeString(plan?.templateKey) || safeString(plan?.plan?.templateKey);
+}
+
+function getRecoveryPlanSummary(plan) {
+  return safeString(plan?.summary) || safeString(plan?.plan?.summary);
+}
+
+function getRecoveryPlanRecoveryType(plan) {
+  return (
+    safeString(plan?.recoveryType) ||
+    safeString(plan?.plan?.recoveryType) ||
+    inferNutritionRecoveryTypeFromTemplateKey(getRecoveryPlanTemplateKey(plan))
+  );
+}
+
+function getRecoveryPlanStatusFromAction(action) {
+  if (action === NUTRITION_RECOVERY_ACTIONS.SAVED_FOR_LATER) {
+    return NUTRITION_RECOVERY_STATUSES.SAVED_FOR_LATER;
+  }
+  if (action === NUTRITION_RECOVERY_ACTIONS.VIEWED) return NUTRITION_RECOVERY_STATUSES.VIEWED;
+  if (action === NUTRITION_RECOVERY_ACTIONS.ACCEPTED) return NUTRITION_RECOVERY_STATUSES.ACCEPTED;
+  if (action === NUTRITION_RECOVERY_ACTIONS.DISMISSED) return NUTRITION_RECOVERY_STATUSES.DISMISSED;
+  if (action === NUTRITION_RECOVERY_ACTIONS.PARTIAL) return NUTRITION_RECOVERY_STATUSES.PARTIAL;
+  return "";
+}
+
+function isSameStoredRecoveryPlan(entry, plan, dateKey, planType) {
+  if (!isObject(entry) || !isObject(plan)) return false;
+
+  const storedDate =
+    planType === NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY
+      ? safeString(entry?.targetDate)
+      : safeString(entry?.date);
+  return (
+    storedDate === safeString(dateKey) &&
+    safeString(entry?.templateKey) === getRecoveryPlanTemplateKey(plan) &&
+    safeString(entry?.summary) === getRecoveryPlanSummary(plan) &&
+    safeString(entry?.recoveryType) === getRecoveryPlanRecoveryType(plan)
+  );
+}
+
 export default function NutritionHomePage({
   profileId,
   profile,
@@ -462,7 +530,20 @@ export default function NutritionHomePage({
 }) {
   const [tab, setTab] = useState(0);
   const todayKey = useMemo(() => getTodayDateKey(), []);
+  const tomorrowKey = useMemo(() => addDaysToDateKey(todayKey, 1), [todayKey]);
   const meals = useMemo(() => (profileId ? getMeals(profileId) : []), [profileId]);
+  const customFoods = useMemo(() => (profileId ? getCustomFoods(profileId) : []), [profileId]);
+  const customRecipes = useMemo(
+    () => (profileId ? getCustomRecipes(profileId) : []),
+    [profileId]
+  );
+  const recoveryMatchContext = useMemo(
+    () => ({
+      customFoods,
+      recipes: customRecipes,
+    }),
+    [customFoods, customRecipes]
+  );
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const totalsToday = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
@@ -634,19 +715,49 @@ export default function NutritionHomePage({
       }),
     [macroAnalysis, proteinAnalysis, satietyToday, tdee, totalsToday, vegetableAnalysis]
   );
-  const correctivePlanInput = {
-    dailyTargetCalories: safeNumber(tdee),
-    dailyTargetProtein: safeNumber(proteinAnalysis?.proteinTarget),
-    dailyTargetCarbs: safeNumber(profile?.macroTargets?.carbs),
-    dailyTargetFat: safeNumber(profile?.macroTargets?.fat),
-    consumedCalories: safeNumber(totalsToday?.calories),
-    consumedProtein: safeNumber(totalsToday?.protein),
-    consumedCarbs: safeNumber(totalsToday?.carbs),
-    consumedFat: safeNumber(totalsToday?.fat),
-    vegetableServings: safeNumber(vegetableAnalysis?.servings),
-    deficits: buildSafeInsights(correctiveDeficits),
-    mealHistory: normalizedTodayMealHistory,
-  };
+  const correctiveInsights = useMemo(
+    () => buildSafeInsights(correctiveDeficits),
+    [correctiveDeficits]
+  );
+  const dailyTargetCalories = safeNumber(tdee);
+  const dailyTargetProtein = safeNumber(proteinAnalysis?.proteinTarget);
+  const dailyTargetCarbs = safeNumber(profile?.macroTargets?.carbs);
+  const dailyTargetFat = safeNumber(profile?.macroTargets?.fat);
+  const consumedCalories = safeNumber(totalsToday?.calories);
+  const consumedProtein = safeNumber(totalsToday?.protein);
+  const consumedCarbs = safeNumber(totalsToday?.carbs);
+  const consumedFat = safeNumber(totalsToday?.fat);
+  const vegetableServings = safeNumber(vegetableAnalysis?.servings);
+  const correctivePlanInput = useMemo(
+    () => ({
+      dailyTargetCalories,
+      dailyTargetProtein,
+      dailyTargetCarbs,
+      dailyTargetFat,
+      consumedCalories,
+      consumedProtein,
+      consumedCarbs,
+      consumedFat,
+      vegetableServings,
+      deficits: correctiveInsights,
+      mealHistory: normalizedTodayMealHistory,
+      context: recoveryMatchContext,
+    }),
+    [
+      correctiveInsights,
+      consumedCalories,
+      consumedCarbs,
+      consumedFat,
+      consumedProtein,
+      dailyTargetCalories,
+      dailyTargetCarbs,
+      dailyTargetFat,
+      dailyTargetProtein,
+      normalizedTodayMealHistory,
+      recoveryMatchContext,
+      vegetableServings,
+    ]
+  );
   const safeMetricsHistory = useMemo(
     () => getSafeArray(metricsLog).filter(isObject),
     [metricsLog]
@@ -666,15 +777,19 @@ export default function NutritionHomePage({
         .filter((entry) => entry?.date),
     [safeMetricsHistory]
   );
-  const nextDayRecoveryOptions = {};
+  const nextDayRecoveryOptions = useMemo(() => {
+    const next = {};
 
-  if (safeNumber(tdee) > 0) {
-    nextDayRecoveryOptions.dailyTargetCalories = safeNumber(tdee);
-  }
+    if (dailyTargetCalories > 0) {
+      next.dailyTargetCalories = dailyTargetCalories;
+    }
 
-  if (safeNumber(proteinAnalysis?.proteinTarget) > 0) {
-    nextDayRecoveryOptions.dailyTargetProtein = safeNumber(proteinAnalysis?.proteinTarget);
-  }
+    if (dailyTargetProtein > 0) {
+      next.dailyTargetProtein = dailyTargetProtein;
+    }
+
+    return next;
+  }, [dailyTargetCalories, dailyTargetProtein]);
   // Merge recent nutrition history from meals and metric rows, tolerating partial data on either side.
   const normalizedRecentDays = useMemo(() => {
     const metricDaysByDate = new Map(
@@ -855,6 +970,228 @@ export default function NutritionHomePage({
       })
       .filter(hasMeaningfulNutritionDay);
   }, [bodyWeightKg, normalizedMealHistory, normalizedMetricsHistory, profile]);
+  const currentDayRecoveryPlan = useMemo(
+    () => buildCorrectiveDayPlan(correctivePlanInput),
+    [correctivePlanInput]
+  );
+  const nextDayRecoveryPlan = useMemo(
+    () =>
+      buildNextDayRecoveryPlan({
+        recentDays: normalizedRecentDays,
+        options: nextDayRecoveryOptions,
+        context: recoveryMatchContext,
+      }),
+    [nextDayRecoveryOptions, normalizedRecentDays, recoveryMatchContext]
+  );
+  const [persistedRecoveryState, setPersistedRecoveryState] = useState(() =>
+    loadNutritionRecoveryState(profileId)
+  );
+
+  useEffect(() => {
+    setPersistedRecoveryState(loadNutritionRecoveryState(profileId));
+  }, [profileId]);
+
+  const persistRecoveryPlan = useCallback(
+    (planType, plan, dateKey) => {
+      if (!isObject(plan)) {
+        return {
+          nextState: loadNutritionRecoveryState(profileId),
+          entry: null,
+          isSamePlan: false,
+        };
+      }
+
+      const entryKey = getNutritionRecoveryStateEntryKey(planType);
+      const previousState = loadNutritionRecoveryState(profileId);
+      const previousEntry = previousState?.[entryKey];
+      const isSamePlan = isSameStoredRecoveryPlan(previousEntry, plan, dateKey, planType);
+
+      if (isSamePlan && previousEntry) {
+        setPersistedRecoveryState(previousState);
+
+        return {
+          nextState: previousState,
+          entry: previousEntry,
+          isSamePlan: true,
+        };
+      }
+
+      const payload =
+        planType === NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY
+          ? { ...plan, targetDate: dateKey }
+          : { ...plan, date: dateKey };
+      const nextState =
+        planType === NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY
+          ? saveNextDayRecoveryPlan(profileId, payload)
+          : saveCurrentDayRecoveryPlan(profileId, payload);
+
+      setPersistedRecoveryState(nextState);
+
+      if (!isSamePlan) {
+        trackRecoveryPlanEvent(profileId, {
+          planType,
+          action: NUTRITION_RECOVERY_ACTIONS.GENERATED,
+          templateKey: getRecoveryPlanTemplateKey(plan),
+          recoveryType: getRecoveryPlanRecoveryType(plan),
+          date: dateKey,
+        });
+      }
+
+      return {
+        nextState,
+        entry: nextState?.[entryKey] || null,
+        isSamePlan,
+      };
+    },
+    [profileId]
+  );
+
+  const applyRecoveryPlanAction = useCallback(
+    (planType, action, plan, dateKey) => {
+      if (!isObject(plan)) return;
+
+      const status = getRecoveryPlanStatusFromAction(action);
+      if (!status) return;
+
+      const entryKey = getNutritionRecoveryStateEntryKey(planType);
+      const { nextState, entry } = persistRecoveryPlan(planType, plan, dateKey);
+      const currentEntry = entry || nextState?.[entryKey];
+      if (!currentEntry) return;
+
+      const currentStatus = safeString(currentEntry?.status);
+      if (
+        action === NUTRITION_RECOVERY_ACTIONS.VIEWED &&
+        currentStatus !== NUTRITION_RECOVERY_STATUSES.GENERATED
+      ) {
+        return;
+      }
+      if (action !== NUTRITION_RECOVERY_ACTIONS.VIEWED && currentStatus === status) return;
+
+      const updatedState = updateRecoveryPlanStatus(profileId, {
+        [entryKey]: { status },
+      });
+
+      setPersistedRecoveryState(updatedState);
+      trackRecoveryPlanEvent(profileId, {
+        planType,
+        action,
+        templateKey: safeString(currentEntry?.templateKey) || getRecoveryPlanTemplateKey(plan),
+        recoveryType: safeString(currentEntry?.recoveryType) || getRecoveryPlanRecoveryType(plan),
+        date: dateKey,
+      });
+    },
+    [persistRecoveryPlan, profileId]
+  );
+
+  const handleCurrentDayViewed = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.CURRENT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.VIEWED,
+        plan,
+        todayKey
+      ),
+    [applyRecoveryPlanAction, todayKey]
+  );
+  const handleCurrentDayAccept = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.CURRENT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.ACCEPTED,
+        plan,
+        todayKey
+      ),
+    [applyRecoveryPlanAction, todayKey]
+  );
+  const handleCurrentDaySaveForLater = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.CURRENT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.SAVED_FOR_LATER,
+        plan,
+        todayKey
+      ),
+    [applyRecoveryPlanAction, todayKey]
+  );
+  const handleCurrentDayDismiss = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.CURRENT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.DISMISSED,
+        plan,
+        todayKey
+      ),
+    [applyRecoveryPlanAction, todayKey]
+  );
+  const handleNextDayViewed = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.VIEWED,
+        plan,
+        tomorrowKey
+      ),
+    [applyRecoveryPlanAction, tomorrowKey]
+  );
+  const handleNextDayAccept = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.ACCEPTED,
+        plan,
+        tomorrowKey
+      ),
+    [applyRecoveryPlanAction, tomorrowKey]
+  );
+  const handleNextDaySaveForLater = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.SAVED_FOR_LATER,
+        plan,
+        tomorrowKey
+      ),
+    [applyRecoveryPlanAction, tomorrowKey]
+  );
+  const handleNextDayDismiss = useCallback(
+    (plan) =>
+      applyRecoveryPlanAction(
+        NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY,
+        NUTRITION_RECOVERY_ACTIONS.DISMISSED,
+        plan,
+        tomorrowKey
+      ),
+    [applyRecoveryPlanAction, tomorrowKey]
+  );
+
+  const displayedCurrentDayRecoveryPlan =
+    currentDayRecoveryPlan?.status === "ok"
+      ? currentDayRecoveryPlan
+      : persistedRecoveryState?.currentDayPlan?.plan || null;
+  const displayedNextDayRecoveryPlan =
+    nextDayRecoveryPlan?.status === "ok"
+      ? nextDayRecoveryPlan
+      : persistedRecoveryState?.nextDayPlan?.plan || null;
+
+  useEffect(() => {
+    if (currentDayRecoveryPlan?.status !== "ok") return;
+
+    persistRecoveryPlan(
+      NUTRITION_RECOVERY_PLAN_TYPES.CURRENT_DAY,
+      currentDayRecoveryPlan,
+      todayKey
+    );
+  }, [currentDayRecoveryPlan, persistRecoveryPlan, todayKey]);
+
+  useEffect(() => {
+    if (nextDayRecoveryPlan?.status !== "ok") return;
+
+    persistRecoveryPlan(
+      NUTRITION_RECOVERY_PLAN_TYPES.NEXT_DAY,
+      nextDayRecoveryPlan,
+      tomorrowKey
+    );
+  }, [nextDayRecoveryPlan, persistRecoveryPlan, tomorrowKey]);
 
   return (
     <Box sx={{ display: "grid", gap: 2 }}>
@@ -919,33 +1256,50 @@ export default function NutritionHomePage({
         <Box
           sx={(theme) => ({
             ...nutritionSurfaceSx(theme),
-            p: { xs: 1.45, sm: 1.8 },
+            p: { xs: 1.45, sm: 1.8, lg: 2 },
             display: "grid",
-            gap: { xs: 1.35, sm: 1.6 },
+            gap: { xs: 1.35, sm: 1.55 },
+            borderColor: alpha(theme.palette.primary.main, 0.12),
+            background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.045)} 0%, ${alpha(theme.palette.background.paper, 0.96)} 38%)`,
           })}
         >
-          <Box sx={{ display: "grid", gap: 0.55 }}>
-            <Typography
-              variant="overline"
-              sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}
-            >
-              Nutrition Recovery Planning
-            </Typography>
-            <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
-              Planning correctivo para hoy y manana
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 760 }}>
-              La app propone como cerrar mejor el dia actual y como organizar el siguiente segun deficits y patrones recientes. Esta es una seccion nueva y no reemplaza ni el dashboard, ni insights, ni AdaptiveMealSuggestions.
-            </Typography>
-          </Box>
+          <Stack
+            direction={{ xs: "column", lg: "row" }}
+            spacing={1.1}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", lg: "flex-start" }}
+          >
+            <Box sx={{ display: "grid", gap: 0.55 }}>
+              <Typography
+                variant="overline"
+                sx={{ color: "text.secondary", fontWeight: 800, letterSpacing: "0.12em" }}
+              >
+                Nutrition Recovery Planning
+              </Typography>
+              <Typography variant="h6" sx={{ lineHeight: 1.08 }}>
+                Cierre de hoy y base para manana
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 720, lineHeight: 1.5 }}>
+                Cierra mejor el dia actual y deja manana encaminado segun deficits y patrones recientes, con planes claros y acciones simples.
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
+              <Chip size="small" label="Hoy" variant="outlined" sx={{ bgcolor: "rgba(255,255,255,0.72)" }} />
+              <Chip size="small" label="Manana" variant="outlined" sx={{ bgcolor: "rgba(255,255,255,0.72)" }} />
+              <Chip size="small" label="Persistencia local" variant="outlined" sx={{ bgcolor: "rgba(255,255,255,0.72)" }} />
+            </Stack>
+          </Stack>
+
+          <Divider sx={{ borderColor: "rgba(15,23,42,0.08)" }} />
 
           <Box
             sx={{
               display: "grid",
-              gap: 1.2,
+              gap: { xs: 1.15, sm: 1.3, lg: 1.45 },
               gridTemplateColumns: {
                 xs: "minmax(0, 1fr)",
-                lg: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(2, minmax(0, 1fr))",
               },
               alignItems: "start",
             }}
@@ -963,12 +1317,24 @@ export default function NutritionHomePage({
               vegetableServings={correctivePlanInput.vegetableServings}
               deficits={correctivePlanInput.deficits}
               mealHistory={correctivePlanInput.mealHistory}
+              context={recoveryMatchContext}
+              planOverride={displayedCurrentDayRecoveryPlan}
+              onViewed={handleCurrentDayViewed}
+              onAccept={handleCurrentDayAccept}
+              onSaveForLater={handleCurrentDaySaveForLater}
+              onDismiss={handleCurrentDayDismiss}
             />
 
             <NextDayRecoveryCard
               title="Plan sugerido para manana"
               recentDays={normalizedRecentDays}
               options={nextDayRecoveryOptions}
+              context={recoveryMatchContext}
+              planOverride={displayedNextDayRecoveryPlan}
+              onViewed={handleNextDayViewed}
+              onAccept={handleNextDayAccept}
+              onSaveForLater={handleNextDaySaveForLater}
+              onDismiss={handleNextDayDismiss}
             />
           </Box>
         </Box>

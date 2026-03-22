@@ -7,6 +7,7 @@ import CookWithWhatIHave from "./CookWithWhatIHave";
 import CasinoMealEvaluator from "./CasinoMealEvaluator";
 import WorkMealPlanner from "./WorkMealPlanner";
 import CampMealKit from "./CampMealKit";
+import WorkFoodInventory from "./WorkFoodInventory";
 import ShoppingList from "./ShoppingList";
 import {
   nutritionCompactTabsSx,
@@ -51,6 +52,7 @@ export default function NutritionTools({ profileId, onMealParsed }) {
           <Tab label={nutritionTabLabelDot("info.main", "Casino")} />
           <Tab label={nutritionTabLabelDot("secondary.main", "Plan")} />
           <Tab label={nutritionTabLabelDot("success.main", "Kit")} />
+          <Tab label={nutritionTabLabelDot("warning.main", "Inventario")} />
           <Tab label={nutritionTabLabelDot("error.main", "Compras")} />
         </Tabs>
       </Box>
@@ -72,7 +74,10 @@ export default function NutritionTools({ profileId, onMealParsed }) {
           <CampMealKit profileId={profileId} />
         </Box>
         <Box sx={{ ...contentFrameSx, display: tab === 5 ? "block" : "none", animation: "fadeIn 140ms ease" }}>
-          <ShoppingList profileId={profileId} isActive={tab === 5} />
+          <WorkFoodInventory profileId={profileId} />
+        </Box>
+        <Box sx={{ ...contentFrameSx, display: tab === 6 ? "block" : "none", animation: "fadeIn 140ms ease" }}>
+          <ShoppingList profileId={profileId} isActive={tab === 6} />
         </Box>
       </Box>
     </Box>

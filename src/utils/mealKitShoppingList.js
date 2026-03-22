@@ -39,6 +39,41 @@ function getCampMealKitKey(profileId) {
   return `fitapp_camp_meal_kit_${profileId}`;
 }
 
+export function getCampMealKitDayKey(day, index = 0) {
+  const numericDay = Number(day?.day);
+  if (Number.isFinite(numericDay) && numericDay > 0) {
+    return `day_${Math.floor(numericDay)}`;
+  }
+
+  const normalizedId = normalizeId(day?.id);
+  if (normalizedId) {
+    return `day_${normalizedId}`;
+  }
+
+  return `day_${Math.max(1, Number(index) + 1)}`;
+}
+
+export function getPendingCampMealKitDays(kit) {
+  const days = Array.isArray(kit?.mealPlan?.days) ? kit.mealPlan.days : [];
+  const consumedDayKeys = new Set(
+    (Array.isArray(kit?.consumedDayKeys) ? kit.consumedDayKeys : [])
+      .map((entry) => normalizeId(entry))
+      .filter(Boolean)
+  );
+
+  if (!consumedDayKeys.size) {
+    return days;
+  }
+
+  return days.filter((day, index) => !consumedDayKeys.has(normalizeId(getCampMealKitDayKey(day, index))));
+}
+
+export function buildShoppingListFromMealPlanDays(days) {
+  const safeDays = Array.isArray(days) ? days : [];
+  const flatMeals = safeDays.flatMap((day) => [day?.breakfast, day?.snack, day?.dinner].filter(Boolean));
+  return generateShoppingListFromKit(flatMeals);
+}
+
 export function generateShoppingListFromKit(kitMeals) {
   const safeMeals = Array.isArray(kitMeals) ? kitMeals : [];
   const counts = new Map();
@@ -102,11 +137,8 @@ export function restoreShoppingListFromSavedKit(profileId) {
     const raw = localStorage.getItem(kitKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    const days = Array.isArray(parsed?.mealPlan?.days) ? parsed.mealPlan.days : [];
-    const flatMeals = days.flatMap((day) => [day?.breakfast, day?.snack, day?.dinner].filter(Boolean));
-    if (!flatMeals.length) return [];
-
-    const list = generateShoppingListFromKit(flatMeals);
+    const pendingDays = getPendingCampMealKitDays(parsed);
+    const list = buildShoppingListFromMealPlanDays(pendingDays);
     if (list.length) {
       saveShoppingList(profileId, list);
     }

@@ -60,8 +60,8 @@ export default function RecipeSelector({ onAddFoods, recipes = baseRecipes, cata
   const [draftIngredients, setDraftIngredients] = useState([]);
   const [activeCategory, setActiveCategory] = useState("Todas");
 
-  const safeRecipes = Array.isArray(recipes) ? recipes : [];
-  const safeCatalog = Array.isArray(catalog) ? catalog : [];
+  const safeRecipes = useMemo(() => (Array.isArray(recipes) ? recipes : []), [recipes]);
+  const safeCatalog = useMemo(() => (Array.isArray(catalog) ? catalog : []), [catalog]);
 
   const catalogIndex = useMemo(() => {
     const index = new Map();
@@ -74,10 +74,6 @@ export default function RecipeSelector({ onAddFoods, recipes = baseRecipes, cata
     return index;
   }, [safeCatalog]);
 
-  const selectedRecipe = useMemo(
-    () => safeRecipes.find((recipe) => String(recipe?.id) === String(selectedRecipeId)) || null,
-    [safeRecipes, selectedRecipeId]
-  );
   const categories = useMemo(() => {
     const values = Array.from(new Set(safeRecipes.map(inferRecipeCategory)));
     return ["Todas", ...values];

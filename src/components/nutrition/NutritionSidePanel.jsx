@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { getMeals, saveMeals } from "../../utils/nutritionStorage";
@@ -230,6 +230,13 @@ function enrichMealsWithStoredNutrients(meals, foodLookup) {
   return { changed, meals: nextMeals };
 }
 
+function buildSidePanelMealState(profileId) {
+  return {
+    profileKey: String(profileId || ""),
+    meals: profileId ? getMeals(profileId) : [],
+  };
+}
+
 export default function NutritionSidePanel({
   profileId,
   profile,
@@ -238,25 +245,29 @@ export default function NutritionSidePanel({
   onChangeSection,
 }) {
   const theme = useTheme();
-  const [meals, setMeals] = useState([]);
+  const [mealState, setMealState] = useState(() => buildSidePanelMealState(profileId));
   const todayKey = useMemo(() => getTodayDateKey(), []);
+  const meals = mealState.meals;
 
   useEffect(() => {
-    if (!profileId) {
-      setMeals([]);
-      return;
-    }
-    setMeals(getMeals(profileId));
+    startTransition(() => {
+      setMealState(buildSidePanelMealState(profileId));
+    });
   }, [profileId]);
 
   useEffect(() => {
-    if (!profileId) return;
+    if (!profileId || mealState.profileKey !== String(profileId || "")) return;
     const lookup = buildFoodLookup([...foodCatalog, ...getCustomFoods(profileId)]);
     const enriched = enrichMealsWithStoredNutrients(meals, lookup);
     if (!enriched.changed) return;
     saveMeals(profileId, enriched.meals);
-    setMeals(enriched.meals);
-  }, [meals, profileId]);
+    startTransition(() => {
+      setMealState({
+        profileKey: String(profileId || ""),
+        meals: enriched.meals,
+      });
+    });
+  }, [meals, mealState.profileKey, profileId]);
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const totalsToday = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);

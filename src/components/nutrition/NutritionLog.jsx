@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Autocomplete,
   Box,
@@ -32,6 +32,22 @@ import FoodDetailDrawer from "./FoodDetailDrawer";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
 import { formatMealPortionMeta, getFoodPortionOption } from "../../utils/foodPortions";
 import { trackVegetableIntake } from "../../utils/vegetableTracker";
+import {
+  clearFrequentMealAdjustmentPreference,
+  loadFrequentMealAdjustmentPreferences,
+  recordFrequentMealAdjustmentAcceptance,
+  resolveFrequentMealAdjustmentPreferences,
+} from "../../utils/frequentMealAdjustmentStorage";
+import { buildAdjustedRepeatedMeals } from "../../utils/repeatedMealAdjustments";
+import {
+  loadWorkFoodInventory,
+  saveWorkFoodInventory,
+} from "../../utils/workFoodInventoryStorage";
+import {
+  buildInventoryRequirementsFromLoggedMeals,
+  consumeInventoryForShoppingList,
+  restoreConsumedInventoryItems,
+} from "../../utils/workFoodInventoryPlanning";
 import {
   nutritionCompactTabsSx,
   nutritionSurfaceSx,
@@ -321,6 +337,180 @@ function formatVegetableServingsLabel(servings) {
   return `${display} ${safeServings === 1 ? "porción" : "porciones"}`;
 }
 
+function formatInventoryFoodLabel(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function buildInventoryUsagePreview(coverage, consumedItems = []) {
+  const restoredItems = Array.isArray(consumedItems) ? consumedItems.filter(Boolean) : [];
+  if (restoredItems.length) {
+    const fragments = restoredItems
+      .slice(0, 3)
+      .map((entry) => `${entry.quantity} ${formatInventoryFoodLabel(entry.name || entry.id)} en ${entry.location}`);
+
+    return {
+      tone: "info",
+      detail: `Descontado de: ${fragments.join(" + ")}`,
+    };
+  }
+
+  const safeItems = Array.isArray(coverage?.items) ? coverage.items : [];
+  if (!safeItems.length) return null;
+
+  const sourceFragments = safeItems
+    .flatMap((item) =>
+      (Array.isArray(item?.consumedFrom) ? item.consumedFrom : []).map((entry) => ({
+        label: `${entry.quantity} ${formatInventoryFoodLabel(item.id)} en ${entry.location}`,
+      }))
+    )
+    .slice(0, 3)
+    .map((entry) => entry.label);
+
+  const missingFragments = safeItems
+    .filter((item) => toNumber(item?.missingAfterConsumption) > 0)
+    .slice(0, 2)
+    .map((item) => `${toNumber(item.missingAfterConsumption)} ${formatInventoryFoodLabel(item.id)}`);
+
+  if (sourceFragments.length && !missingFragments.length) {
+    return {
+      tone: "success",
+      detail: `Sale de: ${sourceFragments.join(" + ")}`,
+    };
+  }
+
+  if (sourceFragments.length || missingFragments.length) {
+    return {
+      tone: "warning",
+      detail: [
+        sourceFragments.length ? `Disponible: ${sourceFragments.join(" + ")}` : "",
+        missingFragments.length ? `Falta: ${missingFragments.join(" + ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+
+  return null;
+}
+
+function findFoodOptionByCandidates(foodOptions, candidates) {
+  const safeOptions = Array.isArray(foodOptions) ? foodOptions.filter(Boolean) : [];
+  const normalizedCandidates = (Array.isArray(candidates) ? candidates : [candidates])
+    .map((candidate) => normalizeFoodIdentityPart(candidate))
+    .filter(Boolean);
+
+  if (!normalizedCandidates.length) return null;
+
+  return (
+    safeOptions.find((food) => {
+      const name = normalizeFoodIdentityPart(food?.name);
+      const id = normalizeFoodIdentityPart(food?.id);
+      return normalizedCandidates.includes(name) || normalizedCandidates.includes(id);
+    }) || null
+  );
+}
+
+function findFoodOptionByIdentity(foodOptions, identity) {
+  const safeIdentity = normalizeFoodIdentityPart(identity);
+  if (!safeIdentity) return null;
+
+  return (
+    (Array.isArray(foodOptions) ? foodOptions : []).find((food) => {
+      const composite = normalizeFoodIdentityPart(getFoodIdentity(food));
+      const id = normalizeFoodIdentityPart(food?.id || food?.name);
+      return composite === safeIdentity || id === safeIdentity;
+    }) || null
+  );
+}
+
+function resolveAdjustmentFoodOption(addition, foodOptions) {
+  return (
+    findFoodOptionByIdentity(foodOptions, addition?.selectedFoodIdentity) ||
+    findFoodOptionByCandidates(foodOptions, addition?.preferredFoodNames) ||
+    null
+  );
+}
+
+function buildAdjustmentEstimatedDelta(addition, food) {
+  const targetGrams = Math.max(0, toNumber(addition?.targetGrams));
+  const ratio = targetGrams / 100;
+
+  if (addition?.type === "add_food") {
+    return {
+      calories: roundToStep(toNumber(food?.calories) * ratio, 5),
+      protein: Number((toNumber(food?.protein) * ratio).toFixed(1)),
+      vegetableServings:
+        addition?.targetCategory === "vegetable"
+          ? Number((targetGrams / VEGETABLE_SERVING_GRAMS).toFixed(1))
+          : 0,
+    };
+  }
+
+  return addition?.estimatedDelta || null;
+}
+
+function hydratePreviewActionPlan(actionPlan, foodOptions) {
+  if (!hasActionPlanContent(actionPlan)) return null;
+
+  return {
+    reductions: (Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : []).map((item) => ({ ...item })),
+    additions: (Array.isArray(actionPlan?.additions) ? actionPlan.additions : []).map((item) => {
+      const resolvedFood = resolveAdjustmentFoodOption(item, foodOptions);
+      const targetGramsFromProtein =
+        toNumber(item?.targetGrams) > 0
+          ? toNumber(item.targetGrams)
+          : toNumber(item?.targetProteinGrams) > 0 && toNumber(resolvedFood?.protein) > 0
+          ? (toNumber(item.targetProteinGrams) / toNumber(resolvedFood.protein)) * 100
+          : 0;
+      const targetGrams = Math.max(10, roundToStep(targetGramsFromProtein, 10));
+
+      return {
+        ...item,
+        selectedFoodIdentity: resolvedFood ? getFoodIdentity(resolvedFood) : "",
+        targetGrams,
+        estimatedDelta: buildAdjustmentEstimatedDelta({ ...item, targetGrams }, resolvedFood),
+      };
+    }),
+  };
+}
+
+function getAdjustmentFoodChoices(addition, foodOptions) {
+  const safeOptions = Array.isArray(foodOptions) ? foodOptions.filter(Boolean) : [];
+  const resolvedFood = resolveAdjustmentFoodOption(addition, safeOptions);
+  const filtered = safeOptions.filter((food) => {
+    const category = normalizeFoodIdentityPart(food?.category);
+    if (addition?.targetCategory === "protein") {
+      return category === "protein" || (category === "dairy" && toNumber(food?.protein) >= 8);
+    }
+    if (addition?.targetCategory === "vegetable") {
+      return category === "vegetable";
+    }
+    return true;
+  });
+
+  if (resolvedFood && !filtered.some((food) => getFoodIdentity(food) === getFoodIdentity(resolvedFood))) {
+    filtered.unshift(resolvedFood);
+  }
+
+  return filtered.sort((left, right) => String(left?.name || "").localeCompare(String(right?.name || "")));
+}
+
+function getProteinFallbackNames(mealType) {
+  if (mealType === "desayuno" || mealType === "snack") {
+    return ["yogurt griego", "atun en lata", "huevo"];
+  }
+  return ["pollo a la plancha", "atun en lata", "pavo"];
+}
+
+function getVegetableFallbackNames(mealType) {
+  if (mealType === "desayuno" || mealType === "snack") {
+    return ["tomate", "pepino", "zanahoria"];
+  }
+  return ["brocoli", "tomate", "lechuga"];
+}
+
 function buildProjectedAdjustmentState({ totalCalories, totalProtein, vegetableServings, deltas = [] }) {
   const mergedDelta = (Array.isArray(deltas) ? deltas : []).reduce(
     (acc, delta) => {
@@ -343,6 +533,399 @@ function buildProjectedAdjustmentState({ totalCalories, totalProtein, vegetableS
   };
 }
 
+function buildProjectedAdjustmentOutcome({
+  projectedState,
+  caloriesRemaining,
+  needsMealProtein,
+  needsMealVegetables,
+  mealProteinTarget,
+}) {
+  if (!projectedState) return null;
+
+  const safeProjectedCalories = toNumber(projectedState?.calories);
+  const safeProjectedProtein = toNumber(projectedState?.protein);
+  const safeProjectedVegetables = toNumber(projectedState?.vegetableServings);
+  const safeCaloriesRemaining = Math.max(0, toNumber(caloriesRemaining));
+  const safeProteinTarget = Math.max(12, toNumber(mealProteinTarget));
+
+  let calorieLabel = "Calorías alineadas";
+  let calorieColor = "success";
+  const alignedCaloriesCap = Math.max(220, safeCaloriesRemaining + 60);
+  const softCaloriesCap = Math.max(280, safeCaloriesRemaining + 140);
+  if (safeProjectedCalories > softCaloriesCap) {
+    calorieLabel = "Calorías altas";
+    calorieColor = "warning";
+  } else if (safeProjectedCalories > alignedCaloriesCap) {
+    calorieLabel = "Calorías algo altas";
+    calorieColor = "info";
+  }
+
+  let proteinLabel = "Proteína correcta";
+  let proteinColor = "success";
+  if (needsMealProtein) {
+    if (safeProjectedProtein >= safeProteinTarget) {
+      proteinLabel = "Proteína alineada";
+      proteinColor = "success";
+    } else if (safeProjectedProtein >= Math.max(12, safeProteinTarget - 6)) {
+      proteinLabel = "Proteína aún justa";
+      proteinColor = "info";
+    } else {
+      proteinLabel = "Proteína aún baja";
+      proteinColor = "warning";
+    }
+  } else if (safeProjectedProtein < 12) {
+    proteinLabel = "Proteína ligera";
+    proteinColor = "info";
+  }
+
+  let vegetablesLabel = "Vegetales ok";
+  let vegetablesColor = "success";
+  if (needsMealVegetables) {
+    if (safeProjectedVegetables >= 1.5) {
+      vegetablesLabel = "Vegetales alineados";
+      vegetablesColor = "success";
+    } else if (safeProjectedVegetables >= 1) {
+      vegetablesLabel = "Vegetales mejoran";
+      vegetablesColor = "info";
+    } else {
+      vegetablesLabel = "Vegetales aún bajos";
+      vegetablesColor = "warning";
+    }
+  } else if (safeProjectedVegetables < 0.5) {
+    vegetablesLabel = "Sin vegetales visibles";
+    vegetablesColor = "info";
+  }
+
+  const unresolvedCount = [calorieColor, proteinColor, vegetablesColor].filter((color) => color === "warning").length;
+  const softCount = [calorieColor, proteinColor, vegetablesColor].filter((color) => color === "info").length;
+
+  let summary = "Mejor alineado";
+  if (unresolvedCount >= 2) {
+    summary = "Mejora, pero todavía queda desalineado";
+  } else if (unresolvedCount === 1) {
+    summary =
+      calorieColor === "warning"
+        ? "Mejora, pero aún queda alto en calorías"
+        : proteinColor === "warning"
+        ? "Mejora, pero aún queda bajo en proteína"
+        : "Mejora, pero aún queda corto en vegetales";
+  } else if (softCount >= 2) {
+    summary = "Mejora, aunque todavía queda justo";
+  } else if (softCount === 1) {
+    summary =
+      proteinColor === "info"
+        ? "Mejor alineado, pero proteína justa"
+        : vegetablesColor === "info"
+        ? "Mejor alineado, pero vegetales justos"
+        : "Mejor alineado, pero algo cargado en calorías";
+  }
+
+  return {
+    summary,
+    chips: [
+      { label: calorieLabel, color: calorieColor },
+      { label: proteinLabel, color: proteinColor },
+      { label: vegetablesLabel, color: vegetablesColor },
+    ],
+  };
+}
+
+function hasActionPlanContent(actionPlan) {
+  return Boolean(
+    (Array.isArray(actionPlan?.reductions) && actionPlan.reductions.length) ||
+      (Array.isArray(actionPlan?.additions) && actionPlan.additions.length)
+  );
+}
+
+function selectAdjustmentActionPlan(actionPlan, mode = "full") {
+  if (!hasActionPlanContent(actionPlan)) return null;
+  if (!mode || mode === "full") return actionPlan;
+
+  const reductions = Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : [];
+  const additions = Array.isArray(actionPlan?.additions) ? actionPlan.additions : [];
+
+  if (mode === "protein") {
+    const nextPlan = {
+      reductions: [],
+      additions: additions.filter((item) => item?.targetCategory === "protein"),
+    };
+    return hasActionPlanContent(nextPlan) ? nextPlan : null;
+  }
+
+  if (mode === "vegetables") {
+    const nextPlan = {
+      reductions: [],
+      additions: additions.filter((item) => item?.targetCategory === "vegetable"),
+    };
+    return hasActionPlanContent(nextPlan) ? nextPlan : null;
+  }
+
+  if (mode === "lighter") {
+    const nextPlan = {
+      reductions,
+      additions: [],
+    };
+    return hasActionPlanContent(nextPlan) ? nextPlan : null;
+  }
+
+  return actionPlan;
+}
+
+function getActionPlanEstimatedDeltas(actionPlan) {
+  if (!hasActionPlanContent(actionPlan)) return [];
+
+  return [
+    ...(Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : []),
+    ...(Array.isArray(actionPlan?.additions) ? actionPlan.additions : []),
+  ]
+    .map((item) => item?.estimatedDelta)
+    .filter(Boolean);
+}
+
+function getAdjustmentActionOptions(actionPlan) {
+  if (!hasActionPlanContent(actionPlan)) return [];
+
+  const reductions = Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : [];
+  const additions = Array.isArray(actionPlan?.additions) ? actionPlan.additions : [];
+  const hasProtein = additions.some((item) => item?.targetCategory === "protein");
+  const hasVegetables = additions.some((item) => item?.targetCategory === "vegetable");
+  const hasLighter = reductions.length > 0;
+  const specificCount = [hasProtein, hasVegetables, hasLighter].filter(Boolean).length;
+
+  const options = [];
+  if (specificCount > 1) {
+    options.push({ key: "full", label: "Completo", variant: "contained" });
+  }
+  if (hasProtein) {
+    options.push({ key: "protein", label: "Solo proteína", variant: "outlined" });
+  }
+  if (hasVegetables) {
+    options.push({ key: "vegetables", label: "Solo vegetales", variant: "outlined" });
+  }
+  if (hasLighter) {
+    options.push({ key: "lighter", label: "Solo reducir", variant: "outlined" });
+  }
+
+  if (!options.length) {
+    options.push({ key: "full", label: "Repetir con ajuste", variant: "contained" });
+  }
+
+  return options;
+}
+
+function buildAdjustmentPreviewLines(actionPlan, foodOptions) {
+  if (!hasActionPlanContent(actionPlan)) return [];
+
+  const lines = [];
+  const reductions = Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : [];
+  const additions = Array.isArray(actionPlan?.additions) ? actionPlan.additions : [];
+
+  reductions.forEach((reduction) => {
+    if (reduction?.type === "reduce_item") {
+      lines.push(`Reducir aprox. ${formatRoundedGrams(reduction?.trimGrams)} de ${reduction?.sourceName || "un componente principal"}.`);
+      return;
+    }
+
+    if (reduction?.type === "reduce_meal") {
+      const ratio = clampNumber(reduction?.ratio, 0.2, 1.5);
+      lines.push(`Repetir con una porción aprox. al ${Math.round(ratio * 100)}% de la original.`);
+    }
+  });
+
+  additions.forEach((addition) => {
+    if (addition?.type !== "add_food") return;
+
+    const matchedFood = resolveAdjustmentFoodOption(addition, foodOptions);
+    const foodName = matchedFood?.name || addition?.preferredFoodNames?.find(Boolean) || "un alimento compatible";
+    const targetGrams = Math.max(
+      10,
+      roundToStep(
+        toNumber(addition?.targetGrams) ||
+          (toNumber(addition?.targetProteinGrams) > 0 && toNumber(matchedFood?.protein) > 0
+            ? (toNumber(addition.targetProteinGrams) / toNumber(matchedFood.protein)) * 100
+            : 0),
+        10
+      )
+    );
+    lines.push(`Agregar aprox. ${formatRoundedGrams(targetGrams)} de ${foodName}.`);
+  });
+
+  return lines.slice(0, 3);
+}
+
+function buildAdjustmentLearningSummary(storedPreferences, actionPlan, mealType) {
+  if (!storedPreferences?.hasLearnedPreference || !hasActionPlanContent(actionPlan)) return null;
+
+  const labels = [];
+  const sources = [];
+
+  const pushLearnedCategory = (categoryKey, label) => {
+    const preference = storedPreferences?.[categoryKey];
+    const source = storedPreferences?.sources?.[categoryKey];
+    if (!preference || !source) return;
+    labels.push(label);
+    sources.push(source);
+  };
+
+  const additions = Array.isArray(actionPlan?.additions) ? actionPlan.additions : [];
+  const reductions = Array.isArray(actionPlan?.reductions) ? actionPlan.reductions : [];
+
+  if (additions.some((item) => item?.targetCategory === "protein")) {
+    pushLearnedCategory("protein", "proteina");
+  }
+  if (additions.some((item) => item?.targetCategory === "vegetable")) {
+    pushLearnedCategory("vegetable", "vegetales");
+  }
+  if (reductions.length > 0) {
+    pushLearnedCategory("lighter", "porcion");
+  }
+
+  if (!labels.length || !sources.length) return null;
+
+  const uniqueLabels = [...new Set(labels)];
+  const uniqueSources = [...new Set(sources)];
+  const labelsText =
+    uniqueLabels.length === 1
+      ? uniqueLabels[0]
+      : uniqueLabels.length === 2
+      ? `${uniqueLabels[0]} y ${uniqueLabels[1]}`
+      : `${uniqueLabels[0]}, ${uniqueLabels[1]} y ${uniqueLabels[2]}`;
+  const mealTypeText = mealTypeLabel(mealType).toLowerCase();
+
+  if (uniqueSources.length === 1 && uniqueSources[0] === "signature") {
+    return {
+      badgeLabel: "Basado en tu ajuste anterior",
+      detail: `Usa lo que ya aceptaste para ${labelsText} en este mismo plato.`,
+      sources: uniqueSources,
+      resetScope: "signature",
+    };
+  }
+
+  if (uniqueSources.length === 1 && uniqueSources[0] === "mealType") {
+    return {
+      badgeLabel: "Basado en ajustes previos",
+      detail: `Usa lo que ya aceptaste para ${labelsText} en ${mealTypeText} similares.`,
+      sources: uniqueSources,
+      resetScope: "mealType",
+    };
+  }
+
+  return {
+    badgeLabel: "Aprendizaje combinado",
+    detail: `Mezcla lo que ya aceptaste en este plato y en ${mealTypeText} similares para ${labelsText}.`,
+    sources: uniqueSources,
+    resetScope: "all",
+  };
+}
+
+function applyStoredPreferenceToAdditionPlan(plan, preference, foodOptions) {
+  if (!plan || !preference) return plan;
+
+  const nextAction = {
+    ...(plan.action || {}),
+    selectedFoodIdentity:
+      String(preference?.selectedFoodIdentity || "").trim() || String(plan?.action?.selectedFoodIdentity || "").trim(),
+    targetGrams:
+      toNumber(preference?.targetGrams) > 0
+        ? roundToStep(preference.targetGrams, 10)
+        : toNumber(plan?.action?.targetGrams),
+  };
+
+  const resolvedFood = resolveAdjustmentFoodOption(nextAction, foodOptions);
+  const nextEstimatedDelta = buildAdjustmentEstimatedDelta(nextAction, resolvedFood);
+  const nextPlan = {
+    ...plan,
+    action: nextAction,
+    estimatedDelta: nextEstimatedDelta,
+  };
+
+  if (nextAction.targetCategory === "vegetable" && nextAction.targetGrams > 0) {
+    const servings = Number((nextAction.targetGrams / VEGETABLE_SERVING_GRAMS).toFixed(1));
+    nextPlan.amountLabel = `+${formatVegetableServingsLabel(servings)} veg.`;
+  }
+
+  if (resolvedFood && nextAction.targetGrams > 0) {
+    nextPlan.example = `Ejemplo: agrega ${formatRoundedGrams(nextAction.targetGrams)} de ${resolvedFood.name}.`;
+  }
+
+  return nextPlan;
+}
+
+function buildReductionEstimatedDelta({ reduction, totalCalories, totalProtein, vegetableServings, focusItem }) {
+  if (!reduction) return null;
+
+  if (reduction?.type === "reduce_meal") {
+    const ratio = clampNumber(reduction?.ratio, 0.2, 1.5);
+    const removedRatio = Math.max(0, 1 - ratio);
+    return {
+      calories: -roundToStep(totalCalories * removedRatio, 5),
+      protein: -Number((totalProtein * removedRatio).toFixed(1)),
+      vegetableServings: -Number((vegetableServings * removedRatio).toFixed(1)),
+    };
+  }
+
+  if (reduction?.type === "reduce_item" && toNumber(focusItem?.grams) > 0) {
+    const trimGrams = roundToStep(reduction?.trimGrams, 5);
+    const perGramProtein = toNumber(focusItem?.protein) / Math.max(toNumber(focusItem?.grams), 1);
+    const perGramCalories = toNumber(focusItem?.calories) / Math.max(toNumber(focusItem?.grams), 1);
+    const vegetableDelta = normalizeFoodIdentityPart(focusItem?.category) === "vegetable" ? trimGrams / VEGETABLE_SERVING_GRAMS : 0;
+
+    return {
+      calories: -roundToStep(trimGrams * perGramCalories, 5),
+      protein: -Number((trimGrams * perGramProtein).toFixed(1)),
+      vegetableServings: -Number(vegetableDelta.toFixed(1)),
+    };
+  }
+
+  return reduction?.estimatedDelta || null;
+}
+
+function applyStoredPreferenceToReductionPlan(plan, preference, context) {
+  if (!plan || !preference) return plan;
+
+  const safeItems = Array.isArray(context?.safeItems) ? context.safeItems : [];
+  const nextAction = {
+    ...(plan.action || {}),
+    trimGrams:
+      toNumber(preference?.targetGrams) > 0 && plan?.action?.type === "reduce_item"
+        ? roundToStep(preference.targetGrams, 5)
+        : toNumber(plan?.action?.trimGrams),
+    ratio:
+      toNumber(preference?.ratio) > 0 && plan?.action?.type === "reduce_meal"
+        ? roundToStep(preference.ratio, 2)
+        : toNumber(plan?.action?.ratio),
+  };
+
+  const focusItem =
+    nextAction?.type === "reduce_item"
+      ? safeItems.find(
+          (item) => normalizeFoodIdentityPart(item?.name) === normalizeFoodIdentityPart(nextAction?.sourceName)
+        ) || null
+      : null;
+
+  const nextPlan = {
+    ...plan,
+    action: nextAction,
+    estimatedDelta: buildReductionEstimatedDelta({
+      reduction: nextAction,
+      totalCalories: context?.totalCalories,
+      totalProtein: context?.totalProtein,
+      vegetableServings: context?.vegetableServings,
+      focusItem,
+    }),
+  };
+
+  if (nextAction?.type === "reduce_item" && nextAction?.trimGrams > 0) {
+    nextPlan.amountLabel = `-${formatRoundedGrams(nextAction.trimGrams)} ${nextAction?.sourceName || "porción"}`;
+    nextPlan.example = `Ejemplo: deja unos ${formatRoundedGrams(nextAction.trimGrams)} menos de ${nextAction?.sourceName || "la base principal"}.`;
+  } else if (nextAction?.type === "reduce_meal" && nextAction?.ratio > 0) {
+    nextPlan.amountLabel = `${Math.round(nextAction.ratio * 100)}% de la porción`;
+    nextPlan.example = `Ejemplo: repítelo con una porción aprox. al ${Math.round(nextAction.ratio * 100)}% de la original.`;
+  }
+
+  return nextPlan;
+}
+
 function getProteinSupportPlan({ mealType, proteinRemaining, topProteinItem, proteinFocusName }) {
   const minimum = mealType === "snack" ? 10 : mealType === "desayuno" ? 12 : 15;
   const maximum = mealType === "snack" ? 18 : mealType === "desayuno" ? 22 : 28;
@@ -361,6 +944,21 @@ function getProteinSupportPlan({ mealType, proteinRemaining, topProteinItem, pro
       proteinGrams: suggestedProtein,
       amountLabel: `+${suggestedProtein} g prot.`,
       example: `Ejemplo: suma unos ${formatRoundedGrams(suggestedFoodGrams)} de ${proteinFocusName}.`,
+      action: {
+        type: "add_food",
+        targetCategory: "protein",
+        preferredFoodNames: [String(topProteinItem?.name || "").trim(), ...getProteinFallbackNames(mealType)],
+        targetGrams: suggestedFoodGrams,
+        targetProteinGrams: suggestedProtein,
+        estimatedDelta: {
+          calories: roundToStep(
+            suggestedFoodGrams * (toNumber(topProteinItem?.calories) / Math.max(toNumber(topProteinItem?.grams), 1)),
+            5
+          ),
+          protein: suggestedProtein,
+          vegetableServings: 0,
+        },
+      },
       estimatedDelta: {
         calories: roundToStep(suggestedFoodGrams * (toNumber(topProteinItem?.calories) / Math.max(toNumber(topProteinItem?.grams), 1)), 5),
         protein: suggestedProtein,
@@ -378,6 +976,18 @@ function getProteinSupportPlan({ mealType, proteinRemaining, topProteinItem, pro
         suggestedProtein >= 15
           ? "Ejemplo: 1 yogurt griego (150 g) + 1 huevo, o 1 lata chica de atún."
           : "Ejemplo: 1 yogurt griego (150 g) o 2 huevos.",
+      action: {
+        type: "add_food",
+        targetCategory: "protein",
+        preferredFoodNames: getProteinFallbackNames(mealType),
+        targetGrams: suggestedProtein >= 15 ? 170 : 150,
+        targetProteinGrams: suggestedProtein,
+        estimatedDelta: {
+          calories: estimatedCalories,
+          protein: suggestedProtein,
+          vegetableServings: 0,
+        },
+      },
       estimatedDelta: {
         calories: estimatedCalories,
         protein: suggestedProtein,
@@ -394,6 +1004,18 @@ function getProteinSupportPlan({ mealType, proteinRemaining, topProteinItem, pro
       suggestedProtein >= 20
         ? "Ejemplo: suma 100-120 g de pollo, atún o pavo."
         : "Ejemplo: suma 80-100 g de pollo, atún o pavo.",
+    action: {
+      type: "add_food",
+      targetCategory: "protein",
+      preferredFoodNames: getProteinFallbackNames(mealType),
+      targetGrams: suggestedProtein >= 20 ? 110 : 90,
+      targetProteinGrams: suggestedProtein,
+      estimatedDelta: {
+        calories: estimatedCalories,
+        protein: suggestedProtein,
+        vegetableServings: 0,
+      },
+    },
     estimatedDelta: {
       calories: estimatedCalories,
       protein: suggestedProtein,
@@ -427,6 +1049,17 @@ function getVegetableSupportPlan({ mealType, vegetableServingsToday, lowSatietyM
       mealType === "almuerzo" || mealType === "cena"
         ? `Ejemplo: agrega ${formatRoundedGrams(grams)} de ensalada o verduras salteadas.`
         : `Ejemplo: agrega ${formatRoundedGrams(grams)} de tomate, pepino o zanahoria.`,
+    action: {
+      type: "add_food",
+      targetCategory: "vegetable",
+      preferredFoodNames: getVegetableFallbackNames(mealType),
+      targetGrams: grams,
+      estimatedDelta: {
+        calories: roundToStep(servings * 20, 5),
+        protein: Number((servings * 1).toFixed(1)),
+        vegetableServings: servings,
+      },
+    },
     estimatedDelta: {
       calories: roundToStep(servings * 20, 5),
       protein: Number((servings * 1).toFixed(1)),
@@ -451,6 +1084,16 @@ function getPortionReductionPlan({ totalCalories, caloriesRemaining, focusItem, 
       trimGrams,
       amountLabel: `-${formatRoundedGrams(trimGrams)} ${focusName}`,
       example: `Ejemplo: deja unos ${formatRoundedGrams(trimGrams)} menos de ${focusName}.`,
+      action: {
+        type: "reduce_item",
+        sourceName: String(focusItem?.name || focusName || "").trim(),
+        trimGrams,
+        estimatedDelta: {
+          calories: -roundToStep(trimGrams * kcalPerGram, 5),
+          protein: -Number((trimGrams * (toNumber(focusItem?.protein) / Math.max(toNumber(focusItem?.grams), 1))).toFixed(1)),
+          vegetableServings: 0,
+        },
+      },
       estimatedDelta: {
         calories: -roundToStep(trimGrams * kcalPerGram, 5),
         protein: -Number((trimGrams * (toNumber(focusItem?.protein) / Math.max(toNumber(focusItem?.grams), 1))).toFixed(1)),
@@ -463,6 +1106,15 @@ function getPortionReductionPlan({ totalCalories, caloriesRemaining, focusItem, 
     trimGrams: 0,
     amountLabel: totalCalories >= 450 ? "-1/3 porción" : "-1/4 porción",
     example: "Ejemplo: repítelo con una porción un poco menor, no igual que la original.",
+    action: {
+      type: "reduce_meal",
+      ratio: totalCalories >= 450 ? 0.67 : 0.75,
+      estimatedDelta: {
+        calories: -(totalCalories >= 450 ? roundToStep(totalCalories * 0.33, 5) : roundToStep(totalCalories * 0.25, 5)),
+        protein: 0,
+        vegetableServings: 0,
+      },
+    },
     estimatedDelta: {
       calories: -(totalCalories >= 450 ? roundToStep(totalCalories * 0.33, 5) : roundToStep(totalCalories * 0.25, 5)),
       protein: 0,
@@ -646,7 +1298,7 @@ function buildMealTemplateCandidate(items, groupKey) {
   };
 }
 
-function buildFrequentMealAdjustment(template, dailyStatus) {
+function buildFrequentMealAdjustment(template, dailyStatus, storedPreferences = null, foodOptions = []) {
   const safeItems = Array.isArray(template?.items) ? template.items.filter(Boolean) : [];
   if (!safeItems.length) return null;
 
@@ -670,6 +1322,7 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
   const carbFocusName = formatMealFocusName(topCarbItem);
   const fatFocusName = formatMealFocusName(topFatItem);
   const proteinFocusName = formatMealFocusName(topProteinItem);
+  const mealProteinTarget = Math.max(26, Math.min(36, proteinRemaining * 0.55));
 
   const chips = [];
   let tone = "info";
@@ -677,6 +1330,8 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
   let detail = "Este plato ya está bastante alineado. Repítelo tal cual si hoy te acomoda.";
   let example = "";
   let projectedState = null;
+  let projectedOutcome = null;
+  let actionPlan = null;
 
   const shouldReducePortion =
     (calorieDelta <= 120 || macroCarbs === "high" || macroFats === "high") &&
@@ -688,27 +1343,44 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
   const lowSatietyMeal =
     totalCalories >= 260 && totalProtein < 18 && vegetableServings < 0.5;
   const proteinPlan = needsMealProtein
-    ? getProteinSupportPlan({
-        mealType: template?.mealType,
-        proteinRemaining,
-        topProteinItem,
-        proteinFocusName,
-      })
+    ? applyStoredPreferenceToAdditionPlan(
+        getProteinSupportPlan({
+          mealType: template?.mealType,
+          proteinRemaining,
+          topProteinItem,
+          proteinFocusName,
+        }),
+        storedPreferences?.protein,
+        foodOptions
+      )
     : null;
   const vegetablePlan = needsMealVegetables
-    ? getVegetableSupportPlan({
-        mealType: template?.mealType,
-        vegetableServingsToday: dailyStatus?.vegetableServings,
-        lowSatietyMeal,
-      })
+    ? applyStoredPreferenceToAdditionPlan(
+        getVegetableSupportPlan({
+          mealType: template?.mealType,
+          vegetableServingsToday: dailyStatus?.vegetableServings,
+          lowSatietyMeal,
+        }),
+        storedPreferences?.vegetable,
+        foodOptions
+      )
     : null;
   const reductionPlan = shouldReducePortion
-    ? getPortionReductionPlan({
-        totalCalories,
-        caloriesRemaining,
-        focusItem: topCarbItem || topFatItem,
-        focusName: carbFocusName || fatFocusName,
-      })
+    ? applyStoredPreferenceToReductionPlan(
+        getPortionReductionPlan({
+          totalCalories,
+          caloriesRemaining,
+          focusItem: topCarbItem || topFatItem,
+          focusName: carbFocusName || fatFocusName,
+        }),
+        storedPreferences?.lighter,
+        {
+          safeItems,
+          totalCalories,
+          totalProtein,
+          vegetableServings,
+        }
+      )
     : null;
 
   if (shouldReducePortion) {
@@ -732,6 +1404,7 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [reductionPlan?.estimatedDelta],
     });
+    actionPlan = reductionPlan?.action ? { reductions: [reductionPlan.action], additions: [] } : null;
   } else if (needsMealProtein && needsMealVegetables) {
     tone = "success";
     title = "Subir proteína y vegetales";
@@ -748,6 +1421,10 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [proteinPlan?.estimatedDelta, vegetablePlan?.estimatedDelta],
     });
+    actionPlan = {
+      reductions: [],
+      additions: [proteinPlan?.action, vegetablePlan?.action].filter(Boolean),
+    };
   } else if (needsMealProtein) {
     tone = "success";
     title = "Agregar proteína";
@@ -762,6 +1439,7 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [proteinPlan?.estimatedDelta],
     });
+    actionPlan = proteinPlan?.action ? { reductions: [], additions: [proteinPlan.action] } : null;
   } else if (needsMealVegetables) {
     tone = "success";
     title = "Agregar vegetales";
@@ -774,6 +1452,7 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [vegetablePlan?.estimatedDelta],
     });
+    actionPlan = vegetablePlan?.action ? { reductions: [], additions: [vegetablePlan.action] } : null;
   } else if (lowSatietyMeal) {
     tone = "info";
     title = "Hazlo más saciante";
@@ -786,6 +1465,7 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [proteinPlan?.estimatedDelta].filter(Boolean),
     });
+    actionPlan = proteinPlan?.action ? { reductions: [], additions: [proteinPlan.action] } : null;
   } else if (macroFats === "high" && totalFat >= 18) {
     tone = "warning";
     title = "Versión un poco más liviana";
@@ -802,7 +1482,16 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
       vegetableServings,
       deltas: [reductionPlan?.estimatedDelta],
     });
+    actionPlan = reductionPlan?.action ? { reductions: [reductionPlan.action], additions: [] } : null;
   }
+
+  projectedOutcome = buildProjectedAdjustmentOutcome({
+    projectedState,
+    caloriesRemaining,
+    needsMealProtein,
+    needsMealVegetables,
+    mealProteinTarget,
+  });
 
   return {
     tone,
@@ -810,6 +1499,18 @@ function buildFrequentMealAdjustment(template, dailyStatus) {
     detail,
     example,
     projectedState,
+    projectedOutcome,
+    actionPlan,
+    learning: buildAdjustmentLearningSummary(storedPreferences, actionPlan, template?.mealType),
+    projectionBase: {
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      caloriesRemaining,
+      needsMealProtein,
+      needsMealVegetables,
+      mealProteinTarget,
+    },
     chips: chips.filter(Boolean).slice(0, 2),
   };
 }
@@ -880,6 +1581,13 @@ export default function NutritionLog({
   const [editingQuantity, setEditingQuantity] = useState("");
   const [detailMeal, setDetailMeal] = useState(null);
   const [repeatFeedback, setRepeatFeedback] = useState("");
+  const [inventoryMealFeedback, setInventoryMealFeedback] = useState("");
+  const [showFrequentRepeats, setShowFrequentRepeats] = useState(false);
+  const [repeatAdjustmentPreview, setRepeatAdjustmentPreview] = useState(null);
+  const [adjustmentPreferences, setAdjustmentPreferences] = useState(() =>
+    loadFrequentMealAdjustmentPreferences(profileId)
+  );
+  const [inventoryState, setInventoryState] = useState(() => loadWorkFoodInventory(profileId));
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const hungerToday = useMemo(() => estimateHungerFromMeals(mealsToday), [mealsToday]);
@@ -898,6 +1606,8 @@ export default function NutritionLog({
     },
     [catalogScopeKey, profileId]
   );
+  const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
+  const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
   const mealsTodayByType = useMemo(() => {
     const grouped = new Map();
     mealsToday.forEach((meal) => {
@@ -919,43 +1629,81 @@ export default function NutritionLog({
         .slice(0, 4)
         .map((template) => ({
           ...template,
-          adjustment: buildFrequentMealAdjustment(template, dailyStatus),
+          adjustment: buildFrequentMealAdjustment(
+            template,
+            dailyStatus,
+            resolveFrequentMealAdjustmentPreferences(adjustmentPreferences, template.signature, template.mealType),
+            foodOptions
+          ),
         })),
-    [repeatableMealTemplates, formData.mealType, dailyStatus]
+    [repeatableMealTemplates, formData.mealType, dailyStatus, adjustmentPreferences, foodOptions]
   );
-  const repeatableTodayEntriesByMealId = useMemo(() => {
+  const todayMealGroupEntriesByMealId = useMemo(() => {
     const entries = new Map();
 
     groupMealsForRepeatTemplates(mealsToday).forEach(({ items, key }) => {
       const template = buildMealTemplateCandidate(items, key);
       if (!template) return;
+      const inventoryConsumed = items.every((meal) => Boolean(String(meal?.inventoryDeductedAt || "").trim()));
+      const deductionSource = items.find(
+        (meal) => Array.isArray(meal?.inventoryDeductionItems) && meal.inventoryDeductionItems.length > 0
+      );
+      const deductionItems = Array.isArray(deductionSource?.inventoryDeductionItems)
+        ? deductionSource.inventoryDeductionItems
+        : [];
 
       template.items.forEach((meal, index) => {
         const mealId = String(meal?.id || `${key}-${index}`);
         entries.set(mealId, {
           template,
           isPrimary: index === 0,
+          groupKey: key,
+          inventoryConsumed,
+          inventoryDeductionItems: deductionItems,
         });
       });
     });
 
     return entries;
   }, [mealsToday]);
+  const todayInventoryCoverageByGroupKey = useMemo(() => {
+    const entries = new Map();
+
+    groupMealsForRepeatTemplates(mealsToday).forEach(({ items, key }) => {
+      const requirements = buildInventoryRequirementsFromLoggedMeals(items, foodOptions);
+      const coverage = consumeInventoryForShoppingList(requirements, inventoryState.items);
+      entries.set(key, {
+        requirements,
+        coverage,
+      });
+    });
+
+    return entries;
+  }, [foodOptions, inventoryState.items, mealsToday]);
   const repeatTargetDate = formData.date || todayKey;
   const repeatTargetTime = formData.time || getCurrentTimeValue();
   const repeatTargetLabel =
     repeatTargetDate === todayKey
       ? `hoy ${repeatTargetTime ? `· ${repeatTargetTime}` : ""}`
       : `${formatShortDate(repeatTargetDate)}${repeatTargetTime ? ` · ${repeatTargetTime}` : ""}`;
-  const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
-  const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
   const portionOption = useMemo(
     () => getFoodPortionOption(formData.food, formData.mealType),
     [formData.food, formData.mealType]
   );
 
+  useEffect(() => {
+    setAdjustmentPreferences(loadFrequentMealAdjustmentPreferences(profileId));
+  }, [profileId]);
+
+  useEffect(() => {
+    setInventoryState(loadWorkFoodInventory(profileId));
+    setInventoryMealFeedback("");
+  }, [profileId]);
+
   const onChangeMealType = (event) => {
     const nextMealType = event.target.value;
+    setShowFrequentRepeats(false);
+    setRepeatAdjustmentPreview(null);
     setFormData((prev) => ({
       ...prev,
       mealType: nextMealType,
@@ -967,6 +1715,87 @@ export default function NutritionLog({
           ? "portion"
           : "x100g",
     }));
+  };
+
+  const openRepeatAdjustmentPreview = (template, option) => {
+    const templateKey = `${template?.sourceGroupId}-${template?.lastConsumedAt}`;
+    const baseActionPlan = selectAdjustmentActionPlan(template?.adjustment?.actionPlan, option?.key);
+    const editableActionPlan = hydratePreviewActionPlan(baseActionPlan, foodOptions);
+    if (!editableActionPlan) return;
+
+    setRepeatAdjustmentPreview({
+      templateKey,
+      mode: option?.key || "full",
+      label: option?.key === "full" ? "Ajuste completo" : option?.label || "Ajuste seleccionado",
+      actionPlan: editableActionPlan,
+    });
+  };
+
+  const onResetFrequentMealPreference = (template) => {
+    const learning = template?.adjustment?.learning;
+    if (!learning) return;
+
+    const nextAdjustmentPreferences = clearFrequentMealAdjustmentPreference(profileId, {
+      signature: template?.signature,
+      mealType: template?.mealType,
+      scope: learning.resetScope,
+      sources: learning.sources,
+    });
+
+    setAdjustmentPreferences(nextAdjustmentPreferences);
+    setRepeatAdjustmentPreview((prev) =>
+      prev?.templateKey === `${template?.sourceGroupId}-${template?.lastConsumedAt}` ? null : prev
+    );
+    setRepeatFeedback(
+      learning.resetScope === "mealType"
+        ? `Preferencia restablecida para ${mealTypeLabel(template?.mealType).toLowerCase()} similares.`
+        : learning.resetScope === "all"
+        ? "Preferencias restablecidas para este plato y comidas similares."
+        : "Preferencia restablecida para este plato frecuente."
+    );
+  };
+
+  const closeRepeatAdjustmentPreview = () => {
+    setRepeatAdjustmentPreview(null);
+  };
+
+  const updateRepeatAdjustmentAddition = (index, updates) => {
+    setRepeatAdjustmentPreview((prev) => {
+      if (!prev?.actionPlan) return prev;
+
+      const nextAdditions = (Array.isArray(prev.actionPlan.additions) ? prev.actionPlan.additions : []).map(
+        (addition, additionIndex) => {
+          if (additionIndex !== index) return addition;
+
+          const nextAddition = {
+            ...addition,
+            ...updates,
+          };
+          const resolvedFood = resolveAdjustmentFoodOption(nextAddition, foodOptions);
+          const targetGrams = Math.max(10, roundToStep(toNumber(nextAddition?.targetGrams), 10));
+
+          return {
+            ...nextAddition,
+            targetGrams,
+            estimatedDelta: buildAdjustmentEstimatedDelta(
+              {
+                ...nextAddition,
+                targetGrams,
+              },
+              resolvedFood
+            ),
+          };
+        }
+      );
+
+      return {
+        ...prev,
+        actionPlan: {
+          ...prev.actionPlan,
+          additions: nextAdditions,
+        },
+      };
+    });
   };
 
   const onChangeBeverageType = (event) => {
@@ -1306,26 +2135,168 @@ export default function NutritionLog({
     const consumedAt = buildMealTimestamp(targetDate, targetTime);
     const baseId = createUniqueMealBaseId(targetDate, targetTime, meals);
     const mealGroupId = `meal-${baseId}`;
-    const createdMeals = templateItems.map((meal, index) => ({
-      ...meal,
-      id: `${baseId}-${index}`,
-      mealGroupId,
-      date: targetDate,
-      time: targetTime,
-      consumedAt,
-    }));
+    const createdMeals = options?.adjustmentMode
+      ? buildAdjustedRepeatedMeals({
+          templateItems,
+          adjustment: template?.adjustment,
+          adjustmentMode: options?.adjustmentMode,
+          customActionPlan: options?.customActionPlan,
+          foodOptions,
+          mealType: template?.mealType,
+          targetDate,
+          targetTime,
+          consumedAt,
+          baseId,
+          mealGroupId,
+        })
+      : templateItems.map((meal, index) => ({
+          ...meal,
+          id: `${baseId}-${index}`,
+          mealGroupId,
+          date: targetDate,
+          time: targetTime,
+          consumedAt,
+        }));
 
     const nextMeals = [...(Array.isArray(meals) ? meals : []), ...createdMeals];
     saveMeals(profileId, nextMeals);
 
+    const acceptedActionPlan =
+      options?.customActionPlan ||
+      (options?.adjustmentMode
+        ? selectAdjustmentActionPlan(template?.adjustment?.actionPlan, options.adjustmentMode)
+        : null);
+    if (acceptedActionPlan && template?.signature) {
+      const nextAdjustmentPreferences = recordFrequentMealAdjustmentAcceptance(profileId, {
+        signature: template.signature,
+        mealType: template?.mealType,
+        actionPlan: acceptedActionPlan,
+      });
+      setAdjustmentPreferences(nextAdjustmentPreferences);
+    }
+
     if (typeof onMealsChange === "function") onMealsChange(nextMeals);
     if (typeof onDataChange === "function") onDataChange();
+    setRepeatAdjustmentPreview(null);
 
     const targetLabel = targetDate === todayKey ? "hoy" : formatShortDate(targetDate);
     const timeLabel = targetTime ? ` · ${targetTime}` : "";
     const feedbackPrefix =
-      options?.feedbackPrefix || `${mealTypeLabel(template?.mealType)} repetida para `;
+      options?.feedbackPrefix ||
+      `${mealTypeLabel(template?.mealType)} ${options?.adjustmentMode ? "repetida con ajuste para " : "repetida para "}`;
     setRepeatFeedback(`${feedbackPrefix}${targetLabel}${timeLabel}`);
+  };
+
+  const onConsumeMealGroupFromInventory = (groupEntry) => {
+    if (!profileId || !groupEntry?.template) return;
+
+    if (groupEntry.inventoryConsumed) {
+      setInventoryMealFeedback("Ese plato ya fue descontado del inventario.");
+      return;
+    }
+
+    const groupKey = String(groupEntry.groupKey || groupEntry.template?.sourceGroupId || "").trim();
+    const inventoryEntry = todayInventoryCoverageByGroupKey.get(groupKey);
+    const coverage = inventoryEntry?.coverage;
+    const missingQuantity = Math.max(0, Number(coverage?.summary?.totalMissingQuantity || 0));
+
+    if (!coverage || missingQuantity > 0) {
+      setInventoryMealFeedback(
+        missingQuantity > 0
+          ? `Faltan ${missingQuantity} unidades para descontar este plato desde inventario.`
+          : "No hay stock suficiente para descontar este plato."
+      );
+      return;
+    }
+
+    const templateItems = Array.isArray(groupEntry.template.items) ? groupEntry.template.items : [];
+    const targetIds = new Set(templateItems.map((meal) => String(meal?.id || "").trim()).filter(Boolean));
+    const deductedAt = new Date().toISOString();
+    const deductionItems = (Array.isArray(coverage?.items) ? coverage.items : []).flatMap((item) =>
+      (Array.isArray(item?.consumedFrom) ? item.consumedFrom : []).map((entry) => ({
+        id: entry.id,
+        name: entry.name || item.id,
+        location: entry.location,
+        quantity: entry.quantity,
+        unit: entry.unit || item.unit || "unidad",
+      }))
+    );
+    const primaryMealId = String(templateItems[0]?.id || "").trim();
+    const nextMeals = (Array.isArray(meals) ? meals : []).map((meal) =>
+      targetIds.has(String(meal?.id || "").trim())
+        ? {
+            ...meal,
+            inventoryDeductedAt: deductedAt,
+            inventoryDeductionItems: String(meal?.id || "").trim() === primaryMealId ? deductionItems : [],
+          }
+        : meal
+    );
+
+    const nextInventoryState = saveWorkFoodInventory(profileId, {
+      items: coverage.inventoryItems,
+    }, {
+      movements: deductionItems.map((entry) => ({
+        type: "consume",
+        source: "comidas_de_hoy",
+        detail: "Descuento desde comida ya registrada",
+        name: entry.name || entry.id,
+        location: entry.location,
+        quantity: entry.quantity,
+        unit: entry.unit || "unidad",
+      })),
+    });
+
+    saveMeals(profileId, nextMeals);
+    setInventoryState(nextInventoryState);
+    if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (typeof onDataChange === "function") onDataChange();
+
+    const mealTypeText = mealTypeLabel(groupEntry.template?.mealType).toLowerCase();
+    setInventoryMealFeedback(`Inventario descontado para ${mealTypeText} de ${groupEntry.template?.lastTime || "hoy"}.`);
+  };
+
+  const onUndoMealGroupInventoryConsumption = (groupEntry) => {
+    if (!profileId || !groupEntry?.template || !groupEntry?.inventoryConsumed) return;
+
+    const deductionItems = Array.isArray(groupEntry.inventoryDeductionItems)
+      ? groupEntry.inventoryDeductionItems
+      : [];
+    if (!deductionItems.length) {
+      setInventoryMealFeedback("No se encontró el detalle del descuento para restaurar el stock.");
+      return;
+    }
+
+    const templateItems = Array.isArray(groupEntry.template.items) ? groupEntry.template.items : [];
+    const targetIds = new Set(templateItems.map((meal) => String(meal?.id || "").trim()).filter(Boolean));
+    const nextMeals = (Array.isArray(meals) ? meals : []).map((meal) =>
+      targetIds.has(String(meal?.id || "").trim())
+        ? {
+            ...meal,
+            inventoryDeductedAt: "",
+            inventoryDeductionItems: [],
+          }
+        : meal
+    );
+    const nextInventoryState = saveWorkFoodInventory(profileId, {
+      items: restoreConsumedInventoryItems(inventoryState.items, deductionItems),
+    }, {
+      movements: deductionItems.map((entry) => ({
+        type: "restore",
+        source: "comidas_de_hoy",
+        detail: "Restauración por deshacer descuento",
+        name: entry.name || entry.id,
+        location: entry.location,
+        quantity: entry.quantity,
+        unit: entry.unit || "unidad",
+      })),
+    });
+
+    saveMeals(profileId, nextMeals);
+    setInventoryState(nextInventoryState);
+    if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (typeof onDataChange === "function") onDataChange();
+
+    setInventoryMealFeedback("Descuento revertido y stock restaurado en inventario.");
   };
 
   const onQuickAddFoods = (items) => {
@@ -1624,19 +2595,36 @@ export default function NutritionLog({
                 Usa la fecha y hora elegidas arriba y guarda el plato completo sin volver a ingresarlo.
               </Typography>
             </Box>
-            <Chip
-              size="small"
-              variant="outlined"
-              label={`Destino: ${repeatTargetLabel}`}
-              sx={{ maxWidth: "100%" }}
-            />
+            <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
+              <Chip size="small" variant="outlined" label={`${repeatableMealsForSelectedType.length} opciones`} />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Destino: ${repeatTargetLabel}`}
+                sx={{ maxWidth: "100%" }}
+              />
+              <Button
+                type="button"
+                size="small"
+                variant="text"
+                onClick={() => {
+                  setShowFrequentRepeats((prev) => {
+                    const nextValue = !prev;
+                    if (!nextValue) setRepeatAdjustmentPreview(null);
+                    return nextValue;
+                  });
+                }}
+              >
+                {showFrequentRepeats ? "Ocultar" : "Mostrar"}
+              </Button>
+            </Box>
           </Box>
           {repeatFeedback ? (
             <Typography variant="caption" sx={{ color: "success.dark", fontWeight: 600 }}>
               {repeatFeedback}
             </Typography>
           ) : null}
-          {repeatableMealsForSelectedType.length > 0 ? (
+          {showFrequentRepeats ? repeatableMealsForSelectedType.length > 0 ? (
             <Box
               sx={{
                 display: "grid",
@@ -1645,12 +2633,40 @@ export default function NutritionLog({
               }}
             >
               {repeatableMealsForSelectedType.map((template) => {
+                const templateKey = `${template.sourceGroupId}-${template.lastConsumedAt}`;
                 const itemNames = template.items
                   .slice(0, 3)
                   .map((item) => item?.name)
                   .filter(Boolean);
                 const extraItems = Math.max(0, template.items.length - itemNames.length);
                 const adjustment = template.adjustment;
+                const adjustmentOptions = getAdjustmentActionOptions(adjustment?.actionPlan);
+                const previewIsOpen = repeatAdjustmentPreview?.templateKey === templateKey;
+                const previewMode = previewIsOpen ? repeatAdjustmentPreview?.mode : "";
+                const previewActionPlan = previewIsOpen ? repeatAdjustmentPreview?.actionPlan || null : null;
+                const previewLines = previewActionPlan
+                  ? buildAdjustmentPreviewLines(previewActionPlan, foodOptions)
+                  : [];
+                const previewProjectionBase = adjustment?.projectionBase;
+                const previewProjectedState =
+                  previewActionPlan && previewProjectionBase
+                    ? buildProjectedAdjustmentState({
+                        totalCalories: previewProjectionBase.totalCalories,
+                        totalProtein: previewProjectionBase.totalProtein,
+                        vegetableServings: previewProjectionBase.vegetableServings,
+                        deltas: getActionPlanEstimatedDeltas(previewActionPlan),
+                      })
+                    : null;
+                const previewProjectedOutcome =
+                  previewProjectedState && previewProjectionBase
+                    ? buildProjectedAdjustmentOutcome({
+                        projectedState: previewProjectedState,
+                        caloriesRemaining: previewProjectionBase.caloriesRemaining,
+                        needsMealProtein: previewProjectionBase.needsMealProtein,
+                        needsMealVegetables: previewProjectionBase.needsMealVegetables,
+                        mealProteinTarget: previewProjectionBase.mealProteinTarget,
+                      })
+                    : null;
                 const adjustmentTone = adjustment?.tone || "info";
                 const adjustmentPalette =
                   adjustmentTone === "warning"
@@ -1673,7 +2689,7 @@ export default function NutritionLog({
 
                 return (
                   <Box
-                    key={`${template.sourceGroupId}-${template.lastConsumedAt}`}
+                    key={templateKey}
                     sx={{
                       display: "grid",
                       gap: 0.8,
@@ -1754,6 +2770,34 @@ export default function NutritionLog({
                             {adjustment.example}
                           </Typography>
                         ) : null}
+                        {adjustment.learning ? (
+                          <Box
+                            sx={{
+                              display: "flex",
+                              gap: 0.65,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap", alignItems: "center" }}>
+                              <Chip size="small" color="info" variant="filled" label={adjustment.learning.badgeLabel} />
+                              <Typography variant="caption" color="text.secondary">
+                                {adjustment.learning.detail}
+                              </Typography>
+                            </Box>
+                            <Button
+                              type="button"
+                              size="small"
+                              variant="text"
+                              color="inherit"
+                              onClick={() => onResetFrequentMealPreference(template)}
+                              sx={{ px: 0.4, minWidth: 0, fontSize: "0.72rem" }}
+                            >
+                              Restablecer preferencia
+                            </Button>
+                          </Box>
+                        ) : null}
                         {adjustment.projectedState ? (
                           <Box sx={{ display: "grid", gap: 0.4 }}>
                             <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
@@ -1780,6 +2824,27 @@ export default function NutritionLog({
                             </Box>
                           </Box>
                         ) : null}
+                        {adjustment.projectedOutcome ? (
+                          <Box sx={{ display: "grid", gap: 0.4 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
+                              Resultado estimado
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: "text.primary", fontWeight: 700 }}>
+                              {adjustment.projectedOutcome.summary}
+                            </Typography>
+                            <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
+                              {adjustment.projectedOutcome.chips.map((chip) => (
+                                <Chip
+                                  key={`${template.sourceGroupId}-${chip.label}`}
+                                  size="small"
+                                  label={chip.label}
+                                  color={chip.color}
+                                  variant="outlined"
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        ) : null}
                         {adjustment.chips?.length ? (
                           <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
                             {adjustment.chips.map((chip) => (
@@ -1795,7 +2860,23 @@ export default function NutritionLog({
                         ) : null}
                       </Box>
                     ) : null}
-                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.8, flexWrap: "wrap" }}>
+                      {adjustment?.actionPlan ? (
+                        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {adjustmentOptions.map((option) => (
+                            <Button
+                              key={`${templateKey}-${option.key}`}
+                              type="button"
+                              size="small"
+                              variant={option.variant}
+                              onClick={() => openRepeatAdjustmentPreview(template, option)}
+                              disabled={!profileId}
+                            >
+                              {option.key === "full" ? "Repetir con ajuste" : option.label}
+                            </Button>
+                          ))}
+                        </Box>
+                      ) : null}
                       <Button
                         type="button"
                         size="small"
@@ -1806,6 +2887,138 @@ export default function NutritionLog({
                         Repetir comida
                       </Button>
                     </Box>
+                    {previewIsOpen && previewActionPlan ? (
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gap: 0.55,
+                          p: 0.9,
+                          borderRadius: 1.6,
+                          border: "1px solid rgba(59,130,246,0.18)",
+                          bgcolor: "rgba(59,130,246,0.06)",
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                          Vista previa
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {repeatAdjustmentPreview?.label || "Ajuste seleccionado"}
+                        </Typography>
+                        {previewLines.map((line) => (
+                          <Typography key={`${templateKey}-${line}`} variant="caption" color="text.secondary">
+                            {line}
+                          </Typography>
+                        ))}
+                        {Array.isArray(previewActionPlan?.additions) && previewActionPlan.additions.length ? (
+                          <Box sx={{ display: "grid", gap: 0.8 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
+                              Editar ajuste
+                            </Typography>
+                            {previewActionPlan.additions.map((addition, additionIndex) => {
+                              const selectedFood = resolveAdjustmentFoodOption(addition, foodOptions);
+                              const additionChoices = getAdjustmentFoodChoices(addition, foodOptions);
+                              const additionLabel =
+                                addition?.targetCategory === "protein"
+                                  ? "Fuente de proteína"
+                                  : addition?.targetCategory === "vegetable"
+                                  ? "Vegetal sugerido"
+                                  : "Alimento sugerido";
+
+                              return (
+                                <Box
+                                  key={`${templateKey}-addition-${additionIndex}`}
+                                  sx={{
+                                    display: "grid",
+                                    gap: 0.75,
+                                    p: 0.8,
+                                    borderRadius: 1.3,
+                                    bgcolor: "rgba(255,255,255,0.55)",
+                                    border: "1px solid rgba(148,163,184,0.16)",
+                                  }}
+                                >
+                                  <Autocomplete
+                                    size="small"
+                                    options={additionChoices}
+                                    value={selectedFood}
+                                    onChange={(_, value) =>
+                                      updateRepeatAdjustmentAddition(additionIndex, {
+                                        selectedFoodIdentity: value ? getFoodIdentity(value) : addition?.selectedFoodIdentity,
+                                      })
+                                    }
+                                    getOptionLabel={(option) =>
+                                      option?.brand ? `${option?.name || ""} · ${option.brand}` : option?.name || ""
+                                    }
+                                    isOptionEqualToValue={(option, value) =>
+                                      getFoodIdentity(option) === getFoodIdentity(value)
+                                    }
+                                    renderInput={(params) => <TextField {...params} label={additionLabel} fullWidth />}
+                                  />
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    label="Cantidad (g)"
+                                    value={Math.round(toNumber(addition?.targetGrams))}
+                                    onChange={(event) =>
+                                      updateRepeatAdjustmentAddition(additionIndex, {
+                                        targetGrams: event.target.value,
+                                      })
+                                    }
+                                    inputProps={{ min: 10, step: 10 }}
+                                    fullWidth
+                                  />
+                                </Box>
+                              );
+                            })}
+                          </Box>
+                        ) : null}
+                        {previewProjectedState ? (
+                          <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
+                            <Chip size="small" label={`${Math.round(previewProjectedState.calories)} kcal`} variant="outlined" />
+                            <Chip
+                              size="small"
+                              label={`${Number(previewProjectedState.protein || 0).toFixed(1)} g prot.`}
+                              variant="outlined"
+                            />
+                            {previewProjectedState.vegetableServings >= 0.5 ? (
+                              <Chip
+                                size="small"
+                                label={`${formatVegetableServingsLabel(previewProjectedState.vegetableServings)} veg.`}
+                                variant="outlined"
+                              />
+                            ) : null}
+                          </Box>
+                        ) : null}
+                        {previewProjectedOutcome ? (
+                          <Typography variant="caption" sx={{ color: "text.primary", fontWeight: 700 }}>
+                            {previewProjectedOutcome.summary}
+                          </Typography>
+                        ) : null}
+                        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          <Button
+                            type="button"
+                            size="small"
+                            variant="text"
+                            onClick={closeRepeatAdjustmentPreview}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="small"
+                            variant="contained"
+                            onClick={() =>
+                              onRepeatMealTemplate(template, {
+                                adjustmentMode: previewMode || "full",
+                                customActionPlan: previewActionPlan,
+                              })
+                            }
+                            disabled={!profileId}
+                          >
+                            Confirmar ajuste
+                          </Button>
+                        </Box>
+                      </Box>
+                    ) : null}
                   </Box>
                 );
               })}
@@ -1813,6 +3026,10 @@ export default function NutritionLog({
           ) : (
             <Typography variant="caption" color="text.secondary">
               Aún no hay {mealTypeLabel(formData.mealType).toLowerCase()}s recientes para repetir. Cuando repitas uno un par de veces aparecerá aquí.
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              El bloque está contraído por defecto. Ábrelo cuando quieras repetir una comida frecuente o aplicar un ajuste.
             </Typography>
           )}
         </Box>
@@ -2381,6 +3598,14 @@ export default function NutritionLog({
             {repeatFeedback}
           </Typography>
         ) : null}
+        {inventoryMealFeedback ? (
+          <Typography
+            variant="caption"
+            sx={{ display: "block", mb: 0.8, color: "info.dark", fontWeight: 600 }}
+          >
+            {inventoryMealFeedback}
+          </Typography>
+        ) : null}
         {mealsToday.length === 0 ? (
           <Box
             sx={{
@@ -2415,7 +3640,13 @@ export default function NutritionLog({
                   {block.items.map((meal) => {
                     const contribution = getMealContributionValues(meal);
                     const isEditing = String(editingMealId) === String(meal.id);
-                    const repeatEntry = repeatableTodayEntriesByMealId.get(String(meal?.id || ""));
+                    const groupEntry = todayMealGroupEntriesByMealId.get(String(meal?.id || ""));
+                    const groupCoverage = todayInventoryCoverageByGroupKey.get(String(groupEntry?.groupKey || ""));
+                    const groupMissing = Math.max(0, Number(groupCoverage?.coverage?.summary?.totalMissingQuantity || 0));
+                    const inventoryPreview = buildInventoryUsagePreview(
+                      groupCoverage?.coverage,
+                      groupEntry?.inventoryDeductionItems
+                    );
                     return (
                       <Box
                         key={`${meal.id}-mobile`}
@@ -2458,6 +3689,14 @@ export default function NutritionLog({
                           <Chip size="small" label={`${contribution.carbs} g carb.`} />
                           <Chip size="small" label={`${contribution.fat} g grasa`} />
                         </Box>
+                        {groupEntry?.isPrimary && inventoryPreview ? (
+                          <Typography
+                            variant="caption"
+                            color={inventoryPreview.tone === "success" ? "success.main" : "text.secondary"}
+                          >
+                            {inventoryPreview.detail}
+                          </Typography>
+                        ) : null}
                         {isEditing ? (
                           <Stack spacing={0.8}>
                             <TextField
@@ -2482,21 +3721,40 @@ export default function NutritionLog({
                           </Stack>
                         ) : (
                           <Stack direction="row" spacing={0.6} flexWrap="wrap">
-                            {repeatEntry?.isPrimary ? (
-                              <Button
-                                type="button"
-                                size="small"
-                                variant="text"
-                                onClick={() =>
-                                  onRepeatMealTemplate(repeatEntry.template, {
-                                    date: todayKey,
-                                    time: getCurrentTimeValue(),
-                                    feedbackPrefix: "Comida repetida para ",
-                                  })
-                                }
-                              >
-                                Repetir comida
-                              </Button>
+                            {groupEntry?.isPrimary ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="text"
+                                  onClick={() =>
+                                    onRepeatMealTemplate(groupEntry.template, {
+                                      date: todayKey,
+                                      time: getCurrentTimeValue(),
+                                      feedbackPrefix: "Comida repetida para ",
+                                    })
+                                  }
+                                >
+                                  Repetir comida
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="text"
+                                  onClick={() =>
+                                    groupEntry.inventoryConsumed
+                                      ? onUndoMealGroupInventoryConsumption(groupEntry)
+                                      : onConsumeMealGroupFromInventory(groupEntry)
+                                  }
+                                  disabled={!groupEntry.inventoryConsumed && groupMissing > 0}
+                                >
+                                  {groupEntry.inventoryConsumed
+                                    ? "Deshacer descuento"
+                                    : groupMissing > 0
+                                    ? "Falta stock"
+                                    : "Descontar inventario"}
+                                </Button>
+                              </>
                             ) : null}
                             <Button type="button" size="small" variant="text" onClick={() => setDetailMeal(meal)}>
                               Detalle
@@ -2554,7 +3812,13 @@ export default function NutritionLog({
                     <TableRow key={meal.id}>
                       {(() => {
                         const contribution = getMealContributionValues(meal);
-                        const repeatEntry = repeatableTodayEntriesByMealId.get(String(meal?.id || ""));
+                        const groupEntry = todayMealGroupEntriesByMealId.get(String(meal?.id || ""));
+                        const groupCoverage = todayInventoryCoverageByGroupKey.get(String(groupEntry?.groupKey || ""));
+                        const groupMissing = Math.max(0, Number(groupCoverage?.coverage?.summary?.totalMissingQuantity || 0));
+                        const inventoryPreview = buildInventoryUsagePreview(
+                          groupCoverage?.coverage,
+                          groupEntry?.inventoryDeductionItems
+                        );
                         return (
                           <>
                             <TableCell sx={{ width: "34%" }}>
@@ -2570,6 +3834,14 @@ export default function NutritionLog({
                                 {meal?.quantityMode === "portion" && formatMealPortionMeta(meal) ? (
                                   <Typography variant="caption" color="text.secondary">
                                     Base: {formatMealPortionMeta(meal)}
+                                  </Typography>
+                                ) : null}
+                                {groupEntry?.isPrimary && inventoryPreview ? (
+                                  <Typography
+                                    variant="caption"
+                                    color={inventoryPreview.tone === "success" ? "success.main" : "text.secondary"}
+                                  >
+                                    {inventoryPreview.detail}
                                   </Typography>
                                 ) : null}
                               </Box>
@@ -2622,13 +3894,13 @@ export default function NutritionLog({
                                 </Stack>
                               ) : (
                                 <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
-                                  {repeatEntry?.isPrimary ? (
+                                  {groupEntry?.isPrimary ? (
                                     <Button
                                       type="button"
                                       size="small"
                                       variant="text"
                                       onClick={() =>
-                                        onRepeatMealTemplate(repeatEntry.template, {
+                                        onRepeatMealTemplate(groupEntry.template, {
                                           date: todayKey,
                                           time: getCurrentTimeValue(),
                                           feedbackPrefix: "Comida repetida para ",
@@ -2636,6 +3908,25 @@ export default function NutritionLog({
                                       }
                                     >
                                       Repetir comida
+                                    </Button>
+                                  ) : null}
+                                  {groupEntry?.isPrimary ? (
+                                    <Button
+                                      type="button"
+                                      size="small"
+                                      variant="text"
+                                      onClick={() =>
+                                        groupEntry.inventoryConsumed
+                                          ? onUndoMealGroupInventoryConsumption(groupEntry)
+                                          : onConsumeMealGroupFromInventory(groupEntry)
+                                      }
+                                      disabled={!groupEntry.inventoryConsumed && groupMissing > 0}
+                                    >
+                                      {groupEntry.inventoryConsumed
+                                        ? "Deshacer descuento"
+                                        : groupMissing > 0
+                                        ? "Falta stock"
+                                        : "Descontar inventario"}
                                     </Button>
                                   ) : null}
                                   <Button

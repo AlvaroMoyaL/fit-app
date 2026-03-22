@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, startTransition, useEffect, useMemo, useState } from "react";
 import { Box, Button, Card, CardContent, Chip, Divider, IconButton, Skeleton, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import NutritionSummary from "./NutritionSummary";
@@ -326,6 +326,13 @@ function enrichMealsWithStoredNutrients(meals, foodLookup) {
   return { changed, meals: nextMeals };
 }
 
+function buildNutritionMealState(profileId) {
+  return {
+    profileKey: String(profileId || ""),
+    meals: profileId ? getMeals(profileId) : [],
+  };
+}
+
 function safeNumber(value, fallback = 0) {
   const next = Number(value);
   return Number.isFinite(next) ? next : fallback;
@@ -603,13 +610,15 @@ export default function NutritionPage({
       desktopPx: 1.35,
       mobilePx: 1.05,
     });
-  const [meals, setMeals] = useState([]);
+  const [mealState, setMealState] = useState(() => buildNutritionMealState(profileId));
   const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
   const [adaptiveDrawerSection, setAdaptiveDrawerSection] = useState("progreso");
   const [dailyStatusTab, setDailyStatusTab] = useState(0);
   const [historyDate, setHistoryDate] = useState("");
-  const [nutritionReady, setNutritionReady] = useState(false);
   const todayKey = useMemo(() => getTodayDateKey(), []);
+  const currentProfileKey = String(profileId || "");
+  const meals = mealState.meals;
+  const nutritionReady = mealState.profileKey === currentProfileKey;
   const customFoods = useMemo(
     () => (profileId ? getCustomFoods(profileId) : []),
     [profileId]
@@ -627,36 +636,35 @@ export default function NutritionPage({
   );
 
   useEffect(() => {
-    if (!profileId) {
-      setMeals([]);
-      setNutritionReady(true);
-      return;
-    }
-    setMeals(getMeals(profileId));
-    setNutritionReady(true);
+    startTransition(() => {
+      setMealState(buildNutritionMealState(profileId));
+    });
   }, [profileId]);
+
   useEffect(() => {
     if (!profileId || !nutritionReady) return;
     const lookup = buildFoodLookup([...foodCatalog, ...customFoods]);
     const enriched = enrichMealsWithStoredNutrients(meals, lookup);
     if (!enriched.changed) return;
     saveMeals(profileId, enriched.meals);
-    setMeals(enriched.meals);
-  }, [customFoods, meals, nutritionReady, profileId]);
+    startTransition(() => {
+      setMealState({
+        profileKey: currentProfileKey,
+        meals: enriched.meals,
+      });
+    });
+  }, [currentProfileKey, customFoods, meals, nutritionReady, profileId]);
 
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const availableMealDates = useMemo(() => {
     const unique = new Set((Array.isArray(meals) ? meals : []).map((meal) => meal?.date).filter(Boolean));
     return [...unique].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
   }, [meals]);
-  useEffect(() => {
-    if (!historyDate) {
-      setHistoryDate(todayKey);
-      return;
+  const resolvedHistoryDate = useMemo(() => {
+    if (historyDate && (availableMealDates.length === 0 || availableMealDates.includes(historyDate))) {
+      return historyDate;
     }
-    if (availableMealDates.length > 0 && !availableMealDates.includes(historyDate)) {
-      setHistoryDate(availableMealDates[0]);
-    }
+    return availableMealDates[0] || todayKey;
   }, [availableMealDates, historyDate, todayKey]);
 
   const totalsToday = useMemo(() => calculateDailyTotals(mealsToday), [mealsToday]);
@@ -697,13 +705,13 @@ export default function NutritionPage({
     [totalsToday.calories, tdee]
   );
   const historyMeals = useMemo(
-    () => getMealsForDate(meals, historyDate || todayKey),
-    [historyDate, meals, todayKey]
+    () => getMealsForDate(meals, resolvedHistoryDate),
+    [meals, resolvedHistoryDate]
   );
   const historyTotals = useMemo(() => calculateDailyTotals(historyMeals), [historyMeals]);
   const historyMetricEntry = useMemo(() => {
-    return (Array.isArray(metricsLog) ? metricsLog : []).find((entry) => entry?.date === (historyDate || todayKey)) || {};
-  }, [historyDate, metricsLog, todayKey]);
+    return (Array.isArray(metricsLog) ? metricsLog : []).find((entry) => entry?.date === resolvedHistoryDate) || {};
+  }, [metricsLog, resolvedHistoryDate]);
   const historyTdee = useMemo(
     () =>
       calculateTDEEDynamic(nutritionProfile, {
@@ -1318,7 +1326,12 @@ export default function NutritionPage({
               <NutritionLog
                 profileId={profileId}
                 meals={meals}
-                onMealsChange={setMeals}
+                onMealsChange={(nextMeals) =>
+                  setMealState({
+                    profileKey: currentProfileKey,
+                    meals: Array.isArray(nextMeals) ? nextMeals : [],
+                  })
+                }
                 onDataChange={onNutritionDataChange}
                 dailyStatus={frequentMealSuggestionContext}
               />
@@ -1643,13 +1656,13 @@ export default function NutritionPage({
                       <Box sx={{ display: "grid", gap: 0.45, minWidth: 0 }}>
                         <Typography variant="subtitle1">Detalle por fecha</Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {historyDate === todayKey ? "Lectura de hoy" : historyDate ? `Fecha seleccionada: ${historyDate}` : "Sin fecha"}
+                          {resolvedHistoryDate === todayKey ? "Lectura de hoy" : `Fecha seleccionada: ${resolvedHistoryDate}`}
                         </Typography>
                       </Box>
                       <TextField
                         label="Fecha"
                         type="date"
-                        value={historyDate || todayKey}
+                        value={resolvedHistoryDate}
                         onChange={(event) => setHistoryDate(event.target.value)}
                         InputLabelProps={{ shrink: true }}
                         sx={{ width: { xs: "100%", sm: 220 } }}

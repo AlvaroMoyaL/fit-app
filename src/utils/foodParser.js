@@ -1,5 +1,5 @@
-import { expandRecipe } from "./recipes";
-import { getFoodPortionOption } from "./foodPortions";
+import { expandRecipe } from "./recipes.js";
+import { getFoodPortionOption } from "./foodPortions.js";
 
 function normalizeText(value) {
   return String(value || "")

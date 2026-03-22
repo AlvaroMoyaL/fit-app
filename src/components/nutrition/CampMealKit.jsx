@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Card,
@@ -14,14 +14,23 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Chip,
 } from "@mui/material";
 import { generateCampMealKit } from "../../utils/campMealKit";
 import { getPortableMealsByType } from "../../utils/portableMeals";
 import {
+  buildShoppingListFromMealPlanDays,
+  getCampMealKitDayKey,
+  getPendingCampMealKitDays,
   generateShoppingListFromKit,
   loadShoppingList,
   saveShoppingList,
 } from "../../utils/mealKitShoppingList";
+import {
+  loadWorkFoodInventory,
+  saveWorkFoodInventory,
+} from "../../utils/workFoodInventoryStorage";
+import { consumeInventoryForShoppingList } from "../../utils/workFoodInventoryPlanning";
 
 function normalizeId(value) {
   return String(value || "")
@@ -79,13 +88,63 @@ function buildPrepSuggestions(foodCounts) {
   return Array.from(suggestions);
 }
 
+function normalizeConsumedDayKeys(consumedDayKeys) {
+  return Array.from(
+    new Set(
+      (Array.isArray(consumedDayKeys) ? consumedDayKeys : [])
+        .map((entry) => normalizeId(entry))
+        .filter(Boolean)
+    )
+  );
+}
+
+function buildDerivedKitData(mealPlan, consumedDayKeys) {
+  const safeMealPlan = mealPlan && typeof mealPlan === "object" ? mealPlan : { days: [] };
+  const pendingDays = getPendingCampMealKitDays({
+    mealPlan: safeMealPlan,
+    consumedDayKeys: normalizeConsumedDayKeys(consumedDayKeys),
+  });
+  const foodCounts = buildFoodCountsFromMealPlan({ days: pendingDays });
+
+  return {
+    mealPlan: safeMealPlan,
+    consumedDayKeys: normalizeConsumedDayKeys(consumedDayKeys),
+    shoppingList: buildShoppingListView(foodCounts),
+    prepSuggestions: buildPrepSuggestions(foodCounts),
+  };
+}
+
+function buildNormalizedKit(rawKit) {
+  if (!rawKit || typeof rawKit !== "object") return null;
+  return {
+    ...rawKit,
+    ...buildDerivedKitData(rawKit.mealPlan, rawKit.consumedDayKeys),
+  };
+}
+
+function loadStoredCampMealKit(profileId) {
+  const key = getCampMealKitKey(profileId);
+  if (!key) return null;
+
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return buildNormalizedKit(parsed);
+  } catch {
+    return null;
+  }
+}
+
 export default function CampMealKit({ profileId }) {
   const [days, setDays] = useState(4);
   const [hasFridge, setHasFridge] = useState(false);
   const [includeBreakfast, setIncludeBreakfast] = useState(true);
   const [includeSnacks, setIncludeSnacks] = useState(true);
   const [includeDinner, setIncludeDinner] = useState(true);
-  const [kit, setKit] = useState(null);
+  const [kit, setKit] = useState(() => loadStoredCampMealKit(profileId));
+  const [inventoryState, setInventoryState] = useState(() => loadWorkFoodInventory(profileId));
+  const [statusMessage, setStatusMessage] = useState("");
 
   const getMealOptionsByType = (mealType) => {
     const type = String(mealType || "").toLowerCase();
@@ -97,20 +156,20 @@ export default function CampMealKit({ profileId }) {
   };
 
   const persistKit = (nextKit) => {
-    setKit(nextKit);
+    const normalizedKit = buildNormalizedKit(nextKit);
+    setKit(normalizedKit);
     const key = getCampMealKitKey(profileId);
-    if (key) {
-      localStorage.setItem(key, JSON.stringify(nextKit));
+    if (key && normalizedKit) {
+      localStorage.setItem(key, JSON.stringify(normalizedKit));
     }
 
-    if (profileId) {
+    if (profileId && normalizedKit) {
       const previousById = new Map(
         loadShoppingList(profileId).map((item) => [normalizeId(item?.id), Boolean(item?.checked)])
       );
-      const flatMeals = (Array.isArray(nextKit?.mealPlan?.days) ? nextKit.mealPlan.days : []).flatMap(
-        (day) => [day?.breakfast, day?.snack, day?.dinner].filter(Boolean)
-      );
-      const checklist = generateShoppingListFromKit(flatMeals).map((item) => ({
+      const checklist = buildShoppingListFromMealPlanDays(
+        getPendingCampMealKitDays(normalizedKit)
+      ).map((item) => ({
         ...item,
         checked: previousById.get(normalizeId(item?.id)) || false,
       }));
@@ -119,24 +178,31 @@ export default function CampMealKit({ profileId }) {
   };
 
   useEffect(() => {
-    const key = getCampMealKitKey(profileId);
-    if (!key) {
-      setKit(null);
-      return;
-    }
-
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
-        setKit(null);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      setKit(parsed && typeof parsed === "object" ? parsed : null);
-    } catch {
-      setKit(null);
-    }
+    startTransition(() => {
+      setKit(loadStoredCampMealKit(profileId));
+      setInventoryState(loadWorkFoodInventory(profileId));
+      setStatusMessage("");
+    });
   }, [profileId]);
+
+  const dayCoverage = useMemo(() => {
+    const days = Array.isArray(kit?.mealPlan?.days) ? kit.mealPlan.days : [];
+    return days.map((dayItem, index) => {
+      const dayKey = normalizeId(getCampMealKitDayKey(dayItem, index));
+      const meals = [dayItem?.breakfast, dayItem?.snack, dayItem?.dinner].filter(Boolean);
+      const shoppingList = generateShoppingListFromKit(meals);
+      const consumption = consumeInventoryForShoppingList(shoppingList, inventoryState.items);
+      const totalMissing = consumption.summary.totalMissingQuantity;
+
+      return {
+        dayKey,
+        shoppingList,
+        canConsumeFromInventory: shoppingList.length > 0 && totalMissing === 0,
+        totalMissing,
+        summary: consumption.summary,
+      };
+    });
+  }, [inventoryState.items, kit]);
 
   const handleGenerate = () => {
     const result = generateCampMealKit({
@@ -147,6 +213,7 @@ export default function CampMealKit({ profileId }) {
       includeDinner,
     });
     persistKit(result);
+    setStatusMessage("");
   };
 
   const handleReset = () => {
@@ -165,10 +232,14 @@ export default function CampMealKit({ profileId }) {
     if (profileId) {
       saveShoppingList(profileId, []);
     }
+    setStatusMessage("");
   };
 
   const handleChangeMeal = (dayIndex, mealKey, nextMealId) => {
     if (!kit || !nextMealId) return;
+    const dayKey = normalizeId(getCampMealKitDayKey(kit?.mealPlan?.days?.[dayIndex], dayIndex));
+    if (normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(dayKey)) return;
+
     const mealType =
       mealKey === "breakfast" ? "breakfast" : mealKey === "snack" ? "snack" : "dinner";
     const replacement = getMealOptionsByType(mealType).find(
@@ -188,6 +259,49 @@ export default function CampMealKit({ profileId }) {
       prepSuggestions: buildPrepSuggestions(foodCounts),
     };
     persistKit(nextKit);
+  };
+
+  const handleConsumeDayFromInventory = (dayItem, dayIndex) => {
+    if (!kit) return;
+
+    const coverage = dayCoverage[dayIndex];
+    if (!coverage?.canConsumeFromInventory) {
+      const missing = Math.max(0, Number(coverage?.totalMissing || 0));
+      setStatusMessage(
+        missing > 0
+          ? `Día ${dayItem?.day || dayIndex + 1}: faltan ${missing} unidades para cubrirlo desde inventario.`
+          : "No hay stock suficiente para consumir este día desde inventario."
+      );
+      return;
+    }
+
+    const consumption = consumeInventoryForShoppingList(coverage.shoppingList, inventoryState.items);
+    const nextInventoryState = saveWorkFoodInventory(profileId, {
+      items: consumption.inventoryItems,
+    }, {
+      movements: (Array.isArray(consumption.items) ? consumption.items : []).flatMap((item) =>
+        (Array.isArray(item?.consumedFrom) ? item.consumedFrom : []).map((entry) => ({
+          type: "consume",
+          source: "kit_trabajo",
+          detail: `Consumo desde kit día ${dayItem?.day || dayIndex + 1}`,
+          name: entry.name || item.id,
+          location: entry.location,
+          quantity: entry.quantity,
+          unit: entry.unit || item.unit || "unidad",
+        }))
+      ),
+    });
+    const nextConsumedDayKeys = normalizeConsumedDayKeys([
+      ...(Array.isArray(kit?.consumedDayKeys) ? kit.consumedDayKeys : []),
+      getCampMealKitDayKey(dayItem, dayIndex),
+    ]);
+
+    setInventoryState(nextInventoryState);
+    persistKit({
+      ...kit,
+      consumedDayKeys: nextConsumedDayKeys,
+    });
+    setStatusMessage(`Día ${dayItem?.day || dayIndex + 1} marcado como cubierto desde inventario.`);
   };
 
   return (
@@ -244,12 +358,69 @@ export default function CampMealKit({ profileId }) {
             <Stack spacing={2}>
               <Divider />
 
+              {statusMessage ? (
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 1.5,
+                    bgcolor: "background.default",
+                    border: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {statusMessage}
+                  </Typography>
+                </Box>
+              ) : null}
+
               <Box>
                 <Typography variant="h6">Plan de comidas</Typography>
                 <Stack spacing={1.2} sx={{ mt: 1 }}>
                   {(kit?.mealPlan?.days || []).map((dayItem, index) => (
-                    <Box key={`kit-day-${dayItem.day}-${index}`}>
-                      <Typography variant="h6">Día {dayItem.day}</Typography>
+                    <Box
+                      key={`kit-day-${dayItem.day}-${index}`}
+                      sx={{
+                        display: "grid",
+                        gap: 1,
+                        p: 1.1,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.default",
+                      }}
+                    >
+                      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+                        <Typography variant="h6">Día {dayItem.day}</Typography>
+                        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", alignItems: "center" }}>
+                          {normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(
+                            normalizeId(getCampMealKitDayKey(dayItem, index))
+                          ) ? (
+                            <Chip size="small" color="success" variant="filled" label="Cubierto desde inventario" />
+                          ) : dayCoverage[index]?.canConsumeFromInventory ? (
+                            <Chip size="small" color="success" variant="outlined" label="Stock listo" />
+                          ) : dayCoverage[index]?.summary?.totalItems ? (
+                            <Chip
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              label={`Faltan ${dayCoverage[index].totalMissing}`}
+                            />
+                          ) : null}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleConsumeDayFromInventory(dayItem, index)}
+                            disabled={
+                              normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(
+                                normalizeId(getCampMealKitDayKey(dayItem, index))
+                              ) || !dayCoverage[index]?.canConsumeFromInventory
+                            }
+                          >
+                            Usar desde inventario
+                          </Button>
+                        </Box>
+                      </Box>
 
                       {dayItem.breakfast && (
                         <Box>
@@ -266,6 +437,9 @@ export default function CampMealKit({ profileId }) {
                               onChange={(event) =>
                                 handleChangeMeal(index, "breakfast", event.target.value)
                               }
+                              disabled={normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(
+                                normalizeId(getCampMealKitDayKey(dayItem, index))
+                              )}
                             >
                               {getMealOptionsByType("breakfast").map((option) => (
                                 <MenuItem key={`breakfast-option-${option.id}`} value={option.id}>
@@ -293,6 +467,9 @@ export default function CampMealKit({ profileId }) {
                               label="Cambiar snack"
                               value={dayItem.snack.id || ""}
                               onChange={(event) => handleChangeMeal(index, "snack", event.target.value)}
+                              disabled={normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(
+                                normalizeId(getCampMealKitDayKey(dayItem, index))
+                              )}
                             >
                               {getMealOptionsByType("snack").map((option) => (
                                 <MenuItem key={`snack-option-${option.id}`} value={option.id}>
@@ -320,6 +497,9 @@ export default function CampMealKit({ profileId }) {
                               label="Cambiar cena"
                               value={dayItem.dinner.id || ""}
                               onChange={(event) => handleChangeMeal(index, "dinner", event.target.value)}
+                              disabled={normalizeConsumedDayKeys(kit?.consumedDayKeys).includes(
+                                normalizeId(getCampMealKitDayKey(dayItem, index))
+                              )}
                             >
                               {getMealOptionsByType("dinner").map((option) => (
                                 <MenuItem key={`dinner-option-${option.id}`} value={option.id}>
@@ -341,13 +521,19 @@ export default function CampMealKit({ profileId }) {
               <Divider />
 
               <Box>
-                <Typography variant="h6">Lista de alimentos</Typography>
+                <Typography variant="h6">Lista de alimentos pendientes</Typography>
                 <Stack spacing={0.6} sx={{ mt: 1 }}>
-                  {(kit?.shoppingList || []).map((item) => (
-                    <Typography key={`shopping-${item.food}`} variant="body1">
-                      {item.food} × {item.quantity}
+                  {(kit?.shoppingList || []).length ? (
+                    (kit?.shoppingList || []).map((item) => (
+                      <Typography key={`shopping-${item.food}`} variant="body1">
+                        {item.food} × {item.quantity}
+                      </Typography>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="success.main">
+                      No quedan alimentos pendientes para el kit actual.
                     </Typography>
-                  ))}
+                  )}
                 </Stack>
               </Box>
 

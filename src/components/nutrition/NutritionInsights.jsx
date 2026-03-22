@@ -40,6 +40,11 @@ export default function NutritionInsights({
   const proteinTarget = toNumber(proteinAnalysis?.proteinTarget);
   const missingProtein = toNumber(proteinAnalysis?.missingProtein);
   const vegetableServings = toNumber(vegetableAnalysis?.servings);
+  const proteinBasisShort = String(proteinAnalysis?.targetBasisShort || "").trim();
+  const proteinBasisHint = String(proteinAnalysis?.targetBasisHint || "").trim();
+  const effectiveWeightKg = toNumber(proteinAnalysis?.effectiveWeightKg);
+  const actualWeightKg = toNumber(proteinAnalysis?.actualWeightKg);
+  const usedAdjustedWeight = Boolean(proteinAnalysis?.usedAdjustedWeight);
 
   const content = (
     <>
@@ -67,6 +72,21 @@ export default function NutritionInsights({
             <Stack spacing={0.6}>
               <Typography variant="body2">{`Consumidas: ${proteinConsumed} g`}</Typography>
               <Typography variant="body2">{`Objetivo: ${proteinTarget} g`}</Typography>
+              {proteinBasisShort ? (
+                <Typography variant="body2" color="text.secondary">
+                  {`Criterio: ${proteinBasisShort}`}
+                </Typography>
+              ) : null}
+              {usedAdjustedWeight && effectiveWeightKg > 0 && actualWeightKg > 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {`Peso actual ${actualWeightKg.toFixed(1)} kg, peso efectivo ${effectiveWeightKg.toFixed(1)} kg.`}
+                </Typography>
+              ) : null}
+              {proteinBasisHint ? (
+                <Typography variant="body2" color="text.secondary">
+                  {proteinBasisHint}
+                </Typography>
+              ) : null}
               <Typography variant="body2">{`Faltan: ${missingProtein} g`}</Typography>
             </Stack>
           </InsightSection>

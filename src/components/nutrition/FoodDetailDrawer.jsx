@@ -10,6 +10,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import { formatMealPortionMeta } from "../../utils/foodPortions";
 
 function mealTypeLabel(type) {
   if (type === "desayuno") return "Desayuno";
@@ -37,6 +38,7 @@ function num(value, digits = 1) {
 export default function FoodDetailDrawer({ open, onClose, meal }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const portionMeta = formatMealPortionMeta(meal);
 
   return (
     <Drawer
@@ -77,6 +79,11 @@ export default function FoodDetailDrawer({ open, onClose, meal }) {
             <Typography variant="body2" color="text.secondary">
               Cantidad: {meal?.quantity ?? 0} {meal?.unit || ""}
             </Typography>
+            {portionMeta ? (
+              <Typography variant="body2" color="text.secondary">
+                Porción base: {portionMeta}
+              </Typography>
+            ) : null}
             <Divider />
             <Box sx={{ display: "grid", gap: 0.6 }}>
               <Typography variant="subtitle2">Aporte nutricional</Typography>

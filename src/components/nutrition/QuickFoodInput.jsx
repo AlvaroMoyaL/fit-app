@@ -52,9 +52,15 @@ export default function QuickFoodInput({
         label="Comidas por línea"
         value={text}
         onChange={(event) => setText(event.target.value)}
-        placeholder={"Ejemplo:\n2 huevos\npan\ncompleto\nplatano"}
+        placeholder={
+          "Ejemplo:\nmedia marraqueta con jamon\nun bowl de yogurt con granola\n2 laminas de queso\n2 huevos"
+        }
         fullWidth
       />
+      <Typography variant="caption" color="text.secondary">
+        Admite frases naturales y compuestas como `media marraqueta con jamon`, `un bowl de yogurt con granola`,
+        `2 laminas de queso` o `2 huevos`.
+      </Typography>
       <Box>
         <Button type="button" variant="contained" onClick={onSubmit}>
           Agregar

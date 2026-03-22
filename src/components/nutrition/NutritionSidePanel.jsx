@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { getMeals, saveMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateTDEEDynamic } from "../../utils/metabolism";
+import {
+  buildNutritionTargetExplanations,
+  calculateMicroTargets,
+} from "../../utils/nutritionTargets";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
 import NutritionSectionNav from "./NutritionSectionNav";
@@ -48,15 +52,7 @@ function getTodayDateKey() {
   return `${year}-${month}-${day}`;
 }
 
-function calculateMicroTargets() {
-  return {
-    fiber: 28,
-    sodium: 2300,
-    cholesterol: 300,
-  };
-}
-
-function HeroMetricCard({ label, valueText, helperText, state }) {
+function HeroMetricCard({ label, valueText, helperText, state, infoText }) {
   return (
     <Box
       sx={{
@@ -69,13 +65,53 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
       }}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}
-        >
-          {label}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.35, minWidth: 0 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}
+          >
+            {label}
+          </Typography>
+          {infoText ? (
+            <Tooltip
+              title={
+                <Typography variant="body2" sx={{ lineHeight: 1.45 }}>
+                  {infoText}
+                </Typography>
+              }
+              arrow
+              enterTouchDelay={0}
+            >
+              <IconButton
+                size="small"
+                sx={{
+                  p: 0.15,
+                  color: "text.secondary",
+                  "&:hover": { color: "text.primary" },
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: "50%",
+                    border: "1px solid currentColor",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "0.62rem",
+                    fontWeight: 800,
+                    lineHeight: 1,
+                  }}
+                >
+                  i
+                </Box>
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </Box>
         <Typography variant="caption" sx={{ color: state.accent, fontWeight: 800 }}>
           {state.label}
         </Typography>
@@ -93,9 +129,11 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
           }}
         />
       </Box>
-      <Typography variant="caption" color="text.secondary">
-        {helperText}
-      </Typography>
+      {helperText ? (
+        <Typography variant="caption" color="text.secondary">
+          {helperText}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -249,17 +287,28 @@ export default function NutritionSidePanel({
     () => calculateTDEEDynamic(nutritionProfile, metricsForTdee),
     [metricsForTdee, nutritionProfile]
   );
-  const microTargets = useMemo(() => calculateMicroTargets(), []);
-  const sugarReference = useMemo(() => {
-    const dailyCalories = Math.max(0, Number(tdee || 0));
-    if (!dailyCalories) return 0;
-    return (dailyCalories * 0.15) / 4;
-  }, [tdee]);
-  const saturatedFatReference = useMemo(() => {
-    const dailyCalories = Math.max(0, Number(tdee || 0));
-    if (!dailyCalories) return 0;
-    return (dailyCalories * 0.1) / 9;
-  }, [tdee]);
+  const microTargets = useMemo(
+    () => calculateMicroTargets(nutritionProfile, { dailyCalories: tdee }),
+    [nutritionProfile, tdee]
+  );
+  const sugarReference = useMemo(
+    () => Number(microTargets.sugars || 0),
+    [microTargets.sugars]
+  );
+  const saturatedFatReference = useMemo(
+    () => Number(microTargets.saturatedFat || 0),
+    [microTargets.saturatedFat]
+  );
+  const supportTargetExplanations = useMemo(
+    () =>
+      buildNutritionTargetExplanations({
+        calories: tdee,
+        ...microTargets,
+        sugars: sugarReference,
+        saturatedFat: saturatedFatReference,
+      }),
+    [microTargets, saturatedFatReference, sugarReference, tdee]
+  );
   const fiberState = useMemo(
     () => getNutritionMetricState(theme, totalsToday.fiber, microTargets.fiber, { lowWarnRatio: 0.5, overWarnRatio: 1.35 }),
     [microTargets.fiber, theme, totalsToday.fiber]
@@ -379,11 +428,11 @@ export default function NutritionSidePanel({
         </Box>
         <Box sx={{ px: 1.2, pb: 1.2, display: "grid", gap: 1.1 }}>
           <HeroMetricCard label="Comidas" valueText={`${Math.round(totalsToday.mealsCount || 0)}`} helperText="bloques lógicos del día" state={mealsState} />
-          <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} helperText={`objetivo FDA: ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} />
-          <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} helperText={`límite diario: ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} />
-          <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} helperText={`referencia flexible: ${Math.round(sugarReference || 0)} g · incluye fruta y lácteos`} state={sugarsState} />
-          <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} helperText={`límite aprox.: ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} />
-          <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg · hoy se prioriza más la grasa saturada`} state={cholesterolState} />
+          <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} infoText={supportTargetExplanations.fiber} />
+          <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} infoText={supportTargetExplanations.sodium} />
+          <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} state={sugarsState} infoText={supportTargetExplanations.sugars} />
+          <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} infoText={supportTargetExplanations.saturatedFat} />
+          <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} state={cholesterolState} infoText={supportTargetExplanations.cholesterol} />
         </Box>
       </Box>
     </Box>

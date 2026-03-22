@@ -18,8 +18,8 @@ function scoreColor(score) {
 export default function NutritionEvaluation({ totals, profile, tdee, embedded = false }) {
   const weight = Number(profile?.weight ?? profile?.peso ?? 0);
   const evaluation = useMemo(
-    () => evaluateDailyNutrition({ ...(totals || {}), weight }, tdee),
-    [totals, tdee, weight]
+    () => evaluateDailyNutrition({ ...(totals || {}), weight }, tdee, profile),
+    [profile, totals, tdee, weight]
   );
 
   const content = (

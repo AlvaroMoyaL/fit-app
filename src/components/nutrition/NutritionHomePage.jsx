@@ -20,6 +20,7 @@ import { getMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateTDEEDynamic } from "../../utils/metabolism";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
+import { calculateNutritionTargets } from "../../utils/nutritionTargets";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
 import { getCustomRecipes } from "../../utils/customRecipesStorage";
 import { buildCorrectiveDayPlan } from "../../utils/correctiveDayBuilder";
@@ -575,9 +576,10 @@ export default function NutritionHomePage({
     () =>
       analyzeProteinIntake({
         proteinConsumedGrams: totalsToday.protein,
+        profile,
         bodyWeightKg,
       }),
-    [bodyWeightKg, totalsToday.protein]
+    [bodyWeightKg, profile, totalsToday.protein]
   );
   const vegetableAnalysis = useMemo(() => trackVegetableIntake(mealsToday), [mealsToday]);
   const nutritionScore = useMemo(
@@ -612,13 +614,22 @@ export default function NutritionHomePage({
       generateNutritionAlerts({
         proteinConsumedGrams: totalsToday.protein,
         bodyWeightKg,
+        profile,
         proteinCalories: totalsToday.protein * 4,
         carbCalories: totalsToday.carbs * 4,
         fatCalories: totalsToday.fat * 9,
         totalCalories: totalsToday.calories,
         meals: mealsToday,
       }),
-    [bodyWeightKg, mealsToday, totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
+    [
+      bodyWeightKg,
+      mealsToday,
+      profile,
+      totalsToday.calories,
+      totalsToday.carbs,
+      totalsToday.fat,
+      totalsToday.protein,
+    ]
   );
   const caloriesRemaining = useMemo(
     () => {
@@ -719,10 +730,14 @@ export default function NutritionHomePage({
     () => buildSafeInsights(correctiveDeficits),
     [correctiveDeficits]
   );
+  const nutritionTargets = useMemo(
+    () => calculateNutritionTargets(profile, { weightKg: bodyWeightKg, dailyCalories: tdee }),
+    [bodyWeightKg, profile, tdee]
+  );
   const dailyTargetCalories = safeNumber(tdee);
-  const dailyTargetProtein = safeNumber(proteinAnalysis?.proteinTarget);
-  const dailyTargetCarbs = safeNumber(profile?.macroTargets?.carbs);
-  const dailyTargetFat = safeNumber(profile?.macroTargets?.fat);
+  const dailyTargetProtein = safeNumber(nutritionTargets?.protein);
+  const dailyTargetCarbs = safeNumber(nutritionTargets?.carbs);
+  const dailyTargetFat = safeNumber(nutritionTargets?.fat);
   const consumedCalories = safeNumber(totalsToday?.calories);
   const consumedProtein = safeNumber(totalsToday?.protein);
   const consumedCarbs = safeNumber(totalsToday?.carbs);
@@ -893,11 +908,21 @@ export default function NutritionHomePage({
         const proteinAnalysisForDate = analyzeProteinIntake({
           proteinConsumedGrams: proteinForDate,
           bodyWeightKg: weightForDate,
+          profile: {
+            ...profile,
+            weight: weightForDate,
+            peso: weightForDate,
+          },
         });
         const satietyForDate = estimateHungerFromMeals(mealsForDate);
         const computedAlerts = generateNutritionAlerts({
           proteinConsumedGrams: proteinForDate,
           bodyWeightKg: weightForDate,
+          profile: {
+            ...profile,
+            weight: weightForDate,
+            peso: weightForDate,
+          },
           proteinCalories: proteinForDate * 4,
           carbCalories: carbsForDate * 4,
           fatCalories: fatForDate * 9,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Autocomplete,
   Box,
@@ -30,6 +30,8 @@ import RecipeSelector from "./RecipeSelector";
 import QuickFoodInput from "./QuickFoodInput";
 import FoodDetailDrawer from "./FoodDetailDrawer";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
+import { formatMealPortionMeta, getFoodPortionOption } from "../../utils/foodPortions";
+import { trackVegetableIntake } from "../../utils/vegetableTracker";
 import {
   nutritionCompactTabsSx,
   nutritionSurfaceSx,
@@ -94,15 +96,8 @@ const FOOD_CATEGORIES = [
 ];
 const MEAL_TYPE_ORDER = ["desayuno", "almuerzo", "cena", "snack", "bebida"];
 const BEVERAGE_TYPES = ["agua", "cafe_te", "sin_calorias", "calorica", "alcohol"];
-const FOOD_PORTION_EQUIVALENTS = {
-  platano: { label: "unidad", grams: 120 },
-  manzana: { label: "unidad", grams: 180 },
-  pera: { label: "unidad", grams: 180 },
-  naranja: { label: "unidad", grams: 130 },
-  mandarina: { label: "unidad", grams: 90 },
-  kiwi: { label: "unidad", grams: 75 },
-  huevo: { label: "unidad", grams: 50 },
-};
+const DAILY_VEGETABLE_TARGET = 3;
+const VEGETABLE_SERVING_GRAMS = 80;
 
 function buildMealTimestamp(dateKey, timeValue) {
   const safeDate = String(dateKey || "").trim();
@@ -114,19 +109,6 @@ function buildMealTimestamp(dateKey, timeValue) {
 
 function scaleNutrient(base, quantity) {
   return Number((Number(base || 0) * quantity).toFixed(2));
-}
-
-function parseServingSizeGrams(servingSize) {
-  const match = String(servingSize || "").match(/(\d+(?:[.,]\d+)?)\s*g/i);
-  if (!match) return 0;
-  return Number(String(match[1]).replace(",", "."));
-}
-
-function getFoodPortionOption(food, mealType) {
-  if (!food || mealType === "bebida") return null;
-  const fromServing = parseServingSizeGrams(food?.servingSize);
-  if (fromServing > 0) return { label: "porción", grams: fromServing };
-  return FOOD_PORTION_EQUIVALENTS[normalizeFoodIdentityPart(food?.name)] || null;
 }
 
 function resolveEntryConfig(food, mealType, quantity, quantityMode) {
@@ -144,13 +126,32 @@ function resolveEntryConfig(food, mealType, quantity, quantityMode) {
 
   if (quantityMode === "portion") {
     const portion = getFoodPortionOption(food, mealType);
-    if (portion?.grams) {
-      const grams = Number((numericQuantity * portion.grams).toFixed(2));
+    if (portion) {
+      if (portion?.grams > 0) {
+        const grams = Number((numericQuantity * portion.grams).toFixed(2));
+        return {
+          quantity: numericQuantity,
+          unit: portion.label || "porción",
+          grams,
+          ratio: grams / 100,
+          quantityMode: "portion",
+          portionLabel: portion.label || "porción",
+          portionDescription: portion.description || "",
+          baseServingGrams: Number(portion.grams || 0),
+          servingSize: String(food?.servingSize || portion.description || ""),
+        };
+      }
+
       return {
         quantity: numericQuantity,
-        unit: portion.label,
-        grams,
-        ratio: grams / 100,
+        unit: portion.label || "porción",
+        grams: 0,
+        ratio: numericQuantity,
+        quantityMode: "portion",
+        portionLabel: portion.label || "porción",
+        portionDescription: portion.description || "",
+        baseServingGrams: 0,
+        servingSize: String(food?.servingSize || portion.description || ""),
       };
     }
   }
@@ -160,6 +161,11 @@ function resolveEntryConfig(food, mealType, quantity, quantityMode) {
     unit: "x100g",
     grams: Number((numericQuantity * 100).toFixed(2)),
     ratio: numericQuantity,
+    quantityMode: "x100g",
+    portionLabel: "",
+    portionDescription: "",
+    baseServingGrams: 0,
+    servingSize: String(food?.servingSize || ""),
   };
 }
 
@@ -181,6 +187,11 @@ function createMealFromFood({ food, mealType, beverageType, quantity, date, time
     brand: food.brand || "",
     quantity: Number(entry?.quantity ?? quantity ?? 0),
     unit,
+    quantityMode: entry?.quantityMode || quantity?.quantityMode || "x100g",
+    portionLabel: String(entry?.portionLabel || ""),
+    portionDescription: String(entry?.portionDescription || ""),
+    baseServingGrams: Number(entry?.baseServingGrams || 0),
+    servingSize: String(entry?.servingSize || food?.servingSize || ""),
     grams: Number(entry?.grams || 0),
     calories: scaleNutrient(food.calories, ratio),
     protein: scaleNutrient(food.protein, ratio),
@@ -202,6 +213,11 @@ function getDraftPreview(food, mealType, quantity) {
   const ratio = entry.ratio;
   return {
     unit: entry.unit,
+    quantityMode: entry.quantityMode || quantity?.quantityMode || "x100g",
+    portionLabel: String(entry.portionLabel || ""),
+    portionDescription: String(entry.portionDescription || ""),
+    baseServingGrams: Number(entry.baseServingGrams || 0),
+    servingSize: String(entry.servingSize || food?.servingSize || ""),
     calories: scaleNutrient(food.calories, ratio),
     protein: scaleNutrient(food.protein, ratio),
     carbs: scaleNutrient(food.carbs, ratio),
@@ -254,7 +270,591 @@ function getFoodIdentity(food) {
   return `${normalizeFoodIdentityPart(food?.name)}::${normalizeFoodIdentityPart(food?.brand)}`;
 }
 
-export default function NutritionLog({ profileId, meals, onMealsChange, onDataChange }) {
+function toNumber(value) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : 0;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(toNumber(value), min), max);
+}
+
+function roundToStep(value, step = 5) {
+  if (step <= 0) return Math.round(toNumber(value));
+  return Math.round(toNumber(value) / step) * step;
+}
+
+function normalizeStatus(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getMealItemWithHighest(items, key) {
+  const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!safeItems.length) return null;
+
+  return safeItems.reduce((best, item) => {
+    if (!best) return item;
+    return toNumber(item?.[key]) > toNumber(best?.[key]) ? item : best;
+  }, null);
+}
+
+function formatMealFocusName(item) {
+  const name = String(item?.name || "").trim();
+  if (!name) return "";
+  const [first, second] = name.split(/\s+/);
+  return [first, second].filter(Boolean).join(" ");
+}
+
+function formatRoundedGrams(value) {
+  const rounded = Math.max(0, roundToStep(value, value >= 100 ? 10 : 5));
+  return `${rounded} g`;
+}
+
+function formatVegetableServingsLabel(servings) {
+  const safeServings = Number(toNumber(servings).toFixed(1));
+  if (!safeServings) return "";
+  const display = Number.isInteger(safeServings) ? String(safeServings) : String(safeServings).replace(".0", "");
+  return `${display} ${safeServings === 1 ? "porción" : "porciones"}`;
+}
+
+function buildProjectedAdjustmentState({ totalCalories, totalProtein, vegetableServings, deltas = [] }) {
+  const mergedDelta = (Array.isArray(deltas) ? deltas : []).reduce(
+    (acc, delta) => {
+      acc.calories += toNumber(delta?.calories);
+      acc.protein += toNumber(delta?.protein);
+      acc.vegetableServings += toNumber(delta?.vegetableServings);
+      return acc;
+    },
+    { calories: 0, protein: 0, vegetableServings: 0 }
+  );
+
+  const nextCalories = Math.max(0, roundToStep(totalCalories + mergedDelta.calories, 5));
+  const nextProtein = Math.max(0, Number((totalProtein + mergedDelta.protein).toFixed(1)));
+  const nextVegetables = Math.max(0, Number((vegetableServings + mergedDelta.vegetableServings).toFixed(1)));
+
+  return {
+    calories: nextCalories,
+    protein: nextProtein,
+    vegetableServings: nextVegetables,
+  };
+}
+
+function getProteinSupportPlan({ mealType, proteinRemaining, topProteinItem, proteinFocusName }) {
+  const minimum = mealType === "snack" ? 10 : mealType === "desayuno" ? 12 : 15;
+  const maximum = mealType === "snack" ? 18 : mealType === "desayuno" ? 22 : 28;
+  const suggestedProtein = clampNumber(roundToStep(proteinRemaining * 0.55, 5), minimum, maximum);
+  const proteinDensity =
+    toNumber(topProteinItem?.grams) > 0 ? toNumber(topProteinItem?.protein) / toNumber(topProteinItem?.grams) : 0;
+
+  if (proteinFocusName && proteinDensity >= 0.12) {
+    const suggestedFoodGrams = clampNumber(
+      roundToStep(suggestedProtein / Math.max(proteinDensity, 0.12), 10),
+      40,
+      mealType === "snack" ? 120 : 160
+    );
+
+    return {
+      proteinGrams: suggestedProtein,
+      amountLabel: `+${suggestedProtein} g prot.`,
+      example: `Ejemplo: suma unos ${formatRoundedGrams(suggestedFoodGrams)} de ${proteinFocusName}.`,
+      estimatedDelta: {
+        calories: roundToStep(suggestedFoodGrams * (toNumber(topProteinItem?.calories) / Math.max(toNumber(topProteinItem?.grams), 1)), 5),
+        protein: suggestedProtein,
+        vegetableServings: 0,
+      },
+    };
+  }
+
+  if (mealType === "snack" || mealType === "desayuno") {
+    const estimatedCalories = suggestedProtein >= 15 ? 140 : 110;
+    return {
+      proteinGrams: suggestedProtein,
+      amountLabel: `+${suggestedProtein} g prot.`,
+      example:
+        suggestedProtein >= 15
+          ? "Ejemplo: 1 yogurt griego (150 g) + 1 huevo, o 1 lata chica de atún."
+          : "Ejemplo: 1 yogurt griego (150 g) o 2 huevos.",
+      estimatedDelta: {
+        calories: estimatedCalories,
+        protein: suggestedProtein,
+        vegetableServings: 0,
+      },
+    };
+  }
+
+  const estimatedCalories = suggestedProtein >= 20 ? 130 : 105;
+  return {
+    proteinGrams: suggestedProtein,
+    amountLabel: `+${suggestedProtein} g prot.`,
+    example:
+      suggestedProtein >= 20
+        ? "Ejemplo: suma 100-120 g de pollo, atún o pavo."
+        : "Ejemplo: suma 80-100 g de pollo, atún o pavo.",
+    estimatedDelta: {
+      calories: estimatedCalories,
+      protein: suggestedProtein,
+      vegetableServings: 0,
+    },
+  };
+}
+
+function getVegetableSupportPlan({ mealType, vegetableServingsToday, lowSatietyMeal }) {
+  const vegetableGap = Math.max(0, DAILY_VEGETABLE_TARGET - toNumber(vegetableServingsToday));
+  const baseServings =
+    mealType === "almuerzo" || mealType === "cena"
+      ? vegetableGap >= 2 || lowSatietyMeal
+        ? 2
+        : vegetableGap >= 1.3
+        ? 1.5
+        : 1
+      : vegetableGap >= 1.3
+      ? 1.5
+      : 1;
+
+  const servings = clampNumber(Number(baseServings.toFixed(1)), 1, 2);
+  const grams = roundToStep(servings * VEGETABLE_SERVING_GRAMS, 10);
+  const amountLabel = `+${formatVegetableServingsLabel(servings)} veg.`;
+
+  return {
+    servings,
+    grams,
+    amountLabel,
+    example:
+      mealType === "almuerzo" || mealType === "cena"
+        ? `Ejemplo: agrega ${formatRoundedGrams(grams)} de ensalada o verduras salteadas.`
+        : `Ejemplo: agrega ${formatRoundedGrams(grams)} de tomate, pepino o zanahoria.`,
+    estimatedDelta: {
+      calories: roundToStep(servings * 20, 5),
+      protein: Number((servings * 1).toFixed(1)),
+      vegetableServings: servings,
+    },
+  };
+}
+
+function getPortionReductionPlan({ totalCalories, caloriesRemaining, focusItem, focusName }) {
+  const desiredTrimKcal = clampNumber(
+    totalCalories - Math.max(120, caloriesRemaining),
+    70,
+    Math.max(90, Math.min(220, totalCalories * 0.35))
+  );
+
+  if (toNumber(focusItem?.grams) > 0 && toNumber(focusItem?.calories) > 0 && focusName) {
+    const kcalPerGram = toNumber(focusItem.calories) / Math.max(toNumber(focusItem.grams), 1);
+    const maxTrimGrams = Math.max(20, roundToStep(toNumber(focusItem.grams) * 0.4, 5));
+    const trimGrams = clampNumber(roundToStep(desiredTrimKcal / Math.max(kcalPerGram, 0.5), 5), 20, maxTrimGrams);
+
+    return {
+      trimGrams,
+      amountLabel: `-${formatRoundedGrams(trimGrams)} ${focusName}`,
+      example: `Ejemplo: deja unos ${formatRoundedGrams(trimGrams)} menos de ${focusName}.`,
+      estimatedDelta: {
+        calories: -roundToStep(trimGrams * kcalPerGram, 5),
+        protein: -Number((trimGrams * (toNumber(focusItem?.protein) / Math.max(toNumber(focusItem?.grams), 1))).toFixed(1)),
+        vegetableServings: 0,
+      },
+    };
+  }
+
+  return {
+    trimGrams: 0,
+    amountLabel: totalCalories >= 450 ? "-1/3 porción" : "-1/4 porción",
+    example: "Ejemplo: repítelo con una porción un poco menor, no igual que la original.",
+    estimatedDelta: {
+      calories: -(totalCalories >= 450 ? roundToStep(totalCalories * 0.33, 5) : roundToStep(totalCalories * 0.25, 5)),
+      protein: 0,
+      vegetableServings: 0,
+    },
+  };
+}
+
+function getMealGroupKey(meal, index = 0) {
+  const explicitGroupId = String(meal?.mealGroupId || "").trim();
+  if (explicitGroupId) return explicitGroupId;
+
+  const explicitId = String(meal?.id || "").trim();
+  if (explicitId) {
+    const prefix = explicitId.split("-")[0];
+    if (prefix) return `meal-${prefix}`;
+    return explicitId;
+  }
+
+  const date = String(meal?.date || "").trim();
+  const time = String(meal?.time || "").trim();
+  const mealType = String(meal?.mealType || "snack").trim();
+  return `${date || "date"}::${time || "time"}::${mealType}::${index}`;
+}
+
+function getMealBaseIdPrefix(meal) {
+  const groupKey = getMealGroupKey(meal);
+  if (groupKey.startsWith("meal-")) return groupKey.slice(5);
+  return groupKey;
+}
+
+function createUniqueMealBaseId(dateKey, timeValue, meals) {
+  let baseId = buildMealTimestamp(dateKey, timeValue);
+  const usedBaseIds = new Set(
+    (Array.isArray(meals) ? meals : [])
+      .map((meal) => String(getMealBaseIdPrefix(meal) || "").trim())
+      .filter(Boolean)
+  );
+
+  while (usedBaseIds.has(String(baseId))) {
+    baseId += 1;
+  }
+
+  return baseId;
+}
+
+function formatShortDate(dateKey) {
+  const safeDate = String(dateKey || "").trim();
+  if (!safeDate) return "";
+  const [year, month, day] = safeDate.split("-");
+  if (!year || !month || !day) return safeDate;
+  return `${day}/${month}`;
+}
+
+function groupMealsForRepeatTemplates(meals) {
+  const safeMeals = Array.isArray(meals) ? meals.filter(Boolean) : [];
+  if (!safeMeals.length) return [];
+
+  const explicitGroups = new Map();
+  const inferredCandidates = [];
+
+  safeMeals.forEach((meal, index) => {
+    const explicitGroupId = String(meal?.mealGroupId || "").trim();
+    if (explicitGroupId) {
+      const current = explicitGroups.get(explicitGroupId) || [];
+      current.push(meal);
+      explicitGroups.set(explicitGroupId, current);
+      return;
+    }
+
+    inferredCandidates.push({ meal, index, timestamp: buildMealTimestamp(meal?.date, meal?.time) });
+  });
+
+  const inferredGroups = [];
+  const THIRTY_MINUTES = 30 * 60 * 1000;
+
+  [...inferredCandidates]
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .forEach(({ meal, index, timestamp }) => {
+      const mealType = String(meal?.mealType || "snack").trim();
+      const mealDate = String(meal?.date || "").trim();
+      const mealTime = String(meal?.time || "").trim();
+      const previousGroup = inferredGroups[inferredGroups.length - 1];
+
+      if (!previousGroup) {
+        inferredGroups.push({
+          key: `inferred-${mealDate || "date"}-${mealType || "type"}-${index}`,
+          items: [meal],
+          lastTimestamp: timestamp,
+          lastDate: mealDate,
+          lastTime: mealTime,
+          mealType,
+        });
+        return;
+      }
+
+      const sameType = previousGroup.mealType === mealType;
+      const sameDate = previousGroup.lastDate === mealDate;
+      const closeInTime =
+        timestamp > 0 &&
+        previousGroup.lastTimestamp > 0 &&
+        timestamp - previousGroup.lastTimestamp <= THIRTY_MINUTES;
+      const sameClockTime =
+        mealTime &&
+        previousGroup.lastTime &&
+        mealTime === previousGroup.lastTime &&
+        sameDate &&
+        sameType;
+
+      if (sameType && sameDate && (closeInTime || sameClockTime)) {
+        previousGroup.items.push(meal);
+        previousGroup.lastTimestamp = timestamp;
+        previousGroup.lastTime = mealTime || previousGroup.lastTime;
+        return;
+      }
+
+      inferredGroups.push({
+        key: `inferred-${mealDate || "date"}-${mealType || "type"}-${index}`,
+        items: [meal],
+        lastTimestamp: timestamp,
+        lastDate: mealDate,
+        lastTime: mealTime,
+        mealType,
+      });
+    });
+
+  return [
+    ...[...explicitGroups.entries()].map(([key, items]) => ({ key, items })),
+    ...inferredGroups.map((group) => ({ key: group.key, items: group.items })),
+  ];
+}
+
+function buildMealTemplateCandidate(items, groupKey) {
+  const safeItems = [...(Array.isArray(items) ? items : [])].filter(Boolean);
+  if (!safeItems.length) return null;
+
+  const orderedItems = [...safeItems].sort((left, right) => {
+    const leftName = `${normalizeFoodIdentityPart(left?.name)}::${normalizeFoodIdentityPart(left?.brand)}`;
+    const rightName = `${normalizeFoodIdentityPart(right?.name)}::${normalizeFoodIdentityPart(right?.brand)}`;
+    return leftName.localeCompare(rightName);
+  });
+
+  const mealType = String(safeItems[0]?.mealType || "snack");
+  const signature = [
+    mealType,
+    ...orderedItems.map((item) =>
+      [
+        normalizeFoodIdentityPart(item?.name),
+        normalizeFoodIdentityPart(item?.brand),
+        Number(item?.grams || item?.quantity || 0).toFixed(1),
+        String(item?.unit || "").trim().toLowerCase(),
+      ].join("::")
+    ),
+  ].join("|");
+
+  const consumedAt = safeItems.reduce(
+    (max, item) => Math.max(max, buildMealTimestamp(item?.date, item?.time)),
+    0
+  );
+  const totals = safeItems.reduce(
+    (acc, item) => {
+      acc.calories += Number(item?.calories || 0);
+      acc.protein += Number(item?.protein || 0);
+      acc.carbs += Number(item?.carbs || 0);
+      acc.fat += Number(item?.fat || 0);
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  return {
+    signature,
+    mealType,
+    items: safeItems,
+    totals,
+    lastDate: String(safeItems[0]?.date || "").trim(),
+    lastTime: String(safeItems[0]?.time || "").trim(),
+    lastConsumedAt: consumedAt,
+    sourceGroupId: groupKey,
+    occurrences: 1,
+  };
+}
+
+function buildFrequentMealAdjustment(template, dailyStatus) {
+  const safeItems = Array.isArray(template?.items) ? template.items.filter(Boolean) : [];
+  if (!safeItems.length) return null;
+
+  const totalCalories = toNumber(template?.totals?.calories);
+  const totalProtein = toNumber(template?.totals?.protein);
+  const totalFat = toNumber(template?.totals?.fat);
+  const vegetableServings = toNumber(trackVegetableIntake(safeItems)?.servings);
+  const calorieDelta = toNumber(
+    dailyStatus?.calorieDelta ??
+      dailyStatus?.caloriesRemaining
+  );
+  const caloriesRemaining = Math.max(0, toNumber(dailyStatus?.caloriesRemaining));
+  const proteinRemaining = Math.max(0, toNumber(dailyStatus?.proteinRemaining));
+  const needsProtein = Boolean(dailyStatus?.needsProtein) || proteinRemaining >= 20;
+  const needsVegetables = Boolean(dailyStatus?.needsVegetables) || toNumber(dailyStatus?.vegetableServings) < 3;
+  const macroCarbs = normalizeStatus(dailyStatus?.macroBalance?.carbs);
+  const macroFats = normalizeStatus(dailyStatus?.macroBalance?.fats);
+  const topProteinItem = getMealItemWithHighest(safeItems, "protein");
+  const topCarbItem = getMealItemWithHighest(safeItems, "carbs");
+  const topFatItem = getMealItemWithHighest(safeItems, "fat");
+  const carbFocusName = formatMealFocusName(topCarbItem);
+  const fatFocusName = formatMealFocusName(topFatItem);
+  const proteinFocusName = formatMealFocusName(topProteinItem);
+
+  const chips = [];
+  let tone = "info";
+  let title = "Buen encaje";
+  let detail = "Este plato ya está bastante alineado. Repítelo tal cual si hoy te acomoda.";
+  let example = "";
+  let projectedState = null;
+
+  const shouldReducePortion =
+    (calorieDelta <= 120 || macroCarbs === "high" || macroFats === "high") &&
+    totalCalories >= Math.max(320, caloriesRemaining + 120);
+  const needsMealProtein =
+    needsProtein && totalProtein < Math.max(26, Math.min(36, proteinRemaining * 0.55));
+  const needsMealVegetables =
+    needsVegetables && vegetableServings < 1;
+  const lowSatietyMeal =
+    totalCalories >= 260 && totalProtein < 18 && vegetableServings < 0.5;
+  const proteinPlan = needsMealProtein
+    ? getProteinSupportPlan({
+        mealType: template?.mealType,
+        proteinRemaining,
+        topProteinItem,
+        proteinFocusName,
+      })
+    : null;
+  const vegetablePlan = needsMealVegetables
+    ? getVegetableSupportPlan({
+        mealType: template?.mealType,
+        vegetableServingsToday: dailyStatus?.vegetableServings,
+        lowSatietyMeal,
+      })
+    : null;
+  const reductionPlan = shouldReducePortion
+    ? getPortionReductionPlan({
+        totalCalories,
+        caloriesRemaining,
+        focusItem: topCarbItem || topFatItem,
+        focusName: carbFocusName || fatFocusName,
+      })
+    : null;
+
+  if (shouldReducePortion) {
+    tone = "warning";
+    title = "Reducir un poco la porción";
+    detail = reductionPlan?.amountLabel
+      ? `Hoy vas más justo de calorías. Si lo repites, recorta aprox. ${reductionPlan.amountLabel.replace(/^-/, "")}.`
+      : carbFocusName
+      ? `Hoy vas más justo de calorías. Si repites este plato, baja un poco ${carbFocusName}.`
+      : fatFocusName
+      ? `Hoy vas más justo de calorías. Si repites este plato, modera un poco ${fatFocusName}.`
+      : "Hoy vas más justo de calorías. Te conviene repetirlo con una porción un poco menor.";
+    example = reductionPlan?.example || "";
+    chips.push(
+      reductionPlan?.amountLabel || (carbFocusName ? `Menos ${carbFocusName}` : "Menos porción"),
+      proteinPlan?.amountLabel || null
+    );
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [reductionPlan?.estimatedDelta],
+    });
+  } else if (needsMealProtein && needsMealVegetables) {
+    tone = "success";
+    title = "Subir proteína y vegetales";
+    detail = `La base está bien, pero hoy te conviene sumar ${
+      proteinPlan?.amountLabel?.replace(/^\+/, "") || "algo de proteína"
+    } y ${
+      vegetablePlan?.amountLabel?.replace(/^\+/, "") || "vegetales visibles"
+    }.`;
+    example = [proteinPlan?.example, vegetablePlan?.example].filter(Boolean).join(" ");
+    chips.push(proteinPlan?.amountLabel || "+ proteína", vegetablePlan?.amountLabel || "+ vegetales");
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [proteinPlan?.estimatedDelta, vegetablePlan?.estimatedDelta],
+    });
+  } else if (needsMealProtein) {
+    tone = "success";
+    title = "Agregar proteína";
+    detail = proteinFocusName
+      ? `Si lo repites, apunta a sumar ${proteinPlan?.amountLabel?.replace(/^\+/, "") || "algo más de proteína"}, idealmente reforzando ${proteinFocusName}.`
+      : `Si lo repites, súmale ${proteinPlan?.amountLabel?.replace(/^\+/, "") || "algo más de proteína"} para cerrar mejor tu día.`;
+    example = proteinPlan?.example || "";
+    chips.push(proteinPlan?.amountLabel || "+ proteína", lowSatietyMeal ? "Más saciedad" : null);
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [proteinPlan?.estimatedDelta],
+    });
+  } else if (needsMealVegetables) {
+    tone = "success";
+    title = "Agregar vegetales";
+    detail = `Este plato entraría mejor hoy con ${vegetablePlan?.amountLabel?.replace(/^\+/, "") || "una porción de vegetales"} al lado.`;
+    example = vegetablePlan?.example || "";
+    chips.push(vegetablePlan?.amountLabel || "+ vegetales", lowSatietyMeal ? "Más volumen" : null);
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [vegetablePlan?.estimatedDelta],
+    });
+  } else if (lowSatietyMeal) {
+    tone = "info";
+    title = "Hazlo más saciante";
+    detail = "Para que te deje mejor, combina este plato con una fuente proteica o una porción vegetal visible.";
+    example = proteinPlan?.example || "Ejemplo: agrega 1 yogurt griego o 1 porción de fruta con algo de proteína.";
+    chips.push("Más saciedad", proteinPlan?.amountLabel || "+ proteína");
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [proteinPlan?.estimatedDelta].filter(Boolean),
+    });
+  } else if (macroFats === "high" && totalFat >= 18) {
+    tone = "warning";
+    title = "Versión un poco más liviana";
+    detail = reductionPlan?.amountLabel
+      ? `Hoy te conviene una versión más liviana, recortando aprox. ${reductionPlan.amountLabel.replace(/^-/, "")}.`
+      : fatFocusName
+      ? `Hoy te conviene una versión más liviana, reduciendo un poco ${fatFocusName}.`
+      : "Hoy te conviene una versión más liviana para no seguir cargando grasas.";
+    example = reductionPlan?.example || "";
+    chips.push("Más liviano", reductionPlan?.amountLabel || "- extras");
+    projectedState = buildProjectedAdjustmentState({
+      totalCalories,
+      totalProtein,
+      vegetableServings,
+      deltas: [reductionPlan?.estimatedDelta],
+    });
+  }
+
+  return {
+    tone,
+    title,
+    detail,
+    example,
+    projectedState,
+    chips: chips.filter(Boolean).slice(0, 2),
+  };
+}
+
+function buildRepeatableMealTemplates(meals) {
+  const safeMeals = Array.isArray(meals) ? meals.filter(Boolean) : [];
+  if (!safeMeals.length) return [];
+
+  const templates = new Map();
+
+  groupMealsForRepeatTemplates(safeMeals).forEach(({ items, key: groupKey }) => {
+    const nextTemplate = buildMealTemplateCandidate(items, groupKey);
+    if (!nextTemplate) return;
+
+    const previousTemplate = templates.get(nextTemplate.signature);
+    if (!previousTemplate) {
+      templates.set(nextTemplate.signature, nextTemplate);
+      return;
+    }
+
+    previousTemplate.occurrences += 1;
+    if (nextTemplate.lastConsumedAt > previousTemplate.lastConsumedAt) {
+      templates.set(nextTemplate.signature, {
+        ...previousTemplate,
+        ...nextTemplate,
+        occurrences: previousTemplate.occurrences,
+      });
+    } else {
+      templates.set(nextTemplate.signature, previousTemplate);
+    }
+  });
+
+  return [...templates.values()].sort((left, right) => {
+    if (right.occurrences !== left.occurrences) return right.occurrences - left.occurrences;
+    return right.lastConsumedAt - left.lastConsumedAt;
+  });
+}
+
+export default function NutritionLog({
+  profileId,
+  meals,
+  onMealsChange,
+  onDataChange,
+  dailyStatus = null,
+}) {
   const panelSx = (theme) => ({
     ...nutritionSurfaceSx(theme),
     p: { xs: 1.2, sm: 1.5 },
@@ -268,8 +868,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
   };
   const [formData, setFormData] = useState(() => createDefaultForm());
   const [draftMealItems, setDraftMealItems] = useState([]);
-  const [customFoods, setCustomFoods] = useState([]);
-  const [customRecipes, setCustomRecipes] = useState([]);
+  const [catalogRevision, setCatalogRevision] = useState(0);
   const [showCustomFoodForm, setShowCustomFoodForm] = useState(false);
   const [customFoodForm, setCustomFoodForm] = useState(DEFAULT_CUSTOM_FOOD_FORM);
   const [registerTab, setRegisterTab] = useState(0);
@@ -280,9 +879,25 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
   const [editingMealId, setEditingMealId] = useState("");
   const [editingQuantity, setEditingQuantity] = useState("");
   const [detailMeal, setDetailMeal] = useState(null);
+  const [repeatFeedback, setRepeatFeedback] = useState("");
   const todayKey = useMemo(() => getTodayDateKey(), []);
   const mealsToday = useMemo(() => getMealsForDate(meals, todayKey), [meals, todayKey]);
   const hungerToday = useMemo(() => estimateHungerFromMeals(mealsToday), [mealsToday]);
+  const catalogScopeKey = `${profileId || "no-profile"}::${catalogRevision}`;
+  const customFoods = useMemo(
+    () => {
+      void catalogScopeKey;
+      return profileId ? getCustomFoods(profileId) : [];
+    },
+    [catalogScopeKey, profileId]
+  );
+  const customRecipes = useMemo(
+    () => {
+      void catalogScopeKey;
+      return profileId ? getCustomRecipes(profileId) : [];
+    },
+    [catalogScopeKey, profileId]
+  );
   const mealsTodayByType = useMemo(() => {
     const grouped = new Map();
     mealsToday.forEach((meal) => {
@@ -296,22 +911,48 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       items: grouped.get(type) || [],
     })).filter((block) => block.items.length > 0);
   }, [mealsToday]);
+  const repeatableMealTemplates = useMemo(() => buildRepeatableMealTemplates(meals), [meals]);
+  const repeatableMealsForSelectedType = useMemo(
+    () =>
+      repeatableMealTemplates
+        .filter((template) => template.mealType === formData.mealType)
+        .slice(0, 4)
+        .map((template) => ({
+          ...template,
+          adjustment: buildFrequentMealAdjustment(template, dailyStatus),
+        })),
+    [repeatableMealTemplates, formData.mealType, dailyStatus]
+  );
+  const repeatableTodayEntriesByMealId = useMemo(() => {
+    const entries = new Map();
+
+    groupMealsForRepeatTemplates(mealsToday).forEach(({ items, key }) => {
+      const template = buildMealTemplateCandidate(items, key);
+      if (!template) return;
+
+      template.items.forEach((meal, index) => {
+        const mealId = String(meal?.id || `${key}-${index}`);
+        entries.set(mealId, {
+          template,
+          isPrimary: index === 0,
+        });
+      });
+    });
+
+    return entries;
+  }, [mealsToday]);
+  const repeatTargetDate = formData.date || todayKey;
+  const repeatTargetTime = formData.time || getCurrentTimeValue();
+  const repeatTargetLabel =
+    repeatTargetDate === todayKey
+      ? `hoy ${repeatTargetTime ? `· ${repeatTargetTime}` : ""}`
+      : `${formatShortDate(repeatTargetDate)}${repeatTargetTime ? ` · ${repeatTargetTime}` : ""}`;
   const foodOptions = useMemo(() => [...foodCatalog, ...customFoods], [customFoods]);
   const recipeOptions = useMemo(() => [...recipes, ...customRecipes], [customRecipes]);
   const portionOption = useMemo(
     () => getFoodPortionOption(formData.food, formData.mealType),
     [formData.food, formData.mealType]
   );
-
-  useEffect(() => {
-    if (!profileId) {
-      setCustomFoods([]);
-      setCustomRecipes([]);
-      return;
-    }
-    setCustomFoods(getCustomFoods(profileId));
-    setCustomRecipes(getCustomRecipes(profileId));
-  }, [profileId]);
 
   const onChangeMealType = (event) => {
     const nextMealType = event.target.value;
@@ -450,7 +1091,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
     }
     if (!stagedItems.length) return;
 
-    const baseId = buildMealTimestamp(formData.date, formData.time);
+    const baseId = createUniqueMealBaseId(formData.date, formData.time, meals);
     const mealGroupId = `meal-${baseId}`;
     const createdMeals = stagedItems.map((item, index) =>
       createMealFromFood({
@@ -500,10 +1141,10 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       cholesterol: Number(customFoodForm.cholesterol || 0),
     };
 
-    const nextCustomFoods = editingCustomFoodIdentity
+    editingCustomFoodIdentity
       ? updateCustomFood(profileId, editingCustomFoodIdentity, customFood)
       : saveCustomFood(profileId, customFood);
-    setCustomFoods(nextCustomFoods);
+    setCatalogRevision((prev) => prev + 1);
     setFormData((prev) => ({ ...prev, food: customFood }));
     setCustomFoodForm(DEFAULT_CUSTOM_FOOD_FORM);
     setEditingCustomFoodIdentity("");
@@ -606,31 +1247,43 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
     if (!safeItems.length) return;
 
     const createdMeals = [];
-    const baseId = buildMealTimestamp(formData.date, formData.time);
+    const baseId = createUniqueMealBaseId(formData.date, formData.time, meals);
     const mealGroupId = `meal-${baseId}`;
 
     safeItems.forEach((item, index) => {
       const food = foodIndex.get(normalizeId(item?.foodId));
       const grams = Number(item?.grams || 0);
-      if (!food || grams <= 0) return;
+      const quantityMode = String(item?.quantityMode || (formData.mealType === "bebida" ? "ml" : "x100g"));
+      const portionQuantity = Number(item?.quantity || 0);
+      if (!food) return;
 
-      const ratio = grams / 100;
-      const meal = {
-        ...createMealFromFood({
-          food,
-          mealType: formData.mealType,
-          beverageType: formData.beverageType,
-          quantity: {
-            value: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
-            quantityMode: formData.mealType === "bebida" ? "ml" : "x100g",
-          },
-          date: formData.date || todayKey,
-          time: formData.time || getCurrentTimeValue(),
-          id: `${baseId}-${index}`,
-          mealGroupId,
-        }),
-        grams: Number(grams.toFixed(2)),
-      };
+      let quantityPayload = null;
+
+      if (quantityMode === "portion" && Number.isFinite(portionQuantity) && portionQuantity > 0) {
+        quantityPayload = {
+          value: Number(portionQuantity.toFixed(2)),
+          quantityMode: "portion",
+        };
+      } else if (grams > 0) {
+        const ratio = grams / 100;
+        quantityPayload = {
+          value: Number((formData.mealType === "bebida" ? grams : ratio).toFixed(2)),
+          quantityMode: formData.mealType === "bebida" ? "ml" : "x100g",
+        };
+      }
+
+      if (!quantityPayload) return;
+
+      const meal = createMealFromFood({
+        food,
+        mealType: formData.mealType,
+        beverageType: formData.beverageType,
+        quantity: quantityPayload,
+        date: formData.date || todayKey,
+        time: formData.time || getCurrentTimeValue(),
+        id: `${baseId}-${index}`,
+        mealGroupId,
+      });
       addMeal(profileId, meal);
       createdMeals.push(meal);
     });
@@ -640,6 +1293,39 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       onMealsChange([...(Array.isArray(meals) ? meals : []), ...createdMeals]);
     }
     if (typeof onDataChange === "function") onDataChange();
+  };
+
+  const onRepeatMealTemplate = (template, options = {}) => {
+    if (!profileId) return;
+
+    const templateItems = Array.isArray(template?.items) ? template.items : [];
+    if (!templateItems.length) return;
+
+    const targetDate = String(options?.date || repeatTargetDate || todayKey);
+    const targetTime = String(options?.time || repeatTargetTime || getCurrentTimeValue());
+    const consumedAt = buildMealTimestamp(targetDate, targetTime);
+    const baseId = createUniqueMealBaseId(targetDate, targetTime, meals);
+    const mealGroupId = `meal-${baseId}`;
+    const createdMeals = templateItems.map((meal, index) => ({
+      ...meal,
+      id: `${baseId}-${index}`,
+      mealGroupId,
+      date: targetDate,
+      time: targetTime,
+      consumedAt,
+    }));
+
+    const nextMeals = [...(Array.isArray(meals) ? meals : []), ...createdMeals];
+    saveMeals(profileId, nextMeals);
+
+    if (typeof onMealsChange === "function") onMealsChange(nextMeals);
+    if (typeof onDataChange === "function") onDataChange();
+
+    const targetLabel = targetDate === todayKey ? "hoy" : formatShortDate(targetDate);
+    const timeLabel = targetTime ? ` · ${targetTime}` : "";
+    const feedbackPrefix =
+      options?.feedbackPrefix || `${mealTypeLabel(template?.mealType)} repetida para `;
+    setRepeatFeedback(`${feedbackPrefix}${targetLabel}${timeLabel}`);
   };
 
   const onQuickAddFoods = (items) => {
@@ -722,8 +1408,8 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
       ingredients,
     };
 
-    const nextRecipes = saveCustomRecipe(profileId, recipe);
-    setCustomRecipes(nextRecipes);
+    saveCustomRecipe(profileId, recipe);
+    setCatalogRevision((prev) => prev + 1);
     setCustomRecipeForm(DEFAULT_RECIPE_FORM);
     setShowCustomRecipeForm(false);
     if (typeof onDataChange === "function") onDataChange();
@@ -910,6 +1596,226 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
             fullWidth
           />
         </Stack>
+        <Box
+          sx={{
+            display: "grid",
+            gap: 1,
+            p: 1.15,
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 2,
+            bgcolor: "background.paper",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 1,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 0.35 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Repetir {mealTypeLabel(formData.mealType).toLowerCase()} frecuente
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Usa la fecha y hora elegidas arriba y guarda el plato completo sin volver a ingresarlo.
+              </Typography>
+            </Box>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Destino: ${repeatTargetLabel}`}
+              sx={{ maxWidth: "100%" }}
+            />
+          </Box>
+          {repeatFeedback ? (
+            <Typography variant="caption" sx={{ color: "success.dark", fontWeight: 600 }}>
+              {repeatFeedback}
+            </Typography>
+          ) : null}
+          {repeatableMealsForSelectedType.length > 0 ? (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
+                gap: 1,
+              }}
+            >
+              {repeatableMealsForSelectedType.map((template) => {
+                const itemNames = template.items
+                  .slice(0, 3)
+                  .map((item) => item?.name)
+                  .filter(Boolean);
+                const extraItems = Math.max(0, template.items.length - itemNames.length);
+                const adjustment = template.adjustment;
+                const adjustmentTone = adjustment?.tone || "info";
+                const adjustmentPalette =
+                  adjustmentTone === "warning"
+                    ? {
+                        background: "rgba(245,158,11,0.12)",
+                        border: "rgba(245,158,11,0.22)",
+                        chip: "warning",
+                      }
+                    : adjustmentTone === "success"
+                    ? {
+                        background: "rgba(34,197,94,0.10)",
+                        border: "rgba(34,197,94,0.18)",
+                        chip: "success",
+                      }
+                    : {
+                        background: "rgba(59,130,246,0.08)",
+                        border: "rgba(59,130,246,0.16)",
+                        chip: "info",
+                      };
+
+                return (
+                  <Box
+                    key={`${template.sourceGroupId}-${template.lastConsumedAt}`}
+                    sx={{
+                      display: "grid",
+                      gap: 0.8,
+                      p: 1,
+                      borderRadius: 1.8,
+                      border: "1px solid rgba(148,163,184,0.18)",
+                      bgcolor: "rgba(15,23,42,0.03)",
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 0.8,
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Box sx={{ display: "grid", gap: 0.25 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {itemNames.join(" · ")}
+                          {extraItems > 0 ? ` +${extraItems}` : ""}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Última vez {formatShortDate(template.lastDate)}
+                          {template.lastTime ? ` · ${template.lastTime}` : ""}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        size="small"
+                        label={
+                          template.occurrences > 1
+                            ? `${template.occurrences} veces`
+                            : "Reciente"
+                        }
+                        color={template.occurrences > 1 ? "success" : "default"}
+                        variant={template.occurrences > 1 ? "filled" : "outlined"}
+                      />
+                    </Box>
+                    <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
+                      <Chip size="small" variant="outlined" label={`${Math.round(template.totals.calories)} kcal`} />
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={`${Number(template.totals.protein || 0).toFixed(1)} g prot.`}
+                      />
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={`${template.items.length} ${template.items.length === 1 ? "ítem" : "ítems"}`}
+                      />
+                    </Box>
+                    {adjustment ? (
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gap: 0.5,
+                          p: 0.9,
+                          borderRadius: 1.6,
+                          bgcolor: adjustmentPalette.background,
+                          border: `1px solid ${adjustmentPalette.border}`,
+                        }}
+                      >
+                        <Typography
+                          variant="caption"
+                          sx={{ fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}
+                        >
+                          Ajuste sugerido
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {adjustment.title}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {adjustment.detail}
+                        </Typography>
+                        {adjustment.example ? (
+                          <Typography variant="caption" sx={{ color: "text.primary", fontWeight: 600 }}>
+                            {adjustment.example}
+                          </Typography>
+                        ) : null}
+                        {adjustment.projectedState ? (
+                          <Box sx={{ display: "grid", gap: 0.4 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>
+                              Quedaría aprox.
+                            </Typography>
+                            <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
+                              <Chip
+                                size="small"
+                                label={`${Math.round(adjustment.projectedState.calories)} kcal`}
+                                variant="outlined"
+                              />
+                              <Chip
+                                size="small"
+                                label={`${Number(adjustment.projectedState.protein || 0).toFixed(1)} g prot.`}
+                                variant="outlined"
+                              />
+                              {adjustment.projectedState.vegetableServings >= 0.5 ? (
+                                <Chip
+                                  size="small"
+                                  label={`${formatVegetableServingsLabel(adjustment.projectedState.vegetableServings)} veg.`}
+                                  variant="outlined"
+                                />
+                              ) : null}
+                            </Box>
+                          </Box>
+                        ) : null}
+                        {adjustment.chips?.length ? (
+                          <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
+                            {adjustment.chips.map((chip) => (
+                              <Chip
+                                key={`${template.sourceGroupId}-${chip}`}
+                                size="small"
+                                label={chip}
+                                color={adjustmentPalette.chip}
+                                variant="outlined"
+                              />
+                            ))}
+                          </Box>
+                        ) : null}
+                      </Box>
+                    ) : null}
+                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="outlined"
+                        onClick={() => onRepeatMealTemplate(template)}
+                        disabled={!profileId}
+                      >
+                        Repetir comida
+                      </Button>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              Aún no hay {mealTypeLabel(formData.mealType).toLowerCase()}s recientes para repetir. Cuando repitas uno un par de veces aparecerá aquí.
+            </Typography>
+          )}
+        </Box>
         </>
         )}
 
@@ -1037,6 +1943,9 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                 fullWidth
               />
             </Stack>
+            <Typography variant="caption" color="text.secondary">
+              Admite formatos como `45 g`, `1 unidad` o `1 rebanada`. Si no agregas gramos, los macros se interpretan por porción.
+            </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
               <TextField
                 type="number"
@@ -1139,7 +2048,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
               value={formData.quantityMode}
               onChange={onChangeQuantityMode}
             >
-              <MenuItem value="portion">{portionOption.label}</MenuItem>
+              <MenuItem value="portion">{portionOption.description || portionOption.label}</MenuItem>
               <MenuItem value="x100g">x100 g</MenuItem>
             </Select>
           </FormControl>
@@ -1174,10 +2083,17 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                   }}
                 >
                   <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {item.food?.name}
-                      {item.food?.brand ? ` · ${item.food.brand}` : ""} ({item.quantity} {item.preview?.unit || (formData.mealType === "bebida" ? "ml" : "x100 g")})
-                    </Typography>
+                    <Box sx={{ display: "grid", gap: 0.18 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {item.food?.name}
+                        {item.food?.brand ? ` · ${item.food.brand}` : ""} ({item.quantity} {item.preview?.unit || (formData.mealType === "bebida" ? "ml" : "x100 g")})
+                      </Typography>
+                      {item.preview?.quantityMode === "portion" && item.preview?.portionDescription ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Base: {item.preview.portionDescription}
+                        </Typography>
+                      ) : null}
+                    </Box>
                     <Stack direction="row" spacing={0.8} alignItems="center">
                       <TextField
                         type="number"
@@ -1312,6 +2228,11 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               Vista previa nutricional
             </Typography>
+            {preview.quantityMode === "portion" && preview.portionDescription ? (
+              <Typography variant="caption" color="text.secondary">
+                Porción base: {preview.portionDescription}
+              </Typography>
+            ) : null}
             <Box
               sx={{
                 display: "grid",
@@ -1452,6 +2373,14 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
         <Typography variant="subtitle1" sx={{ mb: 1 }}>
           Comidas de hoy
         </Typography>
+        {repeatFeedback ? (
+          <Typography
+            variant="caption"
+            sx={{ display: "block", mb: 0.8, color: "success.dark", fontWeight: 600 }}
+          >
+            {repeatFeedback}
+          </Typography>
+        ) : null}
         {mealsToday.length === 0 ? (
           <Box
             sx={{
@@ -1486,6 +2415,7 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                   {block.items.map((meal) => {
                     const contribution = getMealContributionValues(meal);
                     const isEditing = String(editingMealId) === String(meal.id);
+                    const repeatEntry = repeatableTodayEntriesByMealId.get(String(meal?.id || ""));
                     return (
                       <Box
                         key={`${meal.id}-mobile`}
@@ -1510,6 +2440,11 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                               : mealTypeLabel(meal?.mealType)}
                             {meal?.quantity && meal?.unit ? ` · ${meal.quantity} ${meal.unit}` : ""}
                           </Typography>
+                          {meal?.quantityMode === "portion" && formatMealPortionMeta(meal) ? (
+                            <Typography variant="caption" color="text.secondary">
+                              Base: {formatMealPortionMeta(meal)}
+                            </Typography>
+                          ) : null}
                         </Box>
                         <Box
                           sx={{
@@ -1547,6 +2482,22 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                           </Stack>
                         ) : (
                           <Stack direction="row" spacing={0.6} flexWrap="wrap">
+                            {repeatEntry?.isPrimary ? (
+                              <Button
+                                type="button"
+                                size="small"
+                                variant="text"
+                                onClick={() =>
+                                  onRepeatMealTemplate(repeatEntry.template, {
+                                    date: todayKey,
+                                    time: getCurrentTimeValue(),
+                                    feedbackPrefix: "Comida repetida para ",
+                                  })
+                                }
+                              >
+                                Repetir comida
+                              </Button>
+                            ) : null}
                             <Button type="button" size="small" variant="text" onClick={() => setDetailMeal(meal)}>
                               Detalle
                             </Button>
@@ -1603,17 +2554,25 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                     <TableRow key={meal.id}>
                       {(() => {
                         const contribution = getMealContributionValues(meal);
+                        const repeatEntry = repeatableTodayEntriesByMealId.get(String(meal?.id || ""));
                         return (
                           <>
                             <TableCell sx={{ width: "34%" }}>
-                              <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                {meal.name}
-                                {meal?.brand ? ` · ${meal.brand}` : ""}
-                                {meal?.mealType === "bebida" && meal?.beverageType
-                                  ? ` · ${beverageTypeLabel(meal.beverageType)}`
-                                  : ""}
-                                {meal?.quantity && meal?.unit ? ` (${meal.quantity} ${meal.unit})` : ""}
-                              </Typography>
+                              <Box sx={{ display: "grid", gap: 0.18 }}>
+                                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                  {meal.name}
+                                  {meal?.brand ? ` · ${meal.brand}` : ""}
+                                  {meal?.mealType === "bebida" && meal?.beverageType
+                                    ? ` · ${beverageTypeLabel(meal.beverageType)}`
+                                    : ""}
+                                  {meal?.quantity && meal?.unit ? ` (${meal.quantity} ${meal.unit})` : ""}
+                                </Typography>
+                                {meal?.quantityMode === "portion" && formatMealPortionMeta(meal) ? (
+                                  <Typography variant="caption" color="text.secondary">
+                                    Base: {formatMealPortionMeta(meal)}
+                                  </Typography>
+                                ) : null}
+                              </Box>
                             </TableCell>
                             <TableCell
                               align="right"
@@ -1663,6 +2622,22 @@ export default function NutritionLog({ profileId, meals, onMealsChange, onDataCh
                                 </Stack>
                               ) : (
                                 <Stack direction="row" spacing={0.7} sx={{ justifyContent: "flex-end" }}>
+                                  {repeatEntry?.isPrimary ? (
+                                    <Button
+                                      type="button"
+                                      size="small"
+                                      variant="text"
+                                      onClick={() =>
+                                        onRepeatMealTemplate(repeatEntry.template, {
+                                          date: todayKey,
+                                          time: getCurrentTimeValue(),
+                                          feedbackPrefix: "Comida repetida para ",
+                                        })
+                                      }
+                                    >
+                                      Repetir comida
+                                    </Button>
+                                  ) : null}
                                   <Button
                                     type="button"
                                     size="small"

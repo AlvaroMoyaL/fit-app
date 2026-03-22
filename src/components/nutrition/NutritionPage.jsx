@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { Box, Button, Card, CardContent, Chip, Divider, Skeleton, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { Box, Button, Card, CardContent, Chip, Divider, IconButton, Skeleton, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
@@ -20,6 +20,11 @@ import { getMeals, saveMeals } from "../../utils/nutritionStorage";
 import { calculateDailyTotals, getMealsForDate } from "../../utils/nutritionUtils";
 import { calculateCalorieBalance, calculateTDEEDynamic } from "../../utils/metabolism";
 import { estimateHungerFromMeals } from "../../utils/hungerEstimate";
+import {
+  buildNutritionTargetExplanations,
+  calculateMicroTargets,
+  calculateNutritionTargets,
+} from "../../utils/nutritionTargets";
 import { recipes } from "../../data/recipes";
 import { foodCatalog } from "../../data/foodCatalog";
 import { getCustomFoods } from "../../utils/customFoodsStorage";
@@ -150,23 +155,7 @@ function NutritionWorkspacePanel({
   );
 }
 
-function calculateMacroTargets(profile, tdee) {
-  const weight = Number(profile?.weight ?? profile?.peso ?? 0);
-  const dailyCalories = Math.max(0, Number(tdee || 0));
-  const proteinTarget = weight > 0 ? weight * 1.6 : 0;
-  const fatTarget = weight > 0 ? weight * 0.8 : 0;
-  const remainingCalories = Math.max(0, dailyCalories - proteinTarget * 4 - fatTarget * 9);
-  const carbsTarget = remainingCalories / 4;
-
-  return {
-    calories: dailyCalories,
-    protein: proteinTarget,
-    carbs: carbsTarget,
-    fat: fatTarget,
-  };
-}
-
-function HeroMetricCard({ label, valueText, helperText, state }) {
+function HeroMetricCard({ label, valueText, helperText, state, infoText }) {
   return (
     <Box
       sx={{
@@ -179,13 +168,53 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
       }}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, fontSize: { xs: "0.64rem", sm: "0.72rem" } }}
-        >
-          {label}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.35, minWidth: 0 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, fontSize: { xs: "0.64rem", sm: "0.72rem" } }}
+          >
+            {label}
+          </Typography>
+          {infoText ? (
+            <Tooltip
+              title={
+                <Typography variant="body2" sx={{ lineHeight: 1.45 }}>
+                  {infoText}
+                </Typography>
+              }
+              arrow
+              enterTouchDelay={0}
+            >
+              <IconButton
+                size="small"
+                sx={{
+                  p: 0.15,
+                  color: "text.secondary",
+                  "&:hover": { color: "text.primary" },
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: "50%",
+                    border: "1px solid currentColor",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "0.62rem",
+                    fontWeight: 800,
+                    lineHeight: 1,
+                  }}
+                >
+                  i
+                </Box>
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </Box>
         <Typography variant="caption" sx={{ color: state.accent, fontWeight: 800, fontSize: { xs: "0.64rem", sm: "0.72rem" } }}>
           {state.label}
         </Typography>
@@ -211,9 +240,15 @@ function HeroMetricCard({ label, valueText, helperText, state }) {
           }}
         />
       </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: "0.66rem", sm: "0.72rem" } }}>
-        {helperText}
-      </Typography>
+      {helperText ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontSize: { xs: "0.66rem", sm: "0.72rem" } }}
+        >
+          {helperText}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -763,27 +798,35 @@ export default function NutritionPage({
   }, [metricsLog]);
   const currentTargetCalories = Math.round(tdee || 0);
   const macroTargets = useMemo(
-    () => calculateMacroTargets(nutritionProfile, tdee),
+    () => calculateNutritionTargets(nutritionProfile, { dailyCalories: tdee }),
     [nutritionProfile, tdee]
   );
   const microTargets = useMemo(
-    () => ({
-      fiber: 28,
-      sodium: 2300,
-      cholesterol: 300,
-    }),
-    []
+    () => calculateMicroTargets(nutritionProfile, { dailyCalories: tdee }),
+    [nutritionProfile, tdee]
   );
-  const sugarReference = useMemo(() => {
-    const dailyCalories = Math.max(0, Number(tdee || 0));
-    if (!dailyCalories) return 0;
-    return (dailyCalories * 0.15) / 4;
-  }, [tdee]);
-  const saturatedFatReference = useMemo(() => {
-    const dailyCalories = Math.max(0, Number(tdee || 0));
-    if (!dailyCalories) return 0;
-    return (dailyCalories * 0.1) / 9;
-  }, [tdee]);
+  const sugarReference = useMemo(
+    () => Number(microTargets.sugars || 0),
+    [microTargets.sugars]
+  );
+  const saturatedFatReference = useMemo(
+    () => Number(microTargets.saturatedFat || 0),
+    [microTargets.saturatedFat]
+  );
+  const targetExplanations = useMemo(
+    () => buildNutritionTargetExplanations(macroTargets),
+    [macroTargets]
+  );
+  const supportTargetExplanations = useMemo(
+    () =>
+      buildNutritionTargetExplanations({
+        ...macroTargets,
+        ...microTargets,
+        sugars: sugarReference,
+        saturatedFat: saturatedFatReference,
+      }),
+    [macroTargets, microTargets, saturatedFatReference, sugarReference]
+  );
   const mealQualityScore = useMemo(() => {
     if (!Array.isArray(mealsToday) || mealsToday.length === 0) return 0;
     const scores = mealsToday
@@ -814,9 +857,9 @@ export default function NutritionPage({
     () =>
       analyzeProteinIntake({
         proteinConsumedGrams: totalsToday.protein,
-        bodyWeightKg: currentWeight,
+        profile: nutritionProfile,
       }),
-    [currentWeight, totalsToday.protein]
+    [nutritionProfile, totalsToday.protein]
   );
   const vegetableAnalysis = useMemo(() => trackVegetableIntake(mealsToday), [mealsToday]);
   const dailyNutritionScore = useMemo(
@@ -851,13 +894,53 @@ export default function NutritionPage({
       generateNutritionAlerts({
         proteinConsumedGrams: totalsToday.protein,
         bodyWeightKg: currentWeight,
+        profile: nutritionProfile,
         proteinCalories: totalsToday.protein * 4,
         carbCalories: totalsToday.carbs * 4,
         fatCalories: totalsToday.fat * 9,
         totalCalories: totalsToday.calories,
         meals: mealsToday,
       }),
-    [currentWeight, mealsToday, totalsToday.calories, totalsToday.carbs, totalsToday.fat, totalsToday.protein]
+    [
+      currentWeight,
+      mealsToday,
+      nutritionProfile,
+      totalsToday.calories,
+      totalsToday.carbs,
+      totalsToday.fat,
+      totalsToday.protein,
+    ]
+  );
+  const frequentMealSuggestionContext = useMemo(
+    () => ({
+      caloriesRemaining: Math.max(0, Math.round(currentTargetCalories - totalsToday.calories)),
+      calorieDelta: Math.round(currentTargetCalories - totalsToday.calories),
+      proteinRemaining: Math.max(0, Math.round(macroTargets.protein - totalsToday.protein)),
+      proteinTarget: Math.round(Number(macroTargets.protein || 0)),
+      vegetableServings: Number(vegetableAnalysis.servings || 0),
+      needsProtein:
+        Number(macroTargets.protein || 0) - Number(totalsToday.protein || 0) >= 20 ||
+        ["low", "very_low", "slightly_low"].includes(String(proteinAnalysis.status || "")),
+      needsVegetables: Number(vegetableAnalysis.servings || 0) < 3,
+      macroBalance: {
+        protein: macroAnalysis.protein?.status || "good",
+        carbs: macroAnalysis.carbs?.status || "good",
+        fats: macroAnalysis.fats?.status || "good",
+      },
+      mealTiming: suggestedMealType,
+    }),
+    [
+      currentTargetCalories,
+      macroAnalysis.carbs?.status,
+      macroAnalysis.fats?.status,
+      macroAnalysis.protein?.status,
+      macroTargets.protein,
+      proteinAnalysis.status,
+      suggestedMealType,
+      totalsToday.calories,
+      totalsToday.protein,
+      vegetableAnalysis.servings,
+    ]
   );
   const normalizedMealHistory = useMemo(
     () => getSafeArray(meals).map((entry) => normalizeMealEntry(entry)).filter(Boolean),
@@ -885,12 +968,12 @@ export default function NutritionPage({
     if (safeNumber(tdee) > 0) {
       next.dailyTargetCalories = safeNumber(tdee);
     }
-    if (safeNumber(proteinAnalysis.proteinTarget) > 0) {
-      next.dailyTargetProtein = safeNumber(proteinAnalysis.proteinTarget);
+    if (safeNumber(macroTargets.protein) > 0) {
+      next.dailyTargetProtein = safeNumber(macroTargets.protein);
     }
 
     return next;
-  }, [proteinAnalysis.proteinTarget, tdee]);
+  }, [macroTargets.protein, tdee]);
   const recoveryRecentDays = useMemo(() => {
     const metricsByDate = new Map(
       getSafeArray(metricsLog)
@@ -994,6 +1077,11 @@ export default function NutritionPage({
         const proteinForDay = analyzeProteinIntake({
           proteinConsumedGrams: proteinForDate,
           bodyWeightKg: weightForDate,
+          profile: {
+            ...nutritionProfile,
+            weight: weightForDate,
+            peso: weightForDate,
+          },
         });
         const satietyForDay = estimateHungerFromMeals(mealsForDate);
         const nutritionScoreForDate = calculateDailyNutritionScore({
@@ -1021,6 +1109,11 @@ export default function NutritionPage({
           alerts: generateNutritionAlerts({
             proteinConsumedGrams: proteinForDate,
             bodyWeightKg: weightForDate,
+            profile: {
+              ...nutritionProfile,
+              weight: weightForDate,
+              peso: weightForDate,
+            },
             proteinCalories: proteinForDate * 4,
             carbCalories: carbsForDate * 4,
             fatCalories: fatForDate * 9,
@@ -1115,8 +1208,11 @@ export default function NutritionPage({
           `TDEE ${Math.round(tdee || 0)} kcal`,
           `Balance ${Math.round(calorieBalance.balance)} kcal`,
           currentWeight ? `Peso ${currentWeight.toFixed(1)} kg` : "Peso sin registro",
+          macroTargets.usedAdjustedWeight && macroTargets.effectiveWeightKg
+            ? `Peso efectivo ${macroTargets.effectiveWeightKg.toFixed(1)} kg`
+            : null,
           `Objetivo prot. ${Math.round(macroTargets.protein || 0)} g`,
-        ]}
+        ].filter(Boolean)}
         className="workspace-header-nutrition"
         bodyClassName="workspace-header-body-nutrition"
       >
@@ -1124,26 +1220,26 @@ export default function NutritionPage({
           <HeroMetricCard
             label="Calorías"
             valueText={`${Math.round(totalsToday.calories)} / ${Math.round(macroTargets.calories || 0)}`}
-            helperText={`objetivo: ${Math.round(macroTargets.calories || 0)} kcal`}
             state={calorieState}
+            infoText={targetExplanations.calories}
           />
           <HeroMetricCard
             label="Proteínas"
             valueText={`${Math.round(totalsToday.protein || 0)} / ${Math.round(macroTargets.protein || 0)} g`}
-            helperText={`recomendado: ${Math.round(macroTargets.protein || 0)} g`}
             state={proteinState}
+            infoText={targetExplanations.protein}
           />
           <HeroMetricCard
             label="Carbohidratos"
             valueText={`${Math.round(totalsToday.carbs || 0)} / ${Math.round(macroTargets.carbs || 0)} g`}
-            helperText={`recomendado: ${Math.round(macroTargets.carbs || 0)} g`}
             state={carbsState}
+            infoText={targetExplanations.carbs}
           />
           <HeroMetricCard
             label="Grasas"
             valueText={`${Math.round(totalsToday.fat || 0)} / ${Math.round(macroTargets.fat || 0)} g`}
-            helperText={`recomendado: ${Math.round(macroTargets.fat || 0)} g`}
             state={fatState}
+            infoText={targetExplanations.fat}
           />
           <HeroMetricCard
             label="Nutrition score"
@@ -1187,11 +1283,11 @@ export default function NutritionPage({
             }}
           >
             <HeroMetricCard label="Comidas" valueText={`${Math.round(totalsToday.mealsCount || 0)}`} helperText="bloques lógicos del día" state={mealsState} />
-            <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} helperText={`objetivo: ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} />
-            <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} helperText={`límite: ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} />
-            <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} helperText={`referencia flexible: ${Math.round(sugarReference || 0)} g`} state={sugarsState} />
-            <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} helperText={`límite aprox.: ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} />
-            <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} helperText={`referencia clásica: ${Math.round(microTargets.cholesterol || 0)} mg`} state={cholesterolState} />
+            <HeroMetricCard label="Fibra" valueText={`${Math.round(totalsToday.fiber || 0)} / ${Math.round(microTargets.fiber || 0)} g`} state={fiberState} infoText={supportTargetExplanations.fiber} />
+            <HeroMetricCard label="Sodio" valueText={`${Math.round(totalsToday.sodium || 0)} / ${Math.round(microTargets.sodium || 0)} mg`} state={sodiumState} infoText={supportTargetExplanations.sodium} />
+            <HeroMetricCard label="Azúcares totales" valueText={`${Math.round(totalsToday.sugars || 0)} / ${Math.round(sugarReference || 0)} g`} state={sugarsState} infoText={supportTargetExplanations.sugars} />
+            <HeroMetricCard label="Grasa saturada" valueText={`${Math.round(totalsToday.saturatedFat || 0)} / ${Math.round(saturatedFatReference || 0)} g`} state={saturatedFatState} infoText={supportTargetExplanations.saturatedFat} />
+            <HeroMetricCard label="Colesterol" valueText={`${Math.round(totalsToday.cholesterol || 0)} / ${Math.round(microTargets.cholesterol || 0)} mg`} state={cholesterolState} infoText={supportTargetExplanations.cholesterol} />
           </Box>
         </Box>
       </WorkspaceHeader>
@@ -1224,6 +1320,7 @@ export default function NutritionPage({
                 meals={meals}
                 onMealsChange={setMeals}
                 onDataChange={onNutritionDataChange}
+                dailyStatus={frequentMealSuggestionContext}
               />
             </Suspense>
           )}
@@ -1351,7 +1448,7 @@ export default function NutritionPage({
                     <CorrectiveDayPlan
                       title="Plan correctivo del día"
                       dailyTargetCalories={safeNumber(tdee)}
-                      dailyTargetProtein={safeNumber(proteinAnalysis?.proteinTarget)}
+                      dailyTargetProtein={safeNumber(macroTargets?.protein)}
                       dailyTargetCarbs={safeNumber(macroTargets?.carbs)}
                       dailyTargetFat={safeNumber(macroTargets?.fat)}
                       consumedCalories={safeNumber(totalsToday?.calories)}

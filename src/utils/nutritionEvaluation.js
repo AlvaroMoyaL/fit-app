@@ -1,14 +1,15 @@
+import { calculateProteinTarget } from "./nutritionTargets"
+
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
-export function evaluateDailyNutrition(totals, tdee) {
+export function evaluateDailyNutrition(totals, tdee, profile = null) {
   const calories = toNumber(totals?.calories);
   const protein = toNumber(totals?.protein);
   const carbs = toNumber(totals?.carbs);
   const fat = toNumber(totals?.fat);
-  const weight = toNumber(totals?.weight);
   const dailyTdee = toNumber(tdee);
 
   const messages = [];
@@ -23,7 +24,10 @@ export function evaluateDailyNutrition(totals, tdee) {
     issues += 1;
   }
 
-  const proteinTarget = weight > 0 ? weight * 1.6 : 0;
+  const proteinTarget = calculateProteinTarget(profile || totals, {
+    dailyCalories: dailyTdee,
+    weightKg: totals?.weight,
+  });
   if (proteinTarget > 0 && protein < proteinTarget) {
     messages.push("Aumentar consumo de proteína.");
     issues += 1;

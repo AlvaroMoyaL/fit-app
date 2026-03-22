@@ -52,6 +52,7 @@ function addMacroAlerts(alerts, seen, macroAnalysis) {
 export function generateNutritionAlerts({
   proteinConsumedGrams = 0,
   bodyWeightKg = 0,
+  profile = null,
   proteinCalories = 0,
   carbCalories = 0,
   fatCalories = 0,
@@ -68,6 +69,7 @@ export function generateNutritionAlerts({
   const proteinAnalysis = analyzeProteinIntake({
     proteinConsumedGrams,
     bodyWeightKg,
+    profile,
   });
 
   const vegetableAnalysis = trackVegetableIntake(meals);

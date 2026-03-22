@@ -116,6 +116,9 @@
 - UX de sincronización reforzada en sidebar:
   - tras restaurar desde nube se guarda un resumen persistente (`fit_last_sync_restore_summary`) con `perfiles`, `métricas` y hora de la última descarga,
   - el resumen se muestra en `Cuenta` bajo los botones `Subir/Descargar` para validar rápidamente qué se restauró.
+- Acceso a cuenta más visible:
+  - la UI de login/sync ya no vive solo dentro de `Sidebar > Perfil > Cuenta`,
+  - `src/components/AccountPanel.jsx` centraliza ese bloque y también lo muestra en la vista principal de `Perfil`, haciendo visible el acceso sin depender del panel lateral.
 - Foco muscular por día mejorado:
   - se añadió `src/utils/dayFocus.js` para derivar el foco real desde ejercicios del día (bodyPart/target/category),
   - se muestra en `DayCard` y en tarjetas de `Sidebar > Plan`,

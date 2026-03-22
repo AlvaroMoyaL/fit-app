@@ -16,6 +16,7 @@ import Sidebar from "./components/Sidebar";
 import SessionRunner from "./components/SessionRunner";
 import MetricsLogForm from "./components/MetricsLogForm";
 import WorkspaceHeader from "./components/WorkspaceHeader";
+import AccountPanel from "./components/AccountPanel";
 import { toLocalDateKey } from "./utils/dateKey";
 import { getLevelProgress } from "./utils/levelProgress";
 import {
@@ -3675,6 +3676,28 @@ export default function App({ themeMode = "light", onToggleTheme }) {
                     value: metrics?.tdee ? `${Math.round(metrics.tdee)} kcal` : "—",
                   },
                 ]}
+              />
+
+              <AccountPanel
+                authUser={authUser}
+                authReady={authReady}
+                authForm={authForm}
+                onAuthChange={onAuthChange}
+                onSignIn={onSignIn}
+                onSignUp={onSignUp}
+                onMagicLink={onMagicLink}
+                onSignOut={onSignOut}
+                authLoading={authLoading}
+                authError={authError}
+                syncStatus={syncStatus}
+                syncIndicator={syncIndicator}
+                syncRestoreSummary={lastSyncRestoreSummary}
+                onSyncUp={onSyncUp}
+                onSyncDown={onSyncDown}
+                canSyncUp={canUploadSync}
+                authEnabled={authEnabled}
+                title="Cuenta y sincronizacion"
+                description="El acceso y la sincronizacion del perfil activo ahora estan visibles directamente en esta vista, sin depender del panel lateral."
               />
 
               {!plan && (

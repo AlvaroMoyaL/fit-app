@@ -430,6 +430,53 @@ body.hc .help-icon {
   gap: 8px;
 }
 
+.account-panel {
+  gap: 14px;
+}
+
+.account-panel-compact {
+  display: grid;
+  gap: 10px;
+}
+
+.account-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-panel-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.account-panel-copy .note {
+  margin: 0;
+  max-width: 64ch;
+}
+
+.account-panel-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(241, 245, 249, 0.92);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-panel-status.is-connected {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f6d67;
+}
+
 .auth-box input {
   padding: 8px 10px;
   border-radius: 10px;
@@ -6099,6 +6146,18 @@ body.theme-dark .auth-box input {
   background: #0f172a;
   border-color: #3b495d;
   color: #e5e7eb;
+}
+
+body.theme-dark .account-panel-status {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(100, 116, 139, 0.24);
+  color: #cbd5e1;
+}
+
+body.theme-dark .account-panel-status.is-connected {
+  background: rgba(15, 118, 110, 0.2);
+  border-color: rgba(45, 212, 191, 0.2);
+  color: #9be7df;
 }
 
 @media (max-width: 900px) {

@@ -1,6 +1,7 @@
 import LocalDbStatus from "./LocalDbStatus";
 import GifDbStatus from "./GifDbStatus";
 import EmptyState from "./EmptyState";
+import AccountPanel from "./AccountPanel";
 import { getLevelProgress } from "../utils/levelProgress";
 import { buildDayFocusLabel } from "../utils/dayFocus";
 import { getMeals } from "../utils/nutritionStorage";
@@ -572,64 +573,26 @@ export default function Sidebar({
         <>
       <details className="sidebar-section sidebar-collapsible">
         <summary>Cuenta</summary>
-        {!authEnabled && (
-          <p className="note">
-            Configura Supabase en .env para activar login.
-          </p>
-        )}
-        {authEnabled && !authReady && (
-          <div className="auth-box">
-            <span className="note">Comprobando sesión…</span>
-          </div>
-        )}
-        {authEnabled && authReady && !authUser && (
-          <div className="auth-box">
-            <input
-              name="email"
-              placeholder="Email"
-              value={authForm.email}
-              onChange={onAuthChange}
-            />
-            <input
-              name="password"
-              type="password"
-              placeholder="Contraseña"
-              value={authForm.password}
-              onChange={onAuthChange}
-            />
-            {authError && <span className="note">{authError}</span>}
-            <div className="sidebar-actions">
-              <button type="button" className="tiny" onClick={onSignIn} disabled={authLoading}>
-                Entrar
-              </button>
-              <button type="button" className="tiny" onClick={onSignUp} disabled={authLoading}>
-                Crear cuenta
-              </button>
-              <button type="button" className="tiny" onClick={onMagicLink} disabled={authLoading}>
-                Enviar link
-              </button>
-            </div>
-          </div>
-        )}
-        {authEnabled && authUser && (
-          <div className="auth-box">
-            <span className="note">Conectado: {authUser.email}</span>
-            <span className="note">Estado sync: {syncIndicator || "—"}</span>
-            <div className="sidebar-actions">
-              <button type="button" className="tiny" onClick={onSyncUp} disabled={!canSyncUp}>
-                Subir
-              </button>
-              <button type="button" className="tiny" onClick={onSyncDown}>
-                Descargar
-              </button>
-              <button type="button" className="tiny danger" onClick={onSignOut}>
-                Salir
-              </button>
-            </div>
-            {syncStatus && <span className="note">{syncStatus}</span>}
-            {syncRestoreSummary && <span className="note">{syncRestoreSummary}</span>}
-          </div>
-        )}
+        <AccountPanel
+          authUser={authUser}
+          authReady={authReady}
+          authForm={authForm}
+          onAuthChange={onAuthChange}
+          onSignIn={onSignIn}
+          onSignUp={onSignUp}
+          onMagicLink={onMagicLink}
+          onSignOut={onSignOut}
+          authLoading={authLoading}
+          authError={authError}
+          syncStatus={syncStatus}
+          syncIndicator={syncIndicator}
+          syncRestoreSummary={syncRestoreSummary}
+          onSyncUp={onSyncUp}
+          onSyncDown={onSyncDown}
+          canSyncUp={canSyncUp}
+          authEnabled={authEnabled}
+          compact
+        />
       </details>
 
       <details className="sidebar-section sidebar-collapsible">

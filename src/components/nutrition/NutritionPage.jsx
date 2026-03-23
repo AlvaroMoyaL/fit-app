@@ -1,5 +1,21 @@
 import { Suspense, lazy, startTransition, useEffect, useMemo, useState } from "react";
-import { Box, Button, Card, CardContent, Chip, Divider, IconButton, Skeleton, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  Divider,
+  IconButton,
+  Skeleton,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+} from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import NutritionSummary from "./NutritionSummary";
 import EnergyBalanceCard from "./EnergyBalanceCard";
@@ -249,6 +265,234 @@ function HeroMetricCard({ label, valueText, helperText, state, infoText }) {
           {helperText}
         </Typography>
       ) : null}
+    </Box>
+  );
+}
+
+function HistoryChartLegendItem({ color, label }) {
+  return (
+    <Typography
+      variant="caption"
+      sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}
+    >
+      <Box
+        component="span"
+        sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, flexShrink: 0 }}
+      />
+      {label}
+    </Typography>
+  );
+}
+
+function HistoryChartPreviewCard({ title, description, legendItems, onExpand, children }) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onExpand}
+      aria-label={`Ampliar gráfico ${title}`}
+      sx={(muiTheme) => ({
+        ...nutritionSurfaceSx(muiTheme),
+        p: { xs: 1.2, sm: 1.4 },
+        display: "grid",
+        gap: 1.1,
+        width: "100%",
+        textAlign: "left",
+        appearance: "none",
+        WebkitAppearance: "none",
+        color: "inherit",
+        font: "inherit",
+        cursor: "zoom-in",
+        transition: "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+        "&:hover": {
+          transform: "translateY(-1px)",
+          borderColor: muiTheme.palette.primary.main,
+          boxShadow: muiTheme.shadows[4],
+        },
+        "&:focus-visible": {
+          outline: `2px solid ${muiTheme.palette.primary.main}`,
+          outlineOffset: 3,
+        },
+      })}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 1.2,
+          flexWrap: "wrap",
+        }}
+      >
+        <Box sx={{ display: "grid", gap: 0.35, minWidth: 0 }}>
+          <Typography variant="subtitle1">{title}</Typography>
+          {description ? (
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.45 }}>
+              {description}
+            </Typography>
+          ) : null}
+        </Box>
+        <Chip size="small" variant="outlined" label="Ampliar" sx={{ fontWeight: 700 }} />
+      </Box>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+        {legendItems.map((item) => (
+          <HistoryChartLegendItem key={item.label} color={item.color} label={item.label} />
+        ))}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+function NutritionCaloriesHistoryChart({ data = [], chartMax = 1, expanded = false }) {
+  const days = Array.isArray(data) ? data : [];
+  const columns = Math.max(days.length, 1);
+  const safeMax = Math.max(Number(chartMax || 0), 1);
+
+  return (
+    <Box sx={{ overflowX: "auto", pb: expanded ? 0.6 : 0.3, scrollbarWidth: "thin" }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: expanded
+            ? {
+                xs: `repeat(${columns}, minmax(72px, 1fr))`,
+                sm: `repeat(${columns}, minmax(92px, 1fr))`,
+              }
+            : `repeat(${columns}, minmax(48px, 1fr))`,
+          gap: expanded ? { xs: 1, sm: 1.4 } : 1,
+          alignItems: "end",
+          minHeight: expanded ? 300 : 170,
+          minWidth: expanded ? { xs: columns * 74, sm: "100%" } : undefined,
+        }}
+      >
+        {days.map((day) => {
+          const caloriesHeight = Math.max(4, Math.round((Number(day?.calories || 0) / safeMax) * (expanded ? 214 : 120)));
+          const tdeeHeight = Math.max(4, Math.round((Number(day?.tdee || 0) / safeMax) * (expanded ? 214 : 120)));
+
+          return (
+            <Box
+              key={`cal-${day.date}`}
+              sx={{ display: "grid", gap: expanded ? 0.9 : 0.7, justifyItems: "center" }}
+            >
+              {expanded ? (
+                <Box sx={{ display: "grid", gap: 0.2, justifyItems: "center" }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "primary.main", lineHeight: 1 }}>
+                    {Math.round(day.calories)} kcal
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "warning.main", lineHeight: 1 }}>
+                    {Math.round(day.tdee)} kcal
+                  </Typography>
+                </Box>
+              ) : null}
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: expanded ? 0.8 : 0.5,
+                  alignItems: "end",
+                  justifyContent: "center",
+                  width: "100%",
+                  minHeight: expanded ? 220 : 124,
+                }}
+              >
+                <Box
+                  title={`${day.date} calorías: ${Math.round(day.calories)} kcal`}
+                  sx={{
+                    width: expanded ? 16 : 10,
+                    height: caloriesHeight,
+                    bgcolor: "primary.main",
+                    borderRadius: 0.8,
+                  }}
+                />
+                <Box
+                  title={`${day.date} TDEE: ${Math.round(day.tdee)} kcal`}
+                  sx={{
+                    width: expanded ? 16 : 10,
+                    height: tdeeHeight,
+                    bgcolor: "warning.main",
+                    borderRadius: 0.8,
+                  }}
+                />
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                {day.shortDate}
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+function NutritionMacrosHistoryChart({ data = [], chartMax = 1, expanded = false }) {
+  const days = Array.isArray(data) ? data : [];
+  const columns = Math.max(days.length, 1);
+  const safeMax = Math.max(Number(chartMax || 0), 1);
+
+  return (
+    <Box sx={{ overflowX: "auto", pb: expanded ? 0.6 : 0.3, scrollbarWidth: "thin" }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: expanded
+            ? {
+                xs: `repeat(${columns}, minmax(72px, 1fr))`,
+                sm: `repeat(${columns}, minmax(92px, 1fr))`,
+              }
+            : `repeat(${columns}, minmax(48px, 1fr))`,
+          gap: expanded ? { xs: 1, sm: 1.4 } : 1,
+          alignItems: "end",
+          minHeight: expanded ? 300 : 170,
+          minWidth: expanded ? { xs: columns * 74, sm: "100%" } : undefined,
+        }}
+      >
+        {days.map((day) => {
+          const total = Number(day.protein || 0) + Number(day.carbs || 0) + Number(day.fat || 0);
+          const totalHeight = Math.max(4, Math.round((total / safeMax) * (expanded ? 214 : 120)));
+          const proteinH = total > 0 ? Math.max(2, Math.round((Number(day.protein || 0) / total) * totalHeight)) : 0;
+          const carbsH = total > 0 ? Math.max(2, Math.round((Number(day.carbs || 0) / total) * totalHeight)) : 0;
+          const fatH = total > 0 ? Math.max(0, totalHeight - proteinH - carbsH) : 0;
+
+          return (
+            <Box
+              key={`mac-${day.date}`}
+              sx={{ display: "grid", gap: expanded ? 0.9 : 0.7, justifyItems: "center" }}
+            >
+              {expanded ? (
+                <Box sx={{ display: "grid", gap: 0.18, justifyItems: "center" }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "success.main", lineHeight: 1 }}>
+                    P {Math.round(day.protein)} g
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "info.main", lineHeight: 1 }}>
+                    C {Math.round(day.carbs)} g
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "error.main", lineHeight: 1 }}>
+                    G {Math.round(day.fat)} g
+                  </Typography>
+                </Box>
+              ) : null}
+              <Box
+                title={`${day.date} P:${Math.round(day.protein)} C:${Math.round(day.carbs)} G:${Math.round(day.fat)} g`}
+                sx={{
+                  display: "flex",
+                  flexDirection: "column-reverse",
+                  justifyContent: "flex-start",
+                  width: expanded ? 24 : 18,
+                  minHeight: expanded ? 220 : 124,
+                }}
+              >
+                <Box sx={{ height: fatH, bgcolor: "error.main", borderRadius: 0.6 }} />
+                <Box sx={{ height: carbsH, bgcolor: "info.main", borderRadius: 0.6 }} />
+                <Box sx={{ height: proteinH, bgcolor: "success.main", borderRadius: 0.6 }} />
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                {day.shortDate}
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
     </Box>
   );
 }
@@ -547,6 +791,7 @@ export default function NutritionPage({
   showInlineSectionNav = true,
 }) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const sectionStackSx = {
     display: "grid",
     gap: { xs: 1.5, sm: 2.25 },
@@ -566,14 +811,6 @@ export default function NutritionPage({
     display: "grid",
     gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" },
     gap: { xs: 1.2, md: 1.4 },
-  };
-  const historyScrollChartSx = {
-    overflowX: "auto",
-    pb: 0.3,
-    scrollbarWidth: "thin",
-    "& > *": {
-      minWidth: { xs: 410, sm: "100%" },
-    },
   };
   const historySummaryGridSx = {
     display: "grid",
@@ -613,6 +850,7 @@ export default function NutritionPage({
   const [mealState, setMealState] = useState(() => buildNutritionMealState(profileId));
   const [showAdaptiveDrawer, setShowAdaptiveDrawer] = useState(false);
   const [adaptiveDrawerSection, setAdaptiveDrawerSection] = useState("progreso");
+  const [expandedHistoryChart, setExpandedHistoryChart] = useState("");
   const [dailyStatusTab, setDailyStatusTab] = useState(0);
   const [historyDate, setHistoryDate] = useState("");
   const todayKey = useMemo(() => getTodayDateKey(), []);
@@ -1205,6 +1443,43 @@ export default function NutritionPage({
     setAdaptiveDrawerSection(section);
     setShowAdaptiveDrawer(true);
   };
+  const caloriesHistoryLegend = [
+    { color: "primary.main", label: "Calorías" },
+    { color: "warning.main", label: "TDEE" },
+  ];
+  const macrosHistoryLegend = [
+    { color: "success.main", label: "Proteína" },
+    { color: "info.main", label: "Carbohidratos" },
+    { color: "error.main", label: "Grasas" },
+  ];
+  const expandedHistoryChartConfig =
+    expandedHistoryChart === "calories"
+      ? {
+          title: "Calorías vs TDEE",
+          description: "Comparativa ampliada de consumo y gasto estimado en los últimos 7 días.",
+          legendItems: caloriesHistoryLegend,
+          content: (
+            <NutritionCaloriesHistoryChart
+              data={last7HistoryChart}
+              chartMax={chartCaloriesMax}
+              expanded
+            />
+          ),
+        }
+      : expandedHistoryChart === "macros"
+      ? {
+          title: "Macros por día",
+          description: "Distribución diaria ampliada de proteína, carbohidratos y grasas en los últimos 7 días.",
+          legendItems: macrosHistoryLegend,
+          content: (
+            <NutritionMacrosHistoryChart
+              data={last7HistoryChart}
+              chartMax={chartMacrosMax}
+              expanded
+            />
+          ),
+        }
+      : null;
 
   return (
     <Box className="nutrition-page-content workspace-view" sx={{ ...sectionStackSx, pb: { xs: 0.4, sm: 1 } }}>
@@ -1535,110 +1810,29 @@ export default function NutritionPage({
               <Box sx={statusWorkspaceSx}>
                 <Box sx={statusColumnSx}>
                   <Box sx={historyChartsGridSx}>
-                    <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.1 })}>
-                      <Typography variant="subtitle1">Calorías vs TDEE</Typography>
-                      <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "primary.main", borderRadius: "50%" }} />
-                          Calorías
-                        </Typography>
-                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "warning.main", borderRadius: "50%" }} />
-                          TDEE
-                        </Typography>
-                      </Box>
-                      <Box sx={historyScrollChartSx}>
-                        <Box
-                          sx={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(7, minmax(48px, 1fr))",
-                            gap: 1,
-                            alignItems: "end",
-                            minHeight: 170,
-                          }}
-                        >
-                          {last7HistoryChart.map((day) => {
-                            const caloriesHeight = Math.max(4, Math.round((day.calories / chartCaloriesMax) * 120));
-                            const tdeeHeight = Math.max(4, Math.round((day.tdee / chartCaloriesMax) * 120));
-                            return (
-                              <Box key={`cal-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
-                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "end", minHeight: 124 }}>
-                                  <Box
-                                    title={`${day.date} calorías: ${Math.round(day.calories)} kcal`}
-                                    sx={{ width: 10, height: caloriesHeight, bgcolor: "primary.main", borderRadius: 0.8 }}
-                                  />
-                                  <Box
-                                    title={`${day.date} TDEE: ${Math.round(day.tdee)} kcal`}
-                                    sx={{ width: 10, height: tdeeHeight, bgcolor: "warning.main", borderRadius: 0.8 }}
-                                  />
-                                </Box>
-                                <Typography variant="caption" color="text.secondary">
-                                  {day.shortDate}
-                                </Typography>
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      </Box>
-                    </Box>
+                    <HistoryChartPreviewCard
+                      title="Calorías vs TDEE"
+                      description="Haz clic para ampliar y revisar la comparación con más espacio."
+                      legendItems={caloriesHistoryLegend}
+                      onExpand={() => setExpandedHistoryChart("calories")}
+                    >
+                      <NutritionCaloriesHistoryChart
+                        data={last7HistoryChart}
+                        chartMax={chartCaloriesMax}
+                      />
+                    </HistoryChartPreviewCard>
 
-                    <Box sx={(muiTheme) => ({ ...nutritionSurfaceSx(muiTheme), p: { xs: 1.2, sm: 1.4 }, display: "grid", gap: 1.1 })}>
-                      <Typography variant="subtitle1">Macros por día</Typography>
-                      <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
-                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "success.main", borderRadius: "50%" }} />
-                          Proteína
-                        </Typography>
-                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "info.main", borderRadius: "50%" }} />
-                          Carbohidratos
-                        </Typography>
-                        <Typography variant="caption" sx={{ display: "inline-flex", alignItems: "center", gap: 0.6 }}>
-                          <Box component="span" sx={{ width: 10, height: 10, bgcolor: "error.main", borderRadius: "50%" }} />
-                          Grasas
-                        </Typography>
-                      </Box>
-                      <Box sx={historyScrollChartSx}>
-                        <Box
-                          sx={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(7, minmax(48px, 1fr))",
-                            gap: 1,
-                            alignItems: "end",
-                            minHeight: 170,
-                          }}
-                        >
-                          {last7HistoryChart.map((day) => {
-                            const total = Number(day.protein || 0) + Number(day.carbs || 0) + Number(day.fat || 0);
-                            const totalHeight = Math.max(4, Math.round((total / chartMacrosMax) * 120));
-                            const proteinH = total > 0 ? Math.max(2, Math.round((Number(day.protein || 0) / total) * totalHeight)) : 0;
-                            const carbsH = total > 0 ? Math.max(2, Math.round((Number(day.carbs || 0) / total) * totalHeight)) : 0;
-                            const fatH = total > 0 ? Math.max(2, totalHeight - proteinH - carbsH) : 0;
-                            return (
-                              <Box key={`mac-${day.date}`} sx={{ display: "grid", gap: 0.7, justifyItems: "center" }}>
-                                <Box
-                                  title={`${day.date} P:${Math.round(day.protein)} C:${Math.round(day.carbs)} G:${Math.round(day.fat)} g`}
-                                  sx={{
-                                    display: "flex",
-                                    flexDirection: "column-reverse",
-                                    width: 18,
-                                    minHeight: 124,
-                                    justifyContent: "flex-start",
-                                  }}
-                                >
-                                  <Box sx={{ height: fatH, bgcolor: "error.main", borderRadius: 0.6 }} />
-                                  <Box sx={{ height: carbsH, bgcolor: "info.main", borderRadius: 0.6 }} />
-                                  <Box sx={{ height: proteinH, bgcolor: "success.main", borderRadius: 0.6 }} />
-                                </Box>
-                                <Typography variant="caption" color="text.secondary">
-                                  {day.shortDate}
-                                </Typography>
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      </Box>
-                    </Box>
+                    <HistoryChartPreviewCard
+                      title="Macros por día"
+                      description="Haz clic para ampliar y leer mejor la distribución de macros."
+                      legendItems={macrosHistoryLegend}
+                      onExpand={() => setExpandedHistoryChart("macros")}
+                    >
+                      <NutritionMacrosHistoryChart
+                        data={last7HistoryChart}
+                        chartMax={chartMacrosMax}
+                      />
+                    </HistoryChartPreviewCard>
                   </Box>
                 </Box>
 
@@ -1827,6 +2021,69 @@ export default function NutritionPage({
           focusSection={adaptiveDrawerSection}
         />
       </Suspense>
+      <Dialog
+        open={Boolean(expandedHistoryChartConfig)}
+        onClose={() => setExpandedHistoryChart("")}
+        fullScreen={isMobile}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+          },
+        }}
+      >
+        {expandedHistoryChartConfig ? (
+          <Box sx={{ p: { xs: 1.5, sm: 2.2 }, display: "grid", gap: 1.4 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 1.2,
+                flexWrap: "wrap",
+              }}
+            >
+              <Box sx={{ display: "grid", gap: 0.4, minWidth: 0 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 800 }}
+                >
+                  Histórico nutricional
+                </Typography>
+                <Typography variant="h6">{expandedHistoryChartConfig.title}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 640 }}>
+                  {expandedHistoryChartConfig.description}
+                </Typography>
+              </Box>
+              <Button variant="outlined" onClick={() => setExpandedHistoryChart("")}>
+                Cerrar
+              </Button>
+            </Box>
+
+            <Box
+              sx={(muiTheme) => ({
+                ...nutritionSurfaceSx(muiTheme),
+                p: { xs: 1.2, sm: 1.6 },
+                display: "grid",
+                gap: 1.25,
+              })}
+            >
+              <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
+                {expandedHistoryChartConfig.legendItems.map((item) => (
+                  <HistoryChartLegendItem
+                    key={`expanded-${item.label}`}
+                    color={item.color}
+                    label={item.label}
+                  />
+                ))}
+              </Box>
+              {expandedHistoryChartConfig.content}
+            </Box>
+          </Box>
+        ) : null}
+      </Dialog>
     </Box>
   );
 }
